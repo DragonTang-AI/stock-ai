@@ -146,6 +146,9 @@ BREAKING-CHANGE: 无
 | T-M003 前后端联调 | Marvis | 2026-07-02 14:30 | commit 5ad0e99 |
 | **T-M004 行情页接入 API** | **Marvis** | **2026-07-02 14:50** | **commit 002d196** |
 | **T-M005 选股页 UI + Mock** | **Marvis** | **2026-07-02 15:00** | **commit 44a5acd** |
+| **T-S001 行情 API 接入 AkShare** | **QClaw** | **2026-07-02 15:10** | **commit 3470ec1** |
+| **前端 HTTPS 部署** | **Marvis** | **2026-07-02 15:35** | **https://app.stockai.dragontang.com ✅** |
+| **T-S003 行情页无数据排查** | **Marvis** | **2026-07-02 15:40** | **commit 2921af3** |
 
 ### 🔴 进行中
 | 任务 | 负责人 | 状态 | 备注 |
@@ -165,11 +168,13 @@ BREAKING-CHANGE: 无
 | T-M007 选股页接入 API | Marvis | 后端选股路由为 Phase 2 桩 | QClaw 完成 T-S001 |
 
 ### ⚠️ 注意事项
-- **API 已上线**: http://stockai.dragontang.com/docs
-- **前端 dev server**: `cd frontend-ui/frontend && npm run dev:h5`
+- **API 已上线**: https://stockai.dragontang.com/docs
+- **前端已上线**: https://app.stockai.dragontang.com（Let's Encrypt SSL ✅）
+- **前端 HTTPS 部署路径**: `/var/www/app.stockai.dragontang.com/`
+- **前端 Nginx 配置**: `/etc/nginx/sites-enabled/app.stockai.dragontang.com`
 - **生产环境 Python**: /usr/bin/python3.12, pip packages 在 /data/stockai/pylocal/
-- **手动 uvicorn 已启动**（PID 3952305），需配置 systemd 服务持久化
-- **SSL 证书**: 尚未配置，http://stockai.dragontang.com 暂为 HTTP
+- **uvicorn 已启动**（PID 4033758），需配置 systemd 服务持久化
+- **行情页 401 问题**: 已修复，401 时正确跳转登录页（用户需先登录）
 ```
 
 ---
@@ -320,6 +325,48 @@ POST /api/v1/auth/logout  → {message, success}
 **Git 提交**: `44a5acd` feat(frontend): T-M005 选股页 UI + Mock 数据
 
 **备注**: 后端 T-S001 完成后替换 mock 为 `fetch('/api/v1/selection/recommend')` 即可
+
+---
+
+### T-S003：行情页无数据排查（紧急）
+
+**负责人**: Marvis
+**类型**: B 级（Marvis 可独立实现）
+**Worktree**: feat/frontend-ui
+**完成时间**: 2026-07-02 15:40
+
+**问题描述**:
+- 行情页打开后显示"暂无行情数据"
+- 后端 API 正常（HTTP 200 + 真实数据）
+- 前端 Network 面板显示 401 未授权
+
+**根本原因**:
+1. 用户未登录，无 token → 后端返回 401
+2. 前端 `request.ts` 的 401 处理逻辑有缺陷：有 token 才尝试刷新，无 token 应直接跳转登录
+3. 行情页错误处理不完善：捕获错误但未显示，用户看到"暂无行情数据"而非"请先登录"
+
+**修复内容**:
+1. **优化 `src/utils/request.ts` 401 处理**:
+   - 有 token 且 refresh token → 尝试刷新 → 重试
+   - 无 token 或 refresh token → 直接跳转登录页
+2. **行情页增加错误状态显示**:
+   - 新增 `error-state` UI 组件（红色警告图标 + 错误信息）
+   - 错误信息优先于空状态显示
+   - 用户可点击"重试"按钮
+3. **样式更新**:
+   - 错误状态样式（红色主题）
+   - 空状态样式（中性主题）
+
+**修改文件**:
+- `frontend/src/utils/request.ts` — 优化 401 处理逻辑（+40 行）
+- `frontend/src/pages/market/index.vue` — 增加错误状态 UI（+11 行）
+
+**Git 提交**: `2921af3` fix(T-S003): 修复行情页无数据问题
+
+**验证方法**:
+1. 访问 https://app.stockai.dragontang.com/#/pages/market/index
+2. 未登录状态下应看到错误提示或跳转登录页
+3. 登录后应正常显示行情数据
 
 ---
 
