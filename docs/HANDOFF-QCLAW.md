@@ -129,22 +129,22 @@ BREAKING-CHANGE: 无
 
 ---
 
-## 6. 当前状态（初始化）
+## 6. 当前状态（2026-07-02 上午更新）
 
 ```markdown
-## [2026-07-02] 交接状态 - 初始化
+## [2026-07-02 上午] Phase 1 后端骨架完成
 
 ### 🔴 进行中
 | 任务 | 负责人 | 状态 | 备注 |
 |------|--------|------|------|
-| 建立双团队开工契约 | QClaw | 90% | TEAM-CHARTER / BOUNDARY / WORKTREE / HANDOFF |
-| 更新 CLAUDE.md | QClaw | 80% | 适配 QClaw+Marvis 职责 |
-| Phase 1 任务拆分 | QClaw | 待开始 | 见下方待认领 |
+| — | — | — | — |
 
 ### 🟠 待认领
 | 任务 | 描述 | 优先级 | 建议 |
 |------|------|--------|------|
-| — | 开工契约建立完成后，Phase 1 任务将下发 | — | — |
+| uni-app 初始化 + 登录页面 | 在 feat/frontend-ui 初始化 uni-app 项目，接入 POST /api/v1/auth/login | P1 | 见下方详细描述 |
+| uni-app 首页（行情卡片） | TabBar 首页 + ECharts K线图，接入 GET /api/v1/market/quotes | P2 | Phase 2 再实现 |
+| Docker 启动验证 | docker compose up -d postgres redis，确认 API 可连接 DB | P1 | QClaw 或 Marvis 均可 |
 
 ### 🟡 阻塞
 | 任务 | 负责人 | 阻塞原因 | 等待 |
@@ -155,6 +155,66 @@ BREAKING-CHANGE: 无
 | 任务 | 负责人 | 完成时间 | 备注 |
 |------|--------|----------|------|
 | Git 仓库初始化 | QClaw | 2026-07-02 | DragonTang-AI/stock-ai |
-| Worktree 建立 | QClaw | 2026-07-02 | 4 个 worktree + 4 个分支 |
+| Worktree 建立 | QClaw | 2026-07-02 | 4 个 worktree |
 | 开工契约 v1 | QClaw | 2026-07-02 | TEAM-CHARTER / BOUNDARY / HANDOFF-QCLAW / WORKTREE |
+| Phase 1 后端骨架 | QClaw | 2026-07-02 | feat/backend-scaffold commit 99fcc69 |
 ```
+
+---
+
+## 7. Marvis 待认领任务详细描述
+
+### T-M001：uni-app 项目初始化
+
+**负责人**: Marvis
+**类型**: B 级（Marvis 可独立实现）
+**Worktree**: feat/frontend-ui
+**涉及文件**:（新建）
+  - frontend/
+
+**完成标准**:
+  - `npm run dev` 启动无报错
+  - 访问 localhost:5173 能看到登录页 UI
+
+**步骤**:
+1. 在 `ai-stock-worktrees_Qclaw+Marvis/frontend-ui/` 目录初始化 uni-app
+   ```bash
+   npm create vue@latest frontend -- --typescript
+   cd frontend && npm install
+   ```
+2. 配置 `vite.config.ts` 代理到 `http://localhost:8000`
+3. 创建 `src/api/auth.ts` 调用登录接口
+4. 创建 `src/pages/login.vue` 登录页（用户名 + 密码输入）
+5. 提交：commit -m "feat(frontend): uni-app 初始化 + 登录页 UI"
+
+**接口参考**:
+```
+POST /api/v1/auth/login
+Body: { "username": "...", "password": "..." }
+Response: { "access_token": "...", "refresh_token": "...", "token_type": "bearer", "expires_in": 1800 }
+```
+
+---
+
+## 8. Phase 1 交付物汇总
+
+| 模块 | 文件 | 状态 | 备注 |
+|------|------|------|------|
+| 配置 | app/core/config.py | ✅ | Pydantic Settings |
+| 数据库 | app/core/database.py | ✅ | async SQLAlchemy |
+| 安全 | app/core/security.py | ✅ | JWT + bcrypt |
+| 异常 | app/core/exceptions.py | ✅ | 统一异常体系 |
+| 用户模型 | app/models/user.py | ✅ | SQLAlchemy ORM |
+| Auth Schema | app/schemas/auth.py | ✅ | Pydantic 模型 |
+| 认证路由 | app/api/v1/auth.py | ✅ | 5 个端点 |
+| 行情路由 | app/api/v1/market.py | ✅ | Phase 2 桩 |
+| 持仓路由 | app/api/v1/portfolio.py | ✅ | Phase 2 桩 |
+| 分析路由 | app/api/v1/analysis.py | ✅ | Phase 2 桩 |
+| 选股路由 | app/api/v1/selection.py | ✅ | Phase 2 桩 |
+| 模拟交易路由 | app/api/v1/simulation.py | ✅ | Phase 2 桩 |
+| FastAPI 入口 | app/main.py | ✅ | lifespan + CORS |
+| 测试 | tests/conftest.py + test_auth.py | ✅ | 11 个用例 |
+| Docker | docker-compose.yml + Dockerfile | ✅ | Postgres + Redis |
+| 依赖 | pyproject.toml + uv.lock | ✅ | pip/uv 兼容 |
+
+**前置条件**: 需要 Docker 运行 `docker compose up postgres redis -d` 启动 Postgres + Redis
