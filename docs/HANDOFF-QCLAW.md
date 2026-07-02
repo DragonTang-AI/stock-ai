@@ -146,7 +146,7 @@ BREAKING-CHANGE: 无
 ### 🔴 进行中
 | 任务 | 负责人 | 状态 | 备注 |
 |------|--------|------|------|
-| Marvis T-M001 | Marvis | 空闲中 | uni-app 初始化，用户反映未开始 |
+| — | — | — | — |
 
 ### 🟠 待认领
 | 任务 | 描述 | 优先级 | 建议 |
@@ -198,6 +198,37 @@ BREAKING-CHANGE: 无
 POST /api/v1/auth/login
 Body: { "username": "...", "password": "..." }
 Response: { "access_token": "...", "refresh_token": "...", "token_type": "bearer", "expires_in": 1800 }
+```
+
+---
+
+### T-M003：前后端联调 - 接入真实登录 API
+
+**负责人**: Marvis
+**类型**: B 级（Marvis 可独立实现）
+**Worktree**: feat/frontend-ui
+**完成时间**: 2026-07-02 14:30
+
+**完成标准**:
+- 登录页提交 → 调用 `POST /api/v1/auth/login` → 获得 token
+- 登录成功 → `GET /api/v1/auth/me` 拉取用户信息 → 展示用户名 + 邮箱
+- "我的"页面每次可见时刷新用户数据
+
+**修改文件**:
+- `frontend/.env` — `VITE_API_BASE_URL=http://stockai.dragontang.com/api/v1`
+- `frontend/.env.example`（新增）— 配置参考文档
+- `frontend/src/api/auth.ts` — `UserInfo` 类型对齐后端字段 (id/email/is_active/created_at)
+- `frontend/src/stores/auth.ts` — `handleLogin` 成功后调用 `getCurrentUser()` 拉取完整用户信息
+- `frontend/src/pages/mine/index.vue` — `onMounted + onShow` 调用 `getCurrentUser()` 刷新，模板新增 email 显示
+
+**Git 提交**: `5ad0e99` feat(frontend): T-M003 前后端联调 - 接入真实登录 API
+
+**API 验证**（curl 全链路测试通过）:
+```
+POST /api/v1/auth/register → {id, username, email, is_active, created_at}
+POST /api/v1/auth/login   → {access_token, refresh_token, token_type, expires_in}
+GET  /api/v1/auth/me     → {id, username, email, is_active, created_at}
+POST /api/v1/auth/logout  → {message, success}
 ```
 
 ---
