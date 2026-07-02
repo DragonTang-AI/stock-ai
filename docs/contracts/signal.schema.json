@@ -1,0 +1,286 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-stock/contracts/signal.schema.json",
+  "title": "Signal",
+  "description": "AI-Stock 核心契约：AI 选股/分析引擎与交易执行引擎之间的唯一通信协议。一个 Signal = 一只股票的一个动作意图；批量推荐用 Signal 数组表达。AI 引擎只产出符合本 schema 的对象，交易引擎只接受本 schema 作为输入，双方禁止互相 import。修改本文件需人工审批并同步升级 schema_version。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "signal_id",
+    "created_at",
+    "source",
+    "market",
+    "symbol",
+    "action",
+    "confidence",
+    "currency",
+    "prices",
+    "agent_scores",
+    "reason_codes",
+    "reasoning"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "契约版本。结构变更必须升级此值并经人工审批。"
+    },
+    "signal_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "信号唯一标识，用于审计与回溯。"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "信号生成时间（ISO 8601，带时区）。"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["committee_agent", "prescreen", "manual", "qlib"],
+      "description": "信号来源。committee_agent=投委会Agent；prescreen=粗筛层；manual=用户手动；qlib=量化引擎(V2预留)。"
+    },
+    "market": {
+      "type": "string",
+      "enum": ["A", "HK"],
+      "description": "市场。A=A股，HK=港股。US 为 V3 预留，暂不接受。决定使用哪套 MarketRule。"
+    },
+    "symbol": {
+      "type": "string",
+      "pattern": "^[0-9]{4,6}\\.(SH|SZ|BJ|HK)$",
+      "description": "标的代码，带交易所后缀。A股示例 600519.SH / 000001.SZ / 430047.BJ；港股示例 00700.HK。"
+    },
+    "symbol_name": {
+      "type": "string",
+      "description": "标的名称，仅用于展示，可选。",
+      "maxLength": 64
+    },
+    "action": {
+      "type": "string",
+      "enum": ["BUY", "ADD", "HOLD", "REDUCE", "SELL"],
+      "description": "动作意图。BUY=新开仓(选股推荐)；ADD=加仓；HOLD=保留；REDUCE=减仓；SELL=清仓/抛出。交易引擎映射：BUY/ADD→买单，REDUCE/SELL→卖单(REDUCE部分,SELL全部)，HOLD→不下单。"
+    },
+    "confidence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "投委会综合置信分。建议解读：0-30 倾向抛出，30-70 倾向保留，70-100 倾向买入/加仓。"
+    },
+    "currency": {
+      "type": "string",
+      "enum": ["CNY", "HKD"],
+      "description": "价格字段所用币种。A股=CNY，港股=HKD。必须与 market 一致。"
+    },
+    "prices": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reference_price"],
+      "description": "价格信息。HOLD 动作时 target_price/stop_loss/take_profit 可为 null。",
+      "properties": {
+        "reference_price": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "信号生成时的参考价（通常为最新价或收盘价）。"
+        },
+        "target_price": {
+          "type": ["number", "null"],
+          "exclusiveMinimum": 0,
+          "description": "目标价；HOLD 时可为 null。"
+        },
+        "stop_loss": {
+          "type": ["number", "null"],
+          "exclusiveMinimum": 0,
+          "description": "止损价；托管模式下触达后自动执行。"
+        },
+        "take_profit": {
+          "type": ["number", "null"],
+          "exclusiveMinimum": 0,
+          "description": "止盈价；可选。"
+        }
+      }
+    },
+    "sizing": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "仓位建议，供 AI 托管/手动下单参考；纯推荐信号可为 null，由资金管理层决定实际数量。",
+      "properties": {
+        "suggested_position_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.15,
+          "description": "建议目标仓位占总资产比例。受全局风控约束，不得超过 0.15（单票上限 15%）。"
+        },
+        "suggested_qty": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "建议数量（股）。最终须经 MarketRule.normalize_qty 对齐最小手数。"
+        }
+      }
+    },
+    "agent_scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["technical", "fundamental", "sentiment"],
+      "description": "各子 Agent 分项打分，供前端展示「为什么」。",
+      "properties": {
+        "technical": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "技术面 Agent 打分（MACD/RSI/布林带/量价等）。"
+        },
+        "fundamental": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "基本面 Agent 打分（PE/PB/ROE/营收增速/负债率等）。"
+        },
+        "sentiment": {
+          "type": "integer",
+          "minimum": -50,
+          "maximum": 50,
+          "description": "舆情 Agent 情绪打分（新闻/雪球等），负值偏空、正值偏多。"
+        }
+      }
+    },
+    "reason_codes": {
+      "type": "array",
+      "description": "机器可读的理由标签，便于统计与过滤。建议词汇：momentum, breakout, oversold, overbought, undervalued, overvalued, earnings_beat, earnings_miss, high_roe, high_debt, positive_news, negative_news, sector_rotation, stop_loss_hit, take_profit_hit。",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{1,40}$"
+      },
+      "minItems": 1,
+      "maxItems": 12,
+      "uniqueItems": true
+    },
+    "reasoning": {
+      "type": "string",
+      "description": "面向用户的自然语言分析说明。",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "risk": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "随信号附带的风控约束，供交易引擎校验；缺省时回退到全局风控配置。",
+      "properties": {
+        "max_position_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.15,
+          "default": 0.15,
+          "description": "单票仓位上限（占总资产比例），不得超过全局 15%。"
+        },
+        "stop_loss_pct": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1,
+          "description": "止损比例（相对成本），可选。"
+        }
+      }
+    },
+    "meta": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "附加元信息，可选。",
+      "properties": {
+        "report_date": {
+          "type": "string",
+          "format": "date",
+          "description": "归属交易日（用于每日选股/诊断批次归档）。"
+        },
+        "valid_until": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "信号有效期截止；过期信号交易引擎应拒绝执行。"
+        },
+        "horizon": {
+          "type": ["string", "null"],
+          "enum": ["intraday", "short", "mid", "long", null],
+          "description": "建议持有周期。"
+        },
+        "report_id": {
+          "type": ["string", "null"],
+          "format": "uuid",
+          "description": "关联的 analysis.daily_reports 记录 id。"
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "schema_version": "1.0",
+      "signal_id": "1f3b9c2e-7a44-4e1b-9c2a-9e0d6b5a1c10",
+      "created_at": "2026-06-02T07:05:00+08:00",
+      "source": "committee_agent",
+      "market": "A",
+      "symbol": "600519.SH",
+      "symbol_name": "贵州茅台",
+      "action": "BUY",
+      "confidence": 82,
+      "currency": "CNY",
+      "prices": {
+        "reference_price": 1780.0,
+        "target_price": 1980.0,
+        "stop_loss": 1650.0,
+        "take_profit": 2050.0
+      },
+      "sizing": {
+        "suggested_position_pct": 0.1,
+        "suggested_qty": 100
+      },
+      "agent_scores": {
+        "technical": 75,
+        "fundamental": 90,
+        "sentiment": 28
+      },
+      "reason_codes": ["undervalued", "high_roe", "momentum"],
+      "reasoning": "基本面稳健，ROE 维持高位，技术面突破短期均线，舆情中性偏多。",
+      "risk": {
+        "max_position_pct": 0.1,
+        "stop_loss_pct": 0.08
+      },
+      "meta": {
+        "report_date": "2026-06-02",
+        "valid_until": "2026-06-02T15:00:00+08:00",
+        "horizon": "mid",
+        "report_id": "a2c4e6f8-1234-4abc-9def-0123456789ab"
+      }
+    },
+    {
+      "schema_version": "1.0",
+      "signal_id": "2b8e4d1a-3c55-4f2c-8d3b-0a1b2c3d4e5f",
+      "created_at": "2026-06-02T07:06:00+08:00",
+      "source": "committee_agent",
+      "market": "HK",
+      "symbol": "00700.HK",
+      "symbol_name": "腾讯控股",
+      "action": "HOLD",
+      "confidence": 55,
+      "currency": "HKD",
+      "prices": {
+        "reference_price": 380.0,
+        "target_price": null,
+        "stop_loss": 340.0,
+        "take_profit": null
+      },
+      "sizing": null,
+      "agent_scores": {
+        "technical": 50,
+        "fundamental": 68,
+        "sentiment": 5
+      },
+      "reason_codes": ["sector_rotation"],
+      "reasoning": "估值合理但短期催化不足，建议持有观望，跌破止损价再行减仓。",
+      "risk": null,
+      "meta": {
+        "report_date": "2026-06-02",
+        "valid_until": null,
+        "horizon": "mid",
+        "report_id": null
+      }
+    }
+  ]
+}

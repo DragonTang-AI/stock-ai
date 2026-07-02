@@ -1,0 +1,30 @@
+---
+description: AI-Stock 项目核心规范与全局约束（始终生效）。任何任务前先遵守此规则，详细条款见根目录 CLAUDE.md。
+alwaysApply: true
+---
+
+# AI-Stock · 全局规范（始终生效）
+
+> 本规则是 `CLAUDE.md`（项目宪法）的 Cursor 侧执行入口。遇冲突以 `CLAUDE.md` 为准。
+> 架构依据：`AI-Stock-终极架构-Opus定稿.md`。当前阶段：**V1**。
+
+## 必记 8 条
+1. A股 + 港股 的 AI 选股 / 模拟交易平台；**V1 不做实盘自动下单**。
+2. 栈：Python 3.12 + FastAPI + SQLAlchemy 2.0(async) + Celery + PostgreSQL 16 + Redis 7 + LangGraph + uni-app(Vue3)；依赖用 **uv**。
+3. 选股 = **粗筛层(非 LLM) → 4-Agent 投委会(LLM)**，两层都不能省。
+4. AI 层与交易层**只通过 `Signal` JSON 协议通信**，禁止互相 import。
+5. 市场差异(A股/港股)**全部收敛在 `MarketRule`**，禁止散落 `if market == ...`。
+6. 涉及**资金/订单/撮合/风控** = **S 级**：必须 Claude Code + Opus + 人审（见 020 规则）。
+7. **小步提交**：每次改 ≤ 3-5 文件，测试通过即 commit。
+8. 不确定就停下问，**禁止**自行扩大改动 / 删环境 / 重建 / 引入未批准技术。
+
+## 风控阈值（全项目唯一标准）
+- 单票仓位上限 ≤ 总资产 **15%**
+- 单日最大亏损熔断 ≤ **5%**
+- 初始模拟资金默认 **¥1,000,000**
+
+## 行为红线
+- 禁止硬编码密钥/费率/市场规则。
+- 禁止生成与上述技术栈不符的代码（如擅自引入 Kafka/Mongo/NestJS）。
+- 禁止整库喂 Qlib/VeighNa 给模型（集成走 `docs/integrations/` 流水线，V2 启用）。
+- 修改 `CLAUDE.md` / `docs/contracts/` 需人工审批，AI 不得自行更改。
