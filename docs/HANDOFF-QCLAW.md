@@ -129,27 +129,10 @@ BREAKING-CHANGE: 无
 
 ---
 
-## 6. 当前状态（2026-07-02 上午更新）
+## 6. 当前状态（2026-07-02 下午更新）
 
 ```markdown
-## [2026-07-02 上午] Phase 1 后端骨架完成
-
-### 🔴 进行中
-| 任务 | 负责人 | 状态 | 备注 |
-|------|--------|------|------|
-| — | — | — | — |
-
-### 🟠 待认领
-| 任务 | 描述 | 优先级 | 建议 |
-|------|------|--------|------|
-| uni-app 初始化 + 登录页面 | 在 feat/frontend-ui 初始化 uni-app 项目，接入 POST /api/v1/auth/login | P1 | 见下方详细描述 |
-| uni-app 首页（行情卡片） | TabBar 首页 + ECharts K线图，接入 GET /api/v1/market/quotes | P2 | Phase 2 再实现 |
-| Docker 启动验证 | docker compose up -d postgres redis，确认 API 可连接 DB | P1 | QClaw 或 Marvis 均可 |
-
-### 🟡 阻塞
-| 任务 | 负责人 | 阻塞原因 | 等待 |
-|------|--------|----------|------|
-| — | — | — | — |
+## [2026-07-02 下午] Phase 1 后端生产部署完成
 
 ### 🟢 已完成
 | 任务 | 负责人 | 完成时间 | 备注 |
@@ -157,7 +140,30 @@ BREAKING-CHANGE: 无
 | Git 仓库初始化 | QClaw | 2026-07-02 | DragonTang-AI/stock-ai |
 | Worktree 建立 | QClaw | 2026-07-02 | 4 个 worktree |
 | 开工契约 v1 | QClaw | 2026-07-02 | TEAM-CHARTER / BOUNDARY / HANDOFF-QCLAW / WORKTREE |
-| Phase 1 后端骨架 | QClaw | 2026-07-02 | feat/backend-scaffold commit 99fcc69 |
+| Phase 1 后端骨架 | QClaw | 2026-07-02 上午 | feat/backend-scaffold commit 99fcc69 |
+| **Phase 1 生产部署** | **QClaw** | **2026-07-02 13:06** | **http://stockai.dragontang.com 已上线 ✅** |
+
+### 🔴 进行中
+| 任务 | 负责人 | 状态 | 备注 |
+|------|--------|------|------|
+| Marvis T-M001 | Marvis | 空闲中 | uni-app 初始化，用户反映未开始 |
+
+### 🟠 待认领
+| 任务 | 描述 | 优先级 | 建议 |
+|------|------|--------|------|
+| uni-app 初始化 + 登录页 | feat/frontend-ui 初始化 Vue 项目，接入 POST /api/v1/auth/login | P1 | 见下方 T-M001 |
+| uni-app 首页行情 | TabBar 首页 + ECharts K线图，接入 GET /api/v1/market/quotes | P2 | Phase 2 |
+
+### 🟡 阻塞
+| 任务 | 负责人 | 阻塞原因 | 等待 |
+|------|--------|----------|------|
+| — | — | — | — |
+
+### ⚠️ 注意事项
+- **API 已上线**: http://stockai.dragontang.com/docs
+- **生产环境 Python**: /usr/bin/python3.12, pip packages 在 /data/stockai/pylocal/
+- **手动 uvicorn 已启动**（PID 3952305），需配置 systemd 服务持久化
+- **SSL 证书**: 尚未配置，http://stockai.dragontang.com 暂为 HTTP
 ```
 
 ---
