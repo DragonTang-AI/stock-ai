@@ -132,7 +132,7 @@ BREAKING-CHANGE: 无
 ## 6. 当前状态（2026-07-02 下午更新）
 
 ```markdown
-## [2026-07-02 下午] Phase 1 后端生产部署完成
+## [2026-07-02 下午] Phase 1 后端生产部署完成 + 前端行情/选股页交付
 
 ### 🟢 已完成
 | 任务 | 负责人 | 完成时间 | 备注 |
@@ -142,25 +142,31 @@ BREAKING-CHANGE: 无
 | 开工契约 v1 | QClaw | 2026-07-02 | TEAM-CHARTER / BOUNDARY / HANDOFF-QCLAW / WORKTREE |
 | Phase 1 后端骨架 | QClaw | 2026-07-02 上午 | feat/backend-scaffold commit 99fcc69 |
 | **Phase 1 生产部署** | **QClaw** | **2026-07-02 13:06** | **http://stockai.dragontang.com 已上线 ✅** |
+| T-M001 uni-app 初始化 | Marvis | 2026-07-02 | TabBar + 登录/行情/选股/持仓/我的 |
+| T-M003 前后端联调 | Marvis | 2026-07-02 14:30 | commit 5ad0e99 |
+| **T-M004 行情页接入 API** | **Marvis** | **2026-07-02 14:50** | **commit 002d196** |
+| **T-M005 选股页 UI + Mock** | **Marvis** | **2026-07-02 15:00** | **commit 44a5acd** |
 
 ### 🔴 进行中
 | 任务 | 负责人 | 状态 | 备注 |
 |------|--------|------|------|
-| — | — | — | — |
+| T-S001 行情 API (AkShare) | QClaw | 0% | feat/backend-scaffold |
 
 ### 🟠 待认领
 | 任务 | 描述 | 优先级 | 建议 |
 |------|------|--------|------|
-| uni-app 初始化 + 登录页 | feat/frontend-ui 初始化 Vue 项目，接入 POST /api/v1/auth/login | P1 | 见下方 T-M001 |
-| uni-app 首页行情 | TabBar 首页 + ECharts K线图，接入 GET /api/v1/market/quotes | P2 | Phase 2 |
+| T-M006 持仓页 UI | 实现持仓列表 + 模拟交易记录 | P2 | 对接 GET /api/v1/portfolio |
+| T-M007 选股页接入真实 API | 替换 src/mock/selection.ts 为 GET /api/v1/selection/recommend | P2 | 等 T-S001 完成 |
+| T-M008 行情详情页 | ECharts K 线图 + 模拟交易入口 | P2 | 对接 GET /api/v1/market/kline |
 
 ### 🟡 阻塞
 | 任务 | 负责人 | 阻塞原因 | 等待 |
 |------|--------|----------|------|
-| — | — | — | — |
+| T-M007 选股页接入 API | Marvis | 后端选股路由为 Phase 2 桩 | QClaw 完成 T-S001 |
 
 ### ⚠️ 注意事项
 - **API 已上线**: http://stockai.dragontang.com/docs
+- **前端 dev server**: `cd frontend-ui/frontend && npm run dev:h5`
 - **生产环境 Python**: /usr/bin/python3.12, pip packages 在 /data/stockai/pylocal/
 - **手动 uvicorn 已启动**（PID 3952305），需配置 systemd 服务持久化
 - **SSL 证书**: 尚未配置，http://stockai.dragontang.com 暂为 HTTP
@@ -255,3 +261,62 @@ POST /api/v1/auth/logout  → {message, success}
 | 依赖 | pyproject.toml + uv.lock | ✅ | pip/uv 兼容 |
 
 **前置条件**: 需要 Docker 运行 `docker compose up postgres redis -d` 启动 Postgres + Redis
+
+---
+
+### T-M004：行情页接入真实 API
+
+**负责人**: Marvis
+**类型**: B 级（Marvis 可独立实现）
+**Worktree**: feat/frontend-ui
+**完成时间**: 2026-07-02 14:50
+
+**完成标准**:
+- 行情页移除硬编码 mockQuotes（8 条）
+- `fetchQuotes()` 解包后端 `{success, data}` 响应体，标准化字段
+- `fetchKLine()` 同样解包
+- 下拉刷新、市场筛选（A股/港股/全部）正常
+
+**修改文件**:
+- `frontend/src/api/market.ts` — 新增 `normalizeQuote()` + `MarketApiResponse<T>`
+- `frontend/src/pages/market/index.vue` — 移除 mock，修复 `onMounted` 钩子
+
+**Git 提交**: `002d196` feat(frontend): T-M004 行情页接入真实 API
+
+**备注**: 后端 `/api/v1/market/quotes` 当前为 Phase 2 桩（price=0），前端完全就绪
+
+---
+
+### T-M005：选股页 UI + Mock 数据
+
+**负责人**: Marvis
+**类型**: B 级（Marvis 可独立实现）
+**Worktree**: feat/frontend-ui
+**完成时间**: 2026-07-02 15:00
+
+**完成标准**:
+- ✅ `src/mock/selection.ts` 提供 10 条推荐数据（格式对齐后端 `GET /api/v1/selection/recommend`）
+- ✅ 推荐列表按置信度降序，含金/银/铜排名徽章
+- ✅ 点击股票 → `uni.navigateTo` 跳转详情页
+- ✅ 下拉刷新触发 Mock 数据重新生成（含仿真延迟）
+- ✅ Loading 骨架屏 / Error / Empty 三态覆盖
+- ✅ 三维评分条（技术面/基本面/舆情）0-100 可视化
+
+**Mock 数据格式**（对接后端接口）:
+```json
+{
+  "symbol": "600519.SH",
+  "name": "贵州茅台",
+  "confidence": 0.92,
+  "reason": "MACD金叉信号确认...",
+  "score": {"technical": 0.92, "fundamental": 0.85, "sentiment": 0.90}
+}
+```
+
+**修改文件**:
+- `frontend/src/mock/selection.ts`（新建）— Mock 数据 + `generateRecommendations()` + `deriveAction()`
+- `frontend/src/pages/selection/index.vue`（重写）— 接入 Mock、完整三态 UI、骨架屏
+
+**Git 提交**: `44a5acd` feat(frontend): T-M005 选股页 UI + Mock 数据
+
+**备注**: 后端 T-S001 完成后替换 mock 为 `fetch('/api/v1/selection/recommend')` 即可
