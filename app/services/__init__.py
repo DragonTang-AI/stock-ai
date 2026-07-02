@@ -1,4 +1,3 @@
-# app/services/__init__.py
-from app.services import market
-
-__all__ = ["market"]
+"""
+app/services/__init__.py — 业务服务包
+"""

@@ -6,7 +6,7 @@ POST /api/v1/auth/refresh         刷新 Token
 POST /api/v1/auth/logout          登出（前端删除 Token 即可，这里仅占位）
 GET  /api/v1/auth/me              当前用户信息
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -69,6 +69,34 @@ async def get_current_user(
         )
 
     return user
+
+
+async def get_current_user_optional(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    """从 JWT 获取当前用户（可选依赖，无 token 时返回 None）"""
+    # 手动从 Authorization header 解析 token（避免 OAuth2PasswordBearer 自动 401）
+    auth_header = request.headers.get("Authorization", "")
+    token = None
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]  # 去掉 "Bearer " 前缀
+    if not token:
+        return None
+    try:
+        payload = verify_token(token, token_type="access")
+        if payload is None:
+            return None
+        user_id: str | None = payload.get("sub")
+        if user_id is None:
+            return None
+        result = await db.execute(select(User).where(User.id == int(user_id)))
+        user = result.scalar_one_or_none()
+        if user is None or not user.is_active:
+            return None
+        return user
+    except Exception:
+        return None
 
 
 # ── Routes ───────────────────────────────────────────────────────────────
