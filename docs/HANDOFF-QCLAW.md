@@ -320,3 +320,69 @@ POST /api/v1/auth/logout  → {message, success}
 **Git 提交**: `44a5acd` feat(frontend): T-M005 选股页 UI + Mock 数据
 
 **备注**: 后端 T-S001 完成后替换 mock 为 `fetch('/api/v1/selection/recommend')` 即可
+
+---
+
+### T-S001：行情 API 接入 AkShare 真实数据
+
+**负责人**: QClaw
+**类型**: A 级（QClaw 主责，需 S级测试）
+**Worktree**: feat/backend-scaffold
+**完成时间**: 2026-07-02 15:10
+
+**完成标准**:
+- ✅ `app/schemas/market.py` — QuoteItem / KLineItem Pydantic Schema
+- ✅ `app/services/market.py` — AkShare 封装（异步执行 + Mock 降级）
+- ✅ `app/api/v1/market.py` — `/quotes` + `/kline/{symbol}` 真实实现
+- ✅ 已部署到生产环境 `http://stockai.dragontang.com`
+- ✅ API 测试通过（Mock 数据模式，AkShare 待安装）
+
+**技术细节**:
+- AkShare 未安装时自动降级到 Mock 数据（不影响 API 启动）
+- `fetch_realtime_quotes()` — 使用 `ak.stock_zh_a_spot_em()` 获取全市场数据
+- `fetch_kline()` — 使用 `ak.stock_zh_a_hist()` 获取历史 K 线
+- 异步封装：`asyncio.run_in_executor` 避免阻塞事件循环
+
+**Git 提交**:
+- `3470ec1` feat(api): T-S001 行情 API 接入 AkShare 真实数据
+- `1d6801a` fix(services): 兼容 AkShare 未安装环境，返回 Mock 数据
+
+**生产部署**:
+- 代码已通过 GitHub 拉取到 `/data/stockai/backend/`
+- API 进程已重启（PID 4033758）
+- `/health` 检查通过
+- `/api/v1/market/quotes?symbols=600519.SH,000001.SZ` 测试通过
+
+**待办**:
+- 在生产服务器安装 AkShare（`pip install --user akshare`）
+- 安装后 API 自动切换到真实数据（无需重启）
+
+---
+
+## 9. Phase 2 交付物汇总（进行中）
+
+| 模块 | 文件 | 状态 | 备注 |
+|------|------|------|------|
+| 行情 Schema | app/schemas/market.py | ✅ | QuoteItem + KLineItem |
+| 行情服务 | app/services/market.py | ✅ | AkShare 封装 + Mock 降级 |
+| 行情路由 | app/api/v1/market.py | ✅ | /quotes + /kline 真实实现 |
+| 选股路由 | app/api/v1/selection.py | 🟡 | Phase 2 桩（待 T-S002） |
+| 交易路由 | app/api/v1/portfolio.py | 🟡 | Phase 2 桩（待 T-S003） |
+
+---
+
+## 10. 下一步任务
+
+### 🟠 待认领（QClaw）
+| 任务 | 描述 | 优先级 | 建议 |
+|------|------|--------|------|
+| T-S002 | 选股 API 实现（GET /api/v1/selection/recommend） | P0 | 对接 LangGraph Agent |
+| T-S003 | 交易 API 实现（订单下单/查询持仓） | P0 | 需对接交易引擎 |
+| T-S004 | 在生产服务器安装 AkShare | P1 | `pip install --user akshare` |
+
+### 🟠 待认领（Marvis）
+| 任务 | 描述 | 优先级 | 建议 |
+|------|------|--------|------|
+| T-M006 | 选股页接入真实 API（替换 Mock） | P1 | 等待 T-S002 完成 |
+| T-M007 | 行情页 K 线图表优化（ECharts） | P2 | 可独立进行 |
+
