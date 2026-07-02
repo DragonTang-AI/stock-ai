@@ -1,38 +1,42 @@
-# Git Worktree 协作规范
+# Git Worktree 协作规范（QClaw + Marvis 版）
 
-> 目标：让 Cursor、Claude 桌面端、未来的前端/后端/交易 Agent 并发工作时互不撞车。  
-> 原则：主仓库做稳定基线，功能开发全部在独立 worktree 中进行。
+> 版本：v2.0 | 日期：2026-07-02
+> 目标：QClaw × Marvis 双团队并行开发，互不冲突
+> 仓库：`https://github.com/DragonTang-AI/stock-ai`
 
 ---
 
-## 1. 当前仓库与远端
+## 1. 仓库与目录结构
 
-- GitHub: `https://github.com/DragonTang-AI/AI_Stock`
-- 主目录：`/Users/admin/Downloads/ai-stock`
-- Worktree 根目录：`/Users/admin/Downloads/ai-stock-worktrees`
+```
+主仓库（QClaw 主会话操作）:
+/Users/admin/Downloads/ai-stock备份/ai-stock_Qclaw+Marvis/
+  origin: https://github.com/DragonTang-AI/stock-ai
+  分支: main（文档/契约/架构定稿）
+
+Worktrees（各分支独立工作）:
+/Users/admin/Downloads/ai-stock备份/ai-stock-worktrees_Qclaw+Marvis/
+  ├── backend-scaffold/  (feat/backend-scaffold)
+  ├── ai-agents/        (feat/ai-agents)
+  ├── trading-core/      (feat/trading-core)
+  └── frontend-ui/       (feat/frontend-ui)
+```
+
+**注意：QClaw 和 Claude+Cursor 是完全独立的两个工程目录，互不干扰。**
+- QClaw+Marvis 的仓库：`DragonTang-AI/stock-ai`
+- Claude+Cursor 的仓库：`DragonTang-AI/AI_Stock`
 
 ---
 
 ## 2. 分支职责
 
-| 分支 | 目录 | 职责 | 是否直接开发 |
-|------|------|------|--------------|
-| `main` | `/Users/admin/Downloads/ai-stock` | 稳定基线，只放已确认可追溯的内容 | **否** |
-| `dev` | 无固定 worktree | 集成分支，feature 合并后进入这里 | 否 |
-| `feat/backend-scaffold` | `ai-stock-worktrees/backend-scaffold` | FastAPI / DB / Redis / Docker / 后端骨架 | 是 |
-| `feat/frontend-ui` | `ai-stock-worktrees/frontend-ui` | uni-app / Ardot 落地 / 图表 / 前端联调 | 是 |
-| `feat/ai-agents` | `ai-stock-worktrees/ai-agents` | 粗筛层 / LangGraph / Agent 编排 | 是 |
-| `feat/trading-core` | `ai-stock-worktrees/trading-core` | S 级交易核心 / MarketRule / 撮合 / 风控 | 是，但需 Opus + 人审 |
-
-当前 worktree：
-
-```text
-/Users/admin/Downloads/ai-stock                             main
-/Users/admin/Downloads/ai-stock-worktrees/backend-scaffold  feat/backend-scaffold
-/Users/admin/Downloads/ai-stock-worktrees/frontend-ui       feat/frontend-ui
-/Users/admin/Downloads/ai-stock-worktrees/ai-agents         feat/ai-agents
-/Users/admin/Downloads/ai-stock-worktrees/trading-core      feat/trading-core
-```
+| 分支 | Worktree 路径 | 职责 | 主力 | S/A级限制 |
+|------|-------------|------|------|----------|
+| `main` | 主目录 | 文档/契约/架构定稿 | QClaw | — |
+| `feat/backend-scaffold` | worktrees/backend-scaffold | FastAPI骨架/API/DB/Redis/Docker | **QClaw** | Marvis 禁止写 trading/agents |
+| `feat/ai-agents` | worktrees/ai-agents | 粗筛层/LangGraph/4-Agent引擎 | **QClaw** | Marvis 禁止碰 |
+| `feat/trading-core` | worktrees/trading-core | S级/MarketRule/撮合/风控 | **QClaw** | **仅 Opus + 人审实现** |
+| `feat/frontend-ui` | worktrees/frontend-ui | uni-app/图表/前端联调 | **Marvis** | QClaw 仅辅助 |
 
 ---
 
@@ -40,133 +44,94 @@
 
 ### 3.1 开始任务
 
-1. 进入对应 worktree。
-2. 确认分支正确：
-
 ```bash
-git status --short --branch
-```
-
-3. 从远端同步：
-
-```bash
+# QClaw：在主仓库 pull 最新
+cd "/Users/admin/Downloads/ai-stock备份/ai-stock_Qclaw+Marvis"
 git fetch origin
-git merge --ff-only origin/dev
+git pull
+
+# 进入对应 worktree
+cd "/Users/admin/Downloads/ai-stock备份/ai-stock-worktrees_Qclaw+Marvis/backend-scaffold"
+git fetch origin
+git merge origin/main   # 从 main 同步最新
 ```
 
-> 如果 `--ff-only` 失败，说明该分支已有独立提交或 dev 已前进，需要人工判断，不要自动 rebase/merge。
+### 3.2 开发规则
 
-### 3.2 开发中
+1. **同一文件同一时刻只允许一方修改**（共享文件走 HANDOFF 协议）
+2. **每次提交 ≤ 5 个文件**，测试通过即 commit
+3. **S 级目录** `app/trading/` 只在 `feat/trading-core` worktree 实现
+4. **Marvis 禁止写** `app/trading/`、`app/agents/`、`app/selection/`、`app/core/` 核心
+5. **提交后立即 push**，不积压本地改动
 
-- 单轮改动 ≤ 3-5 文件。
-- 同一文件同一时刻只允许一个 Agent/工具修改。
-- 发现需要改其它 worktree 负责目录时，先写入 `docs/HANDOFF.md` 或告知用户，不直接越界。
-- S 级目录 `app/trading/` 只在 `feat/trading-core` worktree 中实现。
+### 3.3 提交规范
 
-### 3.3 提交
-
-提交格式：
-
-```text
-type(scope): message
 ```
+<type>(<scope>): <简短描述>
 
-type ∈ `feat` / `fix` / `refactor` / `test` / `docs` / `chore`
+type: feat | fix | refactor | test | docs | chore
+scope: backend | frontend | agents | trading | infra | docs
+```
 
 示例：
-
 ```bash
-git add app/core app/main.py tests/test_health.py
-git commit -m "feat(api): add FastAPI health scaffold"
+git add app/api/v1/auth.py tests/test_auth.py
+git commit -m "feat(backend): add auth endpoints (login/logout/refresh)"
 git push
 ```
 
-> 未经用户明确要求，不要由 AI 主动 commit。用户要求提交时，必须先展示 `git status` 和将被提交的范围。
+### 3.4 合并顺序
 
-### 3.4 合并
-
-合并顺序：
-
-```text
-feat/* → dev → main
+```
+feat/* (各 worktree) → main (主仓库)
 ```
 
-- `feat/*` 合并到 `dev`：功能完成、测试通过、无契约冲突。
-- `dev` 合并到 `main`：阶段性稳定版本。
-- `feat/trading-core` 合并前必须额外满足：
-  - Opus 实现或审查
-  - 边界测试 + 并发对账测试
-  - 人工逐行审查
-  - PR/提交说明标明 S 级改动范围
+- `feat/trading-core` 合并前：Opus 实现 + 边界测试 + 并发对账测试 + 人工逐行审
+- `feat/frontend-ui` 合并前：QClaw 审阅前端架构 + 确认 API 联调无问题
 
 ---
 
-## 4. 目录归属
+## 4. 协作总线
 
-| 路径 | 主责 worktree | 其它 worktree 是否可改 |
-|------|---------------|-------------------------|
-| `app/core/` | backend-scaffold | 可，但需协调 |
-| `app/api/` | backend-scaffold | 可薄改，需协调 |
-| `app/models/` | backend-scaffold | 可，但需契约确认 |
-| `app/schemas/` | backend-scaffold | 可，但 `signals.py` 必须对齐 `docs/contracts/` |
-| `app/services/` | backend-scaffold | 可，但交易相关不得越界 |
-| `app/selection/` | ai-agents | 其它只读 |
-| `app/agents/` | ai-agents | 其它只读 |
-| `app/trading/` | trading-core | 其它只读；Cursor 内不实现 |
-| `frontend/` | frontend-ui | 其它只读 |
-| `docs/contracts/` | 人工审批 | 修改需先讨论 |
-| `CLAUDE.md` | 人工审批 | AI 不得自行修改 |
-| `.cursor/rules/` | Cursor/人工 | 修改需同步 CLAUDE.md |
+```
+QClaw 主会话
+  ↓ 写代码 → commit → push
+  ↓ 更新 docs/HANDOFF-QCLAW.md
+
+Marvis 子代理
+  ↓ 读取 HANDOFF → 认领任务
+  ↓ 写代码 → commit → push
+  ↓ 更新 HANDOFF
+
+双方通过 Git + HANDOFF 文件交接，不依赖实时聊天。
+```
 
 ---
 
 ## 5. 冲突处理
 
-如果出现冲突：
-
-1. 停止继续生成代码。
-2. 记录冲突文件与分支。
-3. 判断文件归属，归属方优先解决。
-4. 不使用 `git reset --hard`、`git checkout --`、强推等破坏性命令，除非用户明确批准。
-5. 合并后必须运行相关测试。
+1. **同一文件冲突**：先 push 者优先，后 push 者自行解决冲突（保留双方合理改动）
+2. **目录归属争议**：查 `docs/BOUNDARY.md`
+3. **S 级实现争议**：提交设计文档 → 用户 + Opus 决策
+4. **禁止使用** `git reset --hard`、`git push --force`
 
 ---
 
-## 6. 未跟踪文件策略
+## 6. 新增 / 删除 Worktree
 
-主目录中存在一些历史 Battle 文档或其它项目文档，当前**不纳入仓库**，避免污染项目地基。
-
-已纳入首提交的核心文件：
-
-- `CLAUDE.md`
-- `.cursor/rules/`
-- `AI-Stock-终极架构-Opus定稿.md`
-- `docs/HANDOFF.md`
-- `docs/contracts/`
-- `docs/integrations/`
-- `.gitignore`
-
-如需归档旧文档，应另建 `docs/research/archive/` 并由用户确认后再提交。
-
----
-
-## 7. 新增 worktree 模板
-
-如后续需要新增独立工作线：
-
+### 新增 Worktree
 ```bash
-cd /Users/admin/Downloads/ai-stock
-git fetch origin
-git worktree add -b feat/<name> /Users/admin/Downloads/ai-stock-worktrees/<name> dev
+cd "/Users/admin/Downloads/ai-stock备份/ai-stock_Qclaw+Marvis"
+git worktree add -b feat/<name> \
+  "/Users/admin/Downloads/ai-stock备份/ai-stock-worktrees_Qclaw+Marvis/<name>" \
+  main
 git push -u origin feat/<name>
 ```
 
-删除已完成 worktree：
-
+### 删除 Worktree（完成使命后）
 ```bash
-git worktree remove /Users/admin/Downloads/ai-stock-worktrees/<name>
+cd "/Users/admin/Downloads/ai-stock备份/ai-stock_Qclaw+Marvis"
+git worktree remove "/Users/admin/Downloads/ai-stock备份/ai-stock-worktrees_Qclaw+Marvis/<name>"
 git branch -d feat/<name>
+git push origin --delete feat/<name>
 ```
-
-> 删除远端分支需人工确认后执行。
-
