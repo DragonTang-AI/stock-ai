@@ -1,11 +1,17 @@
 """
-app/services/market.py — 行情数据服务（AkShare 封装）
+app/services/market.py — 行情数据服务（AkShare 封装，支持 Mock 降级）
 """
-import akshare as ak
+try:
+    import akshare as ak
+
+    AKSHARE_AVAILABLE = True
+except ImportError:
+    ak = None
+    AKSHARE_AVAILABLE = False
+
 from typing import List, Optional
 from app.schemas.market import QuoteItem, KLineItem
 import asyncio
-from functools import partial
 
 
 def _normalize_symbol(symbol: str) -> str:
@@ -33,11 +39,42 @@ def _get_market_suffix(symbol: str) -> str:
         return symbol  # 未知格式，原样返回
 
 
+def _mock_quotes(symbols: List[str]) -> List[QuoteItem]:
+    """Mock 行情数据（AkShare 未安装时使用）"""
+    mock_data = {
+        "600519.SH": {"name": "贵州茅台", "price": 1680.0, "change_pct": 2.5},
+        "000001.SZ": {"name": "平安银行", "price": 12.5, "change_pct": -0.8},
+    }
+    result = []
+    for symbol in symbols:
+        data = mock_data.get(symbol, {"name": symbol, "price": 0.0, "change_pct": 0.0})
+        price = data["price"]
+        change_pct = data["change_pct"]
+        change = price * change_pct / 100
+        result.append(
+            QuoteItem(
+                symbol=symbol,
+                name=data["name"],
+                price=price,
+                open=price * 0.99,
+                high=price * 1.02,
+                low=price * 0.98,
+                close=price - change,
+                change=change,
+                change_pct=change_pct,
+                volume=1000000,
+                amount=price * 1000000,
+            )
+        )
+    return result
+
+
 async def fetch_realtime_quotes(symbols: List[str]) -> List[QuoteItem]:
     """
     获取实时行情报价。
 
     使用 AkShare `stock_zh_a_spot_em()` 获取全市场实时数据，然后过滤指定股票。
+    如果 AkShare 未安装，返回 Mock 数据。
 
     Args:
         symbols: 股票代码列表，如 ["600519.SH", "000001.SZ"]
@@ -45,6 +82,10 @@ async def fetch_realtime_quotes(symbols: List[str]) -> List[QuoteItem]:
     Returns:
         QuoteItem 列表
     """
+    # 如果 AkShare 未安装，返回 Mock 数据
+    if not AKSHARE_AVAILABLE:
+        return _mock_quotes(symbols)
+
     loop = asyncio.get_event_loop()
 
     # AkShare 是同步库，用 run_in_executor 避免阻塞
@@ -90,6 +131,7 @@ async def fetch_kline(
     获取 K 线历史数据。
 
     使用 AkShare `stock_zh_a_hist()` 获取历史 K 线。
+    如果 AkShare 未安装，返回 Mock 数据。
 
     Args:
         symbol: 股票代码，如 "600519.SH"
@@ -99,6 +141,9 @@ async def fetch_kline(
     Returns:
         KLineItem 列表（按日期升序）
     """
+    if not AKSHARE_AVAILABLE:
+        return _mock_kline(symbol, count)
+
     loop = asyncio.get_event_loop()
 
     def _fetch():
@@ -138,3 +183,29 @@ async def fetch_kline(
         return result
 
     return await loop.run_in_executor(None, _fetch)
+
+
+def _mock_kline(symbol: str, count: int) -> List[KLineItem]:
+    """Mock K 线数据"""
+    import datetime
+
+    result = []
+    base_price = 1680.0 if "600519" in symbol else 12.5
+    today = datetime.date.today()
+
+    for i in range(count):
+        date = today - datetime.timedelta(days=count - i)
+        open_price = base_price * (0.98 + 0.04 * (i / count))
+        close_price = open_price * (1 + (-0.02 + 0.04 * (i / count)))
+        result.append(
+            KLineItem(
+                date=str(date),
+                open=round(open_price, 2),
+                close=round(close_price, 2),
+                high=round(open_price * 1.02, 2),
+                low=round(open_price * 0.98, 2),
+                volume=1000000 + i * 10000,
+                change_pct=round((close_price - open_price) / open_price * 100, 2),
+            )
+        )
+    return result
