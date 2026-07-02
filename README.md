@@ -97,3 +97,32 @@ backend-scaffold/
 | `REDIS_URL` | Redis 连接串 | `redis://localhost:6379/0` |
 | `JWT_SECRET` | JWT 密钥（生产必须改） | `CHANGE_ME` |
 | `IS_AUDIT_MODE` | 审核模式 | `true` |
+
+---
+
+## 🚀 生产部署（已上线）
+
+**API**: http://stockai.dragontang.com  
+**文档**: http://stockai.dragontang.com/docs
+
+### 环境
+- Ubuntu 22.04, Python 3.12, pip --user
+- PostgreSQL 16 (Docker) + Redis 7 (Docker)
+- nginx 反向代理，systemd 服务
+
+### 部署步骤
+```bash
+# 安装依赖（pip user 模式）
+/usr/bin/python3.12 -m pip install --user fastapi uvicorn[standard] \
+  sqlalchemy[asyncio] asyncpg alembic redis python-jose[cryptography] \
+  bcrypt cffi pydantic pydantic-settings pytest pytest-asyncio httpx \
+  email-validator
+
+# 迁移数据库
+cd /data/stockai/backend
+export PYTHONPATH=/data/stockai/pylocal/lib/python3.12/site-packages:$PWD
+/usr/bin/python3.12 -m alembic upgrade head
+
+# 启动
+systemctl start ai-stock-api
+```
