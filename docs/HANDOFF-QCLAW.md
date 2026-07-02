@@ -1,0 +1,160 @@
+# 任务交接协议：QClaw × Marvis
+
+> 版本：v1.0 | 日期：2026-07-02
+> 目的：QClaw 与 Marvis 不共享上下文，通过本文件交接任务
+
+---
+
+## 1. 工作模式
+
+**QClaw（主会话 + 多 worktree 并行）：**
+- 在 `feat/backend-scaffold` / `feat/ai-agents` / `feat/trading-core` 分别写代码
+- 通过 HANDOFF 文件向 Marvis 传递任务
+- Marvis 的输出通过 Git push → QClaw pull 到本地审阅
+
+**Marvis（子代理 sessions_spawn 并行）：**
+- 监听 HANDOFF 文件的任务队列
+- 在 `feat/frontend-ui` worktree 写前端代码
+- 通过 Git push → QClaw pull 到本地审阅
+- 阻塞时在 HANDOFF 标记状态
+
+---
+
+## 2. HANDOFF 文件格式
+
+```markdown
+## [YYYY-MM-DD] 交接状态
+
+### 🔴 进行中
+| 任务 | 负责人 | 状态 | 备注 |
+|------|--------|------|------|
+| FastAPI auth 路由 | QClaw | 80% | 预计今天完成 |
+| 登录页面 | Marvis | 待认领 | 见下方详细描述 |
+
+### 🟢 已完成
+| 任务 | 负责人 | 完成时间 | 备注 |
+|------|--------|----------|------|
+| Signal 契约定稿 | QClaw | 2026-07-02 | docs/contracts/signal.schema.json |
+| CLAUDE.md 更新 | QClaw | 2026-07-02 | 含 QClaw+Marvis 分工 |
+
+### 🟡 阻塞
+| 任务 | 负责人 | 阻塞原因 | 等待 |
+|------|--------|----------|------|
+| WebSocket 前端订阅 | Marvis | 等待后端 WS 路由 | QClaw 完成 app/api/websocket.py |
+
+### 🟠 待认领
+| 任务 | 描述 | 优先级 | 建议 |
+|------|------|--------|------|
+| 登录页面 | 接入 /api/v1/auth/login，响应式布局 | P1 | 先看 schemas/auth.py |
+| 首页行情卡片 | 接入 /api/v1/market/quotes，需 ECharts | P2 | — |
+```
+
+---
+
+## 3. 任务描述规范
+
+每个任务在「待认领」或「进行中」必须包含：
+
+```markdown
+### [任务ID] 任务名称
+**负责人**: QClaw / Marvis
+**类型**: S/A/B/C 级（见 TEAM-CHARTER.md）
+**Worktree**: feat/backend-scaffold / feat/ai-agents / feat/trading-core / feat/frontend-ui
+**涉及文件**:
+  - app/schemas/auth.py（新建）
+  - app/api/v1/auth.py（新建）
+**接口描述**:（如有）
+  - GET /api/v1/market/quotes?symbols=600519.SH,000001.SZ
+  - Response: 见 docs/contracts/signal.schema.json
+**完成标准**:（可测试）
+  - pytest tests/test_auth.py 通过
+  - curl localhost:8000/api/v1/auth/login 返回 200 + JWT
+**阻塞条件**:（如有）
+  - 等待：app/schemas/auth.py 定稿
+```
+
+---
+
+## 4. 交接流程
+
+### 4.1 QClaw → Marvis 传递任务
+
+```
+1. QClaw 在 HANDOFF-QCLAW.md「待认领」区域写入任务描述
+2. QClaw 在对应 worktree commit 并 push
+3. Marvis 子代理 sessions_spawn 读取 HANDOFF → 认领任务
+4. Marvis 在 feat/frontend-ui worktree 写代码
+5. Marvis commit → push → 更新 HANDOFF「已完成」区域
+6. QClaw pull → 审阅 → 如有问题在 HANDOFF 反馈
+```
+
+### 4.2 Marvis → QClaw 反馈
+
+```
+1. Marvis 在 HANDOFF「阻塞」区域标记问题 + 等待事项
+2. QClaw 主会话处理 → 完成 → 更新 HANDOFF「已完成」
+3. Marvis 收到通知 → 继续工作
+```
+
+### 4.3 冲突处理
+
+```
+同一文件被双方同时修改：
+1. 先 push 者优先，后 push 者自行解决冲突
+2. 解决方式：保留两者合理改动，冲突标记交给作者裁决
+3. 重大冲突：用户 + QClaw 决定
+```
+
+---
+
+## 5. 提交信息规范
+
+### QClaw 提交
+```
+feat(api): add auth endpoints (login/logout/refresh)
+
+BREAKING-CHANGE: 无
+关联: HANDOFF #3
+涉及文件: app/api/v1/auth.py, app/schemas/auth.py
+```
+
+### Marvis 提交
+```
+feat(frontend): add login page with JWT handling
+
+BREAKING-CHANGE: 无
+关联: HANDOFF #3
+涉及文件: frontend/src/pages/login.vue, frontend/src/api/auth.ts
+```
+
+---
+
+## 6. 当前状态（初始化）
+
+```markdown
+## [2026-07-02] 交接状态 - 初始化
+
+### 🔴 进行中
+| 任务 | 负责人 | 状态 | 备注 |
+|------|--------|------|------|
+| 建立双团队开工契约 | QClaw | 90% | TEAM-CHARTER / BOUNDARY / WORKTREE / HANDOFF |
+| 更新 CLAUDE.md | QClaw | 80% | 适配 QClaw+Marvis 职责 |
+| Phase 1 任务拆分 | QClaw | 待开始 | 见下方待认领 |
+
+### 🟠 待认领
+| 任务 | 描述 | 优先级 | 建议 |
+|------|------|--------|------|
+| — | 开工契约建立完成后，Phase 1 任务将下发 | — | — |
+
+### 🟡 阻塞
+| 任务 | 负责人 | 阻塞原因 | 等待 |
+|------|--------|----------|------|
+| — | — | — | — |
+
+### 🟢 已完成
+| 任务 | 负责人 | 完成时间 | 备注 |
+|------|--------|----------|------|
+| Git 仓库初始化 | QClaw | 2026-07-02 | DragonTang-AI/stock-ai |
+| Worktree 建立 | QClaw | 2026-07-02 | 4 个 worktree + 4 个分支 |
+| 开工契约 v1 | QClaw | 2026-07-02 | TEAM-CHARTER / BOUNDARY / HANDOFF-QCLAW / WORKTREE |
+```

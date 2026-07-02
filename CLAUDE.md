@@ -1,11 +1,23 @@
-# CLAUDE.md — AI-Stock 项目宪法
+# CLAUDE.md — AI-Stock 项目宪法（QClaw + Marvis 版）
 
-> 本文件是项目的最高行为准则。**任何 AI（Claude Code / Cursor / 其他）在执行任务前必须先完整阅读本文件。**
-> 修改本文件 = 修宪，必须经人工（项目负责人）审批，不得由 AI 自行更改。
+> **双团队说明**：本项目由 **QClaw（主开发）+ Marvis（副开发）** 并行开发。
+> QClaw 对应原 Claude Code 角色（架构/后端/AI引擎/测试）。
+> Marvis 对应原 Cursor 角色（前端/小改/联调/执行）。
+> 详细分工见 `docs/TEAM-CHARTER.md` 和 `docs/BOUNDARY.md`。
+>
+> 本文件是项目的最高行为准则。**QClaw 和 Marvis 在执行任务前必须先完整阅读本文件。**
+> 修改本文件 = 修宪，必须经用户（项目负责人）审批，不得由 AI 自行更改。
 > 架构依据：`AI-Stock-终极架构-Opus定稿.md`（唯一架构 Source of Truth）。
-> 最近更新：2026-06-02 ｜ 当前阶段：**V1 开发**
+> 最近更新：2026-07-02 ｜ 当前阶段：**V1 开发**
 
 ---
+
+> **QClaw 开工检查清单**：
+> - [x] 已阅读 `docs/TEAM-CHARTER.md`
+> - [x] 已阅读 `docs/BOUNDARY.md`
+> - [x] 已阅读 `docs/HANDOFF-QCLAW.md`
+> - [x] 已阅读 `docs/WORKTREE.md`
+> - [x] 已在 HANDOFF-QCLAW.md 记录当前 Phase 1 任务状态
 
 ## 0. 一分钟速读（AI 必记）
 
@@ -15,8 +27,9 @@
 4. AI 层与交易层**只通过 `Signal` JSON 协议通信**，禁止互相 import。
 5. 市场差异（A股/港股）**全部收敛在 `MarketRule`**，上层不写 if market == ...。
 6. 涉及**资金/订单/撮合/风控**的代码是 **S 级**：强模型 + 测试 + 人工审查，缺一不可。
-7. **小步提交**：每次改 ≤ 3-5 文件，测试通过立即 commit。
+7. **小步提交**：每次改 ≤ 5 文件，测试通过立即 commit；通过 `git push` 同步到 worktree。
 8. 不确定就停下来问，**禁止自行扩大改动范围 / 自行删除环境或重建**。
+9. 本文件是 QClaw+Marvis 双团队的共同宪法，偏离时回归 `docs/TEAM-CHARTER.md` 第 6 条「初心提醒」。
 
 ---
 
@@ -162,19 +175,21 @@ app/
 
 ---
 
-## 9. 模型路由（人工执行，AI 负责提醒）
+## 9. 模型路由（QClaw × Marvis）
 
-> 重要现实：本地区 **Cursor 不能用 Anthropic 模型**。因此 **Opus 主战场在 Claude Code 终端**（可在 Cursor 内置 Terminal 运行 `claude`）。
+> QClaw 使用 qclaw/modelroute（含 Claude Sonnet 能力），对应原 Claude Code 的主力角色。
+> Marvis 由 sessions_spawn 子代理执行，对应原 Cursor 的执行角色。
+> **Opus（Claude Opus 4.8）仅用于 S 级交易核心实现**，QClaw 负责设计+测试+人审协调。
 
 | 风险级 | 任务 | 工具 + 模型 |
 |--------|------|-------------|
-| S | 撮合 / MarketRule / 订单状态机 / Signal→Order / 风控 / 费用 | **Claude Code + Opus 4.8** + 人审 |
-| A | LangGraph 编排 / 粗筛层 / OSS 集成 adapter / 大重构 | Claude Code + Opus |
-| B | CRUD / 路由 / 定时任务 / 普通 API | Claude Code + Sonnet |
-| C | uni-app 页面 / 图表 / 样式 / 补全 | Cursor + Composer/Codex/DeepSeek Flash |
+| S | 撮合 / MarketRule / 订单状态机 / Signal→Order / 风控 / 费用 | **Opus 4.8** + 人审（QClaw 负责协调） |
+| A | LangGraph 编排 / 粗筛层 / OSS 集成 adapter / 大重构 | **QClaw** |
+| B | CRUD / 路由 / 定时任务 / 普通 API | **QClaw**（日常后端） |
+| C | uni-app 页面 / 图表 / 样式 / 补全 | **Marvis**（sessions_spawn 子代理） |
 
 - 本文件**不会自动切换模型**，由人工选择。AI 若发现"当前模型与任务风险级不匹配"，必须主动提示。
-- **DeepSeek Flash 禁止用于任何会动钱的路径（S 级）。**
+- **S 级交易核心：QClaw 只输出设计+测试，实际实现由 Opus 4.8 完成。**
 
 ---
 
@@ -292,20 +307,21 @@ app/
 
 ---
 
-## 19. 协作机制（Cursor ↔ Claude Code）
+## 19. 协作机制（QClaw × Marvis）
 
-- 二者**不共享聊天上下文**，只共享**同一仓库 + Git**。
-- 短周期任务交接写 `docs/HANDOFF.md`（本轮完成 / 下轮待办 / 阻塞 / 目录归属）。
+- 二者**不共享聊天上下文**，只共享**同一 Git 仓库 + Git**。
+- 短周期任务交接写 `docs/HANDOFF-QCLAW.md`（本轮完成 / 下轮待办 / 阻塞 / 目录归属）。
 - **目录归属（减少并发冲突）**：
 
 | 路径 | 主责 | 另一方 |
 |------|------|--------|
-| `app/trading/`、`app/agents/`、`app/selection/` | Claude Code | 仅可设计/Review，不直接写 |
-| `frontend/` | Cursor | — |
-| `app/api/`、`app/services/`（非 S 级） | Claude Code | Cursor 仅薄改 |
+| `app/trading/`、`app/agents/`、`app/selection/` | QClaw | Marvis 禁止写，仅可设计/Review |
+| `frontend/` | Marvis | QClaw 仅辅助 |
+| `app/api/`、`app/services/`（非 S 级） | QClaw | Marvis 仅薄改 |
 | `docs/contracts/` | 人工审批后双方只读 | — |
 
 - 同一文件同一时刻只允许一方修改；契约先行（先改 schema/契约，再改实现）。
+- 详见 `docs/TEAM-CHARTER.md` 和 `docs/BOUNDARY.md`。
 
 ---
 
@@ -313,7 +329,7 @@ app/
 
 1. **禁止**未经许可扩大改动范围（一个任务只做被要求的事）。
 2. **禁止**删除/重建环境、删除数据库、批量删文件，除非明确授权。
-3. **禁止**在 S 级路径用非 Opus 模型直接写实现。
+3. **禁止**在 S 级路径直接写实现（QClaw 只能写设计+测试，实际实现由 Opus 4.8 完成）。
 4. **禁止**让 AI 引擎与交易引擎互相 import（只走 Signal）。
 5. **禁止**在撮合/Agent 里硬编码费率、市场规则、密钥。
 6. **禁止**整库喂 Qlib/VeighNa 给模型分析。
