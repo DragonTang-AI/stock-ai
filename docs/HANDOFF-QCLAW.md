@@ -151,7 +151,16 @@ BREAKING-CHANGE: 无
 |------|--------|----------|------|
 | — | — | — | — |
 
-### 🟢 已完成
+### 🟢 已完成 (Phase 2)
+| 任务 | 负责人 | 完成时间 | 备注 |
+|------|--------|----------|------|
+| **Phase 2 Batch 1: AkShare Adapter** | QClaw | 2026-07-02 15:58 | feat/phase2-akshare-adapter → commit `c46811f` |
+| SinaAdapter 真实数据接入（3只股票验证） | QClaw | 2026-07-02 | 茅台1203(+0.84%)/平安10.28(+1.18%)/宁德382.35(-0.39%) |
+| 接口契约文档 | QClaw | 2026-07-02 | docs/contracts/market-data-adapter.md |
+| 单元测试 20/20 通过 | QClaw | 2026-07-02 | tests/integrations/market_data/，respx mock |
+| 生产部署到 stockai.dragontang.com | QClaw | 2026-07-02 | systemd + PYTHONPATH pylocal，已重启验证 |
+
+### 🟢 已完成 (Phase 1)
 | 任务 | 负责人 | 完成时间 | 备注 |
 |------|--------|----------|------|
 | Git 仓库初始化 | QClaw | 2026-07-02 | DragonTang-AI/stock-ai |
