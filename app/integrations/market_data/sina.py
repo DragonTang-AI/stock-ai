@@ -216,6 +216,42 @@ class SinaAdapter(MarketDataAdapter):
 
                     name = fields[0]
                     standard_symbol = _to_standard_symbol(sina_code)
+
+                    # 指数数据字段少（无买卖盘），单独处理
+                    if len(fields) < 33:
+                        # 新浪指数格式：name,open,prev_close,price,high,low,volume(手),amount(元),...,date,time,status
+                        # 实际约 33-35 字段，但某些指数可能更少
+                        if len(fields) >= 8 and sina_code.startswith(("sh0", "sz399")):
+                            try:
+                                prev_close = float(fields[2])
+                                price = float(fields[3])
+                                change = price - prev_close
+                                change_pct = (change / prev_close * 100) if prev_close else 0.0
+                                quote = QuoteData(
+                                    symbol=standard_symbol,
+                                    name=name,
+                                    price=price,
+                                    open=float(fields[1]) if fields[1] else 0.0,
+                                    high=float(fields[4]) if len(fields) > 4 and fields[4] else 0.0,
+                                    low=float(fields[5]) if len(fields) > 5 and fields[5] else 0.0,
+                                    prev_close=prev_close,
+                                    change=change,
+                                    change_pct=change_pct,
+                                    volume=int(float(fields[6])) if len(fields) > 6 and fields[6] else 0,
+                                    amount=float(fields[7]) if len(fields) > 7 and fields[7] else 0.0,
+                                )
+                                results.append(quote)
+                                continue
+                            except (ValueError, IndexError) as e:
+                                logger.warning(f"[{self.name}] 指数解析失败: {sina_code} ({e})")
+                                continue
+                        else:
+                            logger.warning(
+                                f"[{self.name}] 字段数不足: {sina_code}, "
+                                f"got {len(fields)}, skip"
+                            )
+                            continue
+
                     quote = QuoteData.from_sina(standard_symbol, name, fields)
                     results.append(quote)
                 except (ValueError, IndexError) as e:
