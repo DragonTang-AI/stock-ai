@@ -31,6 +31,7 @@ class RecommendRequest(BaseModel):
     """选股推荐请求（GET query 参数）"""
     market: str = Field("all", description="市场过滤：all/A/HK")
     top_n: int = Field(10, ge=1, le=50, description="返回 Top N")
+    strategy: str = Field("momentum", description="策略：momentum(追涨)/reversal(抄底)/balanced(均衡)")
     min_change_pct: float = Field(-2.0, description="最小涨幅 %")
     max_change_pct: float = Field(9.0, description="最大涨幅 %（避开涨停）")
 
