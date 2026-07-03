@@ -453,6 +453,148 @@ async def cancel_order(db: AsyncSession, user: User, order_id: int) -> OrderItem
 
 
 # ============== 成交 ==============
+async def get_portfolio_analytics(
+    db: AsyncSession,
+    user: User,
+) -> dict:
+    """
+    持仓分析：
+    - 总盈亏 / 日均盈亏
+    - 持仓胜率
+    - 最佳/最差持仓
+    - 持仓集中度（Top 3 权重）
+    - 行业分布（按个股名称特征分组）
+    """
+    from decimal import Decimal
+
+    account = await get_or_create_account(db, user)
+    positions = await get_positions(db, user)
+
+    if not positions:
+        return {
+            "position_count": 0,
+            "total_market_value": 0,
+            "total_profit": round(float(account.balance) - INITIAL_BALANCE, 2),
+            "total_profit_pct": round((float(account.balance) - INITIAL_BALANCE) / INITIAL_BALANCE * 100, 4) if INITIAL_BALANCE > 0 else 0,
+            "win_rate": 0,
+            "best_position": None,
+            "worst_position": None,
+            "top_holdings_concentration": 0,
+            "top_holdings": [],
+            "holdings_distribution": [],
+        }
+
+    total_market_value = sum(p.market_value for p in positions)
+    total_cost = sum(p.cost_amount for p in positions)
+
+    # 总盈亏（持仓盈亏 + 现金变动）
+    total_equity = float(account.balance) + total_market_value
+    total_profit = round(total_equity - INITIAL_BALANCE, 2)
+    total_profit_pct = round((total_profit / INITIAL_BALANCE) * 100, 4) if INITIAL_BALANCE > 0 else 0
+
+    # 胜率
+    winning = [p for p in positions if p.profit > 0]
+    win_rate = round(len(winning) / len(positions) * 100, 2) if positions else 0
+
+    # 最佳/最差
+    sorted_positions = sorted(positions, key=lambda p: p.profit_pct, reverse=True)
+    best = sorted_positions[0] if sorted_positions else None
+    worst = sorted_positions[-1] if sorted_positions else None
+
+    def _to_score(p, total_mv):
+        return {
+            "symbol": p.symbol,
+            "name": p.name,
+            "profit": round(p.profit, 2),
+            "profit_pct": round(p.profit_pct, 4),
+            "market_value": round(p.market_value, 2),
+            "weight": round(p.market_value / total_mv * 100, 2) if total_mv > 0 else 0,
+        }
+
+    # 持仓集中度（Top 3 权重）
+    top3 = sorted(positions, key=lambda p: p.market_value, reverse=True)[:3]
+    top3_weight = sum(p.market_value for p in top3) / total_market_value * 100 if total_market_value > 0 else 0
+    top_holdings = [_to_score(p, total_market_value) for p in top3]
+
+    # 行业分布
+    sector_groups = {}
+    for p in positions:
+        sector = _guess_sector(p.name, p.symbol)
+        if sector not in sector_groups:
+            sector_groups[sector] = {"sector": sector, "market_value": 0, "profit": 0.0, "count": 0}
+        sector_groups[sector]["market_value"] += p.market_value
+        sector_groups[sector]["profit"] += p.profit
+        sector_groups[sector]["count"] += 1
+
+    holdings_distribution = [
+        {
+            "sector": sg["sector"],
+            "market_value": round(sg["market_value"], 2),
+            "weight": round(sg["market_value"] / total_market_value * 100, 2) if total_market_value > 0 else 0,
+            "profit": round(sg["profit"], 2),
+            "count": sg["count"],
+        }
+        for sg in sorted(sector_groups.values(), key=lambda x: x["market_value"], reverse=True)
+    ]
+
+    # 今日盈亏（基于持仓的当日涨跌幅）
+    symbols = [p.symbol for p in positions]
+    daily_profit = None
+    daily_profit_pct = None
+    try:
+        quotes = await fetch_realtime_quotes(symbols)
+        quote_map = {q.symbol: q for q in quotes}
+        daily_change_total = sum(
+            (q.change_pct or 0) * p.market_value / 100
+            for q in quotes
+            for p in positions
+            if q.symbol == p.symbol
+        )
+        daily_profit = round(daily_change_total, 2)
+        daily_profit_pct = round(daily_change_total / total_equity * 100, 4) if total_equity > 0 else 0
+    except Exception:
+        pass
+
+    return {
+        "position_count": len(positions),
+        "total_market_value": round(total_market_value, 2),
+        "total_profit": total_profit,
+        "total_profit_pct": total_profit_pct,
+        "daily_profit": daily_profit,
+        "daily_profit_pct": daily_profit_pct,
+        "win_rate": win_rate,
+        "best_position": _to_score(best, total_market_value) if best else None,
+        "worst_position": _to_score(worst, total_market_value) if worst else None,
+        "top_holdings_concentration": round(top3_weight, 2),
+        "top_holdings": top_holdings,
+        "holdings_distribution": holdings_distribution,
+    }
+
+
+def _guess_sector(name: str, symbol: str) -> str:
+    """根据个股名称后缀猜测所属行业"""
+    bank_keywords = ["银行", "中国银", "招商银", "工商", "建设", "农业", "交通", "兴业", "浦发", "平安"]
+    tech_keywords = ["科技", "技术", "信息", "软件", "电子", "半导体", "通信", "宁德"]
+    medical_keywords = ["医药", "医疗", "生物", "恒瑞", "药", "康"]
+    food_keywords = ["茅台", "五粮", "食品", "饮料", "白酒", "伊利"]
+    finance_keywords = ["证券", "保险", "信托", "中国平", "中信", "中金", "东方财"]
+    energy_keywords = ["石油", "石化", "能源", "煤炭", "电力", "核电", "中国神"]
+    manu_keywords = ["制造", "机械", "汽车", "比亚迪", "美的", "格力", "海尔"]
+    house_keywords = ["保利", "万科", "房产", "地产"]
+
+    if any(kw in name for kw in bank_keywords): return "银行"
+    if any(kw in name for kw in tech_keywords): return "科技"
+    if any(kw in name for kw in medical_keywords): return "医药"
+    if any(kw in name for kw in food_keywords): return "消费"
+    if any(kw in name for kw in finance_keywords): return "金融"
+    if any(kw in name for kw in energy_keywords): return "能源"
+    if any(kw in name for kw in manu_keywords): return "制造"
+    if any(kw in name for kw in house_keywords): return "地产"
+    if "中国" in name and "中国" in symbol[:2]: return "国企"
+
+    return "其他"
+
+
 async def get_trades(
     db: AsyncSession,
     user: User,

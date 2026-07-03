@@ -143,3 +143,20 @@ class TradeListResponse(BaseModel):
     success: bool
     data: List[TradeItem] = Field(default_factory=list)
     total: int = 0
+
+
+# ============== 持仓分析 ==============
+class PositionScore(BaseModel):
+    """单只持仓评分（用于排行）"""
+    symbol: str
+    name: str
+    profit: float
+    profit_pct: float
+    market_value: float
+    weight: float = Field(..., description="占总持仓市值比例")
+
+
+class PortfolioAnalyticsResponse(BaseModel):
+    """持仓分析响应"""
+    success: bool
+    data: Optional[dict] = None

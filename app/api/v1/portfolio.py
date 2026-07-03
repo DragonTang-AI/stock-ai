@@ -29,6 +29,7 @@ from app.schemas.trading import (
     OrderResponse,
     OrderRequest,
     TradeListResponse,
+    PortfolioAnalyticsResponse,
 )
 from app.services.trading import (
     get_account_info,
@@ -37,6 +38,7 @@ from app.services.trading import (
     place_order,
     cancel_order,
     get_trades,
+    get_portfolio_analytics,
 )
 
 router = APIRouter()
@@ -124,6 +126,32 @@ async def delete_order(
         raise
     except Exception as e:
         raise AppException(code="CANCEL_FAILED", message=str(e), status_code=400)
+
+
+@router.get("/analytics", response_model=PortfolioAnalyticsResponse)
+async def get_analytics(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    持仓分析
+
+    返回：
+    - position_count: 持仓数量
+    - total_market_value: 持仓总市值
+    - total_profit: 累计盈亏（含现金变动）
+    - total_profit_pct: 累计收益率
+    - daily_profit: 今日浮动盈亏（基于实时行情）
+    - daily_profit_pct: 今日收益率
+    - win_rate: 持仓胜率（盈利持仓占比）
+    - best_position: 最佳持仓
+    - worst_position: 最差持仓
+    - top_holdings_concentration: Top3 持仓权重
+    - top_holdings: Top3 持仓明细
+    - holdings_distribution: 行业分布
+    """
+    analytics = await get_portfolio_analytics(db, current_user)
+    return {"success": True, "data": analytics}
 
 
 @router.get("/trades", response_model=TradeListResponse)
