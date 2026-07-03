@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, Query
 from typing import List, Optional
 from app.models.user import User
 from app.api.v1.auth import get_current_user_optional
-from app.schemas.market import QuoteItem, QuoteResponse, KLineItem, KLineResponse
+from app.core.exceptions import AppException
+from app.schemas.market import QuoteItem, QuoteResponse, KLineItem, KLineResponse, StockDetailResponse
 from app.services import market as market_service
 
 router = APIRouter()
@@ -94,3 +95,30 @@ async def get_kline(
     normalized = _normalize_symbol(symbol)
     klines = await market_service.fetch_kline(normalized, period=period, count=count)
     return {"success": True, "symbol": normalized, "period": period, "data": klines}
+
+
+@router.get("/detail/{symbol}", response_model=StockDetailResponse)
+async def get_stock_detail(
+    symbol: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """
+    获取股票详情（公开接口，无需登录）。
+
+    返回实时行情 + K 线（日/周） + 均线技术指标。
+    用于行情详情页（点击股票卡片跳转）。
+
+    Args:
+        symbol: 股票代码，如 "600519.SH" 或 "sh600519"
+
+    Returns:
+        行情 + K 线 + 均线数据
+    """
+    normalized = _normalize_symbol(symbol)
+    try:
+        detail = await market_service.fetch_stock_detail(normalized)
+        return {"success": True, "data": detail, "message": ""}
+    except AppException:
+        raise
+    except Exception as e:
+        raise AppException(code="DETAIL_FAILED", message=f"获取详情失败: {e}", status_code=500)

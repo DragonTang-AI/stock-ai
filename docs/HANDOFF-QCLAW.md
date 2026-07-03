@@ -167,3 +167,12 @@ BREAKING-CHANGE: 无
 | Worktree 建立 | QClaw | 2026-07-02 | 4 个 worktree + 4 个分支 |
 | 开工契约 v1 | QClaw | 2026-07-02 | TEAM-CHARTER / BOUNDARY / HANDOFF-QCLAW / WORKTREE |
 ```
+
+## 2026-07-03 11:30 — 行情详情页 API 上线
+
+| 任务 | 负责人 | 状态 | 备注 |
+|------|--------|------|------|
+| 行情详情页 API | QClaw | 🟢 已完成 | commit (待提交)，detail/{symbol} |
+| K 线排序修复 | QClaw | 🟢 已完成 | Sina 最新在前→反转最早在前 |
+| 技术指标引擎 | QClaw | 🟢 已完成 | RSI/MACD/Bollinger Bands |
+| 行情详情页前端 | Marvis | 🟠 待启动 | 等 T-M008 完成后启动 |
