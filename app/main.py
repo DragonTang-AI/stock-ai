@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.core.database import init_db, close_db
 from app.core.exceptions import AppException
 
-from app.api.v1 import auth, market, portfolio, analysis, selection, simulation
+from app.api.v1 import auth, market, portfolio, analysis, selection, simulation, watchlist
 
 
 @asynccontextmanager
@@ -90,6 +90,7 @@ app.include_router(portfolio.router, prefix="/api/v1/portfolio", tags=["持仓"]
 app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["分析"])
 app.include_router(selection.router, prefix="/api/v1/selection", tags=["选股"])
 app.include_router(simulation.router, prefix="/api/v1/simulation", tags=["模拟交易"])
+app.include_router(watchlist.router, prefix="/api/v1", tags=["自选股"])
 
 
 # ── 健康检查 ──────────────────────────────────────────────────────────────

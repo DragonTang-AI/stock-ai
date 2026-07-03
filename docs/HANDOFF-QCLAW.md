@@ -188,3 +188,11 @@ BREAKING-CHANGE: 无
 | 量价确认复合因子 | QClaw | 🟢 | 上涨放量 vs 下跌放量 |
 | 三种策略模式 | QClaw | 🟢 | momentum/reversal/balanced |
 | 生产部署验证 | QClaw | 🟢 | ~1s/92只，3策略全通过 |
+
+## 2026-07-03 12:10 — 自选股/关注列表 API 完成
+
+| 任务 | 负责人 | 状态 | 备注 |
+|------|--------|------|------|
+| 自选股后端 CRUD | QClaw | 🟢 | GET/POST/PATCH/DELETE/check/batch |
+| 自选股行情补充 | QClaw | 🟢 | 查询时自动调实时行情 |
+| 自选股前端 | Marvis | 🟠 | 任务已创建，待 Marvis 启动 |

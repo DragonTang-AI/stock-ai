@@ -9,3 +9,4 @@ from app.models.trading import (  # noqa: F401
     Position,
     EquitySnapshot,
 )
+from app.models.stock import Watchlist  # noqa: F401
