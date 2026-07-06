@@ -76,6 +76,6 @@ async def get_prescreen_candidates(
     return PrescreenResponse(
         market=market,
         trade_date=trade_date_str,
-        pool_size=len(quotes),
+        pool_size=len(pool),
         candidates=candidates,
     )
