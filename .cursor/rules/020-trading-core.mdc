@@ -1,0 +1,36 @@
+---
+description: 交易引擎 / 撮合 / MarketRule / 风控 / 费用 / 订单状态机 —— S 级资金红线，Cursor 内只设计不实现。
+globs: app/trading/**/*.py
+alwaysApply: false
+---
+
+# ⚠️ 交易核心 · S 级资金红线
+
+> 本目录涉及资金、订单、撮合、风控、费用、市场规则，是全项目最高风险区。
+
+## 模型与工具约束（最重要）
+- 本地区 **Cursor 无法使用 Opus**，因此 **S 级代码禁止在 Cursor 中直接实现**。
+- 在 Cursor 中编辑本目录时：**只输出设计、状态机、伪代码、测试用例清单与风险点**，
+  并在回复开头提示：「⚠️ S 级路径：请切换到 Claude Code + Opus 4.8 实现本目录代码」。
+- 实现必须在 **Claude Code（终端）+ Opus 4.8** 完成，并经**人工逐行审查**后合并。
+
+## 设计铁律
+- 市场差异（手数/涨跌停/T+0·T+1/费率/币种）**全部收敛在 `market_rule.py`**；
+  撮合/风控/费用**只依赖 `MarketRule` 接口**，禁止出现散落的 `if market == "A"`。
+- 撮合引擎**禁止硬编码费率**，费用一律走 `MarketRule.calc_fees`。
+- 模拟与实盘（V2）**同一套接口**：`place_order / cancel_order / get_positions / get_account`，
+  切换只改 Gateway 配置；实盘 adapter 经 `trading/adapters/base.py` 抽象接入。
+- 交易引擎**禁止** import `app/agents/*`；只接受 `Signal`（见 `schemas/signals.py` 与 `docs/contracts/signal.schema.json`）作为输入。
+
+## 风控阈值（唯一标准）
+- 单票仓位上限 ≤ 总资产 **15%**
+- 单日最大亏损熔断 ≤ **5%**（触发暂停 AI 托管下单）
+- AI 托管单笔金额 > 配置阈值需二次确认
+
+## 测试强制（缺一不可）
+- 边界测试：资金不足、超卖、涨跌停拒单、最小手数对齐、停牌。
+- 并发对账测试：高并发撮合下账目不出现负数、资金/持仓守恒。
+- 全审计日志：每次下单/成交/撤单记录（用户、时间、来源信号、结果）。
+
+## V2 预留
+- 实盘（Mini-QMT/富途/VeighNa 网关）通过 adapter 接入，**撮合主流程不得改动**。

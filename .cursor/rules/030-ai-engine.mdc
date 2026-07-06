@@ -1,0 +1,33 @@
+---
+description: AI 选股引擎规范 —— 粗筛层(非 LLM) + LangGraph 4-Agent 投委会 + Signal 协议。
+globs: app/agents/**/*.py,app/selection/**/*.py
+alwaysApply: false
+---
+
+# AI 选股 / 分析引擎规范（A 级）
+
+## 选股双层（不可合并）
+```
+全市场 5000+ → ① 粗筛层(app/selection, 非 LLM) → Top 30~50 候选池
+            → ② 4-Agent(app/agents, LLM 只看候选池) → Top 5 + 置信分
+```
+- **粗筛层禁止调用 LLM**；用 pandas-ta 因子打分 + 加权排序。
+- 粗筛层必须输出**稳定的候选池数据结构**（schema 定义）；V2 用 Qlib 替换内部实现时，**精选层不得改动**。
+- 每个 Agent **只允许**分析传入的候选池，**禁止**自行扩大到全市场。
+
+## Agent 输出
+- 每个 Agent **必须**输出结构化 JSON，禁止自由文本当结果。
+- 评分：技术面/基本面 0-100；舆情 -50~+50；投委会 `confidence` 0-100。
+- 投委会输出：`action` + `confidence` + `reason_codes` + 自然语言 `reasoning`。
+- Agent 间通过 LangGraph State 传递，**禁止**直接调用对方内部函数。
+
+## 解耦红线
+- AI 引擎**禁止** import `app/trading/*`；产出只能是符合 `docs/contracts/signal.schema.json` 的 `Signal`。
+- 所有 LLM 调用必须有 `timeout` + `retry` + 备用模型降级。
+
+## 成本纪律
+- 严禁把全市场喂给 LLM（粗筛层就是为此存在）。
+- 大盘播报全站生成一份后缓存分发；持仓诊断按持仓股数限流。
+
+## V2 预留
+- `app/selection/prescreen.py` 是 Qlib 接入点；集成走 `docs/integrations/` 流水线，禁止整库喂模型。

@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Signal",
+  "description": "AI层与交易层之间的唯一接口契约",
+  "version": "1.0.0",
+  "type": "object",
+  "required": ["signal_id", "symbol", "market", "action", "confidence"],
+  "properties": {
+    "signal_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "唯一标识"
+    },
+    "symbol": {
+      "type": "string",
+      "pattern": "^[A-Z0-9]+\\.[A-Z]{2,4}$",
+      "examples": ["600519.SH", "0700.HK", "AAPL.US"],
+      "description": "股票代码，含市场后缀"
+    },
+    "market": {
+      "type": "string",
+      "enum": ["A", "HK", "US"],
+      "description": "A=A股, HK=港股, US=美股"
+    },
+    "action": {
+      "type": "string",
+      "enum": ["BUY", "ADD", "HOLD", "REDUCE", "SELL"],
+      "description": "交易动作"
+    },
+    "confidence": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "置信度 0-100"
+    },
+    "currency": {
+      "type": "string",
+      "enum": ["CNY", "HKD", "USD"],
+      "default": "CNY"
+    },
+    "target_price": {
+      "type": "number",
+      "minimum": 0,
+      "description": "目标价"
+    },
+    "stop_loss": {
+      "type": "number",
+      "minimum": 0,
+      "description": "止损价"
+    },
+    "take_profit": {
+      "type": "number",
+      "minimum": 0,
+      "description": "止盈价"
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "TECH_MA_GOLDEN","TECH_MA_DEAD","TECH_RSI_OVERSOLD","TECH_RSI_OVERBOUGHT",
+          "TECH_MACD_DIVERGE","TECH_BOLL_BREAK","TECH_VOLUME_SPIKE","TECH_TREND_UP","TECH_TREND_DOWN",
+          "FUND_PE_LOW","FUND_PE_HIGH","FUND_PB_LOW","FUND_PROFIT_GROW","FUND_ROE_HIGH",
+          "FUND_DEBT_LOW","FUND_CASH_RICH","FUND_DIVIDEND_HIGH",
+          "SENT_POSITIVE","SENT_NEGATIVE","SENT_NEWS_HOT","SENT_INST_BUY",
+          "SENT_RESEARCH_BULLISH","SENT_BANNER_PULL","SENT_BANNER_BAD",
+          "RISK_STOP_LOSS","RISK_TAKE_PROFIT","RISK_POSITION_LIMIT","RISK_LOSS_LIMIT"
+        ]
+      },
+      "description": "推荐理由编码"
+    },
+    "reasoning": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "推荐理由说明"
+    },
+    "source": {
+      "type": "string",
+      "default": "committee_agent"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["PENDING","EXECUTED","REJECTED","CANCELLED","EXPIRED"],
+      "default": "PENDING"
+    }
+  }
+}

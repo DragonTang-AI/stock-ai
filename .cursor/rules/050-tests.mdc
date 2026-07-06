@@ -1,0 +1,30 @@
+---
+description: 测试规范 —— pytest + testcontainers，S 级资金模块强制边界与并发对账测试。
+globs: tests/**/*.py
+alwaysApply: false
+---
+
+# 测试规范
+
+## 框架
+- `pytest` + `pytest-asyncio`；DB 集成测试用 `testcontainers` 起临时 PostgreSQL。
+- 测试文件命名 `test_*.py`；目录镜像 `app/` 结构。
+
+## 测试先行
+- S 级（trading）与 A 级（selection / agents）代码：**先写 test 再写实现**。
+
+## S 级强制覆盖（缺一不可）
+- 边界：资金不足、超卖、涨跌停拒单、最小手数对齐、停牌、币种(A/HK)。
+- 并发对账：高并发撮合下账目不出现负数，资金/持仓守恒。
+- 费用：A股(佣金万3+印花千1卖出)、港股(印花/交易征费/结算费) 经 `MarketRule.calc_fees` 校验。
+
+## 覆盖率
+- 核心模块（trading / selection / agents）覆盖率 > 80%。
+
+## Agent 测试
+- LLM 调用 mock 化；校验输出 JSON 结构与字段范围（置信分 0-100 等）。
+- 校验"Agent 只分析候选池、不触全市场"的约束。
+
+## 纪律
+- 测试用 mock 数据 / fixture，禁止依赖真实行情接口的网络可用性。
+- 资金相关断言要验算具体数值，不只断言"成功"。
