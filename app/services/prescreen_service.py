@@ -56,12 +56,22 @@ async def get_prescreen_candidates(
     effective_limit = max(1, min(limit, 50))
 
     try:
-        quotes = await fetch_realtime_quotes(pool)
+        raw = await fetch_realtime_quotes(pool)
     except Exception as e:
         logger.warning(f"Prescreen fetch_quotes failed: {e}, falling back to empty")
-        quotes = []
+        raw = []
 
-    candidates = run_prescreen(quotes, limit=effective_limit)
+    # QuoteItem → dict（兼容 Pydantic 模型）
+    stocks = []
+    for item in raw:
+        if hasattr(item, "model_dump"):
+            stocks.append(item.model_dump())
+        elif hasattr(item, "dict"):
+            stocks.append(item.dict())
+        else:
+            stocks.append(item)
+
+    candidates = run_prescreen(stocks, limit=effective_limit)
 
     return PrescreenResponse(
         market=market,
