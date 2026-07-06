@@ -66,3 +66,27 @@ async def get_daily_picks(
         "picks": [p.model_dump() for p in result.picks],
         "meta": result.meta,
     }
+
+
+# ── Prescreen 粗筛接口 ────────────────────────────────────────────────
+from datetime import date
+from app.schemas.prescreen import PrescreenResponse
+from app.services.prescreen_service import get_prescreen_candidates
+
+
+@router.get("/prescreen", response_model=PrescreenResponse)
+async def get_prescreen(
+    market: str = Query("A", description="市场代码: A/HK/US"),
+    limit: int = Query(20, ge=1, le=50, description="返回 Top N（1~50）"),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """
+    轻量级因子粗筛（公开接口）。
+
+    基于涨幅动量(60%) + 成交量活跃度(40%)评分，
+    从候选池中筛选综合得分最高的股票。
+
+    用途：快速获取当日强势股候选名单，
+    可对接后续 4-Agent 深度分析流程。
+    """
+    return await get_prescreen_candidates(market=market, limit=limit)
