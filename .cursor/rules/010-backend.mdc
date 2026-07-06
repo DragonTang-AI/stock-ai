@@ -1,0 +1,38 @@
+---
+description: 后端 Python（FastAPI/SQLAlchemy/Celery）分层、命名、异步、数据库与 schema 规范。
+globs: app/**/*.py,alembic/**/*.py,scripts/**/*.py
+alwaysApply: false
+---
+
+# 后端 Python 规范
+
+## 分层（严禁跨层）
+```
+api (薄路由) → service (业务逻辑) → model (ORM) / 外部适配器
+```
+- `api/` 只做：Pydantic 参数校验、调用 service、组装响应。**禁止**在 api 层操作 DB 或写业务逻辑。
+- `service/` 是唯一允许做 DB 操作与业务编排的层。
+- 跨模块调用走 service，不直接 import 其他模块的 api 层。
+- 所有请求/响应必须有 Pydantic schema，禁止裸 dict 出入接口。
+
+## 异步
+- 全程 async：FastAPI 路由、SQLAlchemy 2.0 用 async engine/session。**禁用**同步 Session。
+- 所有外部调用（LLM、行情、Redis、DB）必须有 `timeout`；LLM 调用必须有 `retry` + 备用模型降级。
+
+## 命名
+- 文件 snake_case；类 PascalCase；函数/变量 snake_case；常量 UPPER_SNAKE；API 路径 kebab-case。
+
+## 数据库
+- 主键 `UUID`（`gen_random_uuid()`）；时间 `TIMESTAMPTZ`；金额 `DECIMAL(20,4)`。
+- 每表有 `created_at`，可变表加 `updated_at`。
+- schema 隔离：`auth` / `trading` / `market` / `analysis`。
+- 模拟与实盘账户同表，用 `account_type`（PAPER/LIVE）区分。
+- K 线用声明式分区表（按月）。
+- 所有 schema 变更走 Alembic 迁移，禁止手改库。
+
+## 配置与安全
+- 配置统一 `core/config.py`（Pydantic Settings）；禁止硬编码密钥，走环境变量。
+- SQL 一律 ORM 参数化，禁止字符串拼接。
+
+## 提交
+- 小步：≤ 3-5 文件/次，测试通过即 commit；格式 `type(scope): message`。

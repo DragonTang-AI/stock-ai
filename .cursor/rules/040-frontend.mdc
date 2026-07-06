@@ -1,0 +1,29 @@
+---
+description: 前端 uni-app(Vue3 + Pinia + ECharts) 规范 —— 双产品、条件编译、审核模式、图表与接口对接。
+globs: frontend/**
+alwaysApply: false
+---
+
+# 前端 uni-app 规范（Cursor 主战场）
+
+## 双产品形态
+- **产品 A 分析版**（微信小程序）：纯展示，无任何交易动作；文案用"分析/参考/观点"。
+- **产品 B 交易版**（H5 Web App）：模拟交易（手动 + AI 托管）/ 看板 / 实盘(V2)。
+- 用 `#ifdef MP-WEIXIN` / `#ifdef H5` 条件编译区分；公共逻辑复用。
+
+## 审核模式（合规生死线）
+- `IS_AUDIT_MODE` 为真时：买入/卖出/加仓/托管 → 关注/取消关注/AI 模拟实验；隐藏实盘入口。
+- 每个含收益率的页面底部固定免责声明：「模拟收益仅供参考，不构成投资建议，入市有风险」。
+
+## 技术约定
+- Vue3 Composition API + `<script setup>`；状态用 Pinia。
+- 图表用 ECharts（uni 版）；K 线/净值曲线按 **375px 小程序宽度** 适配，注意 Canvas 触控区与字号。
+- 接口统一走 `src/api/`，与后端 OpenAPI / Signal 契约对齐；实时数据用 WebSocket，不轮询。
+- 金额/涨跌幅展示遵循 A股红涨绿跌；港股注意币种(HKD)与 A股(CNY)区分显示。
+
+## 设计来源
+- 视觉来自 Ardot 出稿（MCP 交付）→ 在此改写为生产级 uni-app；以 `docs/design/` 的 tokens/screens 为准，不凭口头描述还原。
+
+## 纪律
+- 小步：单组件/单页一次；改完本地预览验证；与后端联调前先对齐接口契约。
+- 不在前端写业务/资金计算逻辑（属于后端 service / trading）。
