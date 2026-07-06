@@ -1,0 +1,160 @@
+/**
+ * AI-Stock 性能与动画工具
+ */
+
+/* ========== 基础动画混入 ========== */
+
+@mixin fade-in($duration: 0.3s, $delay: 0s) {
+  animation: fadeIn $duration ease-out $delay both;
+}
+
+@mixin slide-up($duration: 0.35s, $delay: 0s) {
+  animation: slideUp $duration ease-out $delay both;
+}
+
+@mixin slide-down($duration: 0.3s, $delay: 0s) {
+  animation: slideDown $duration ease-out $delay both;
+}
+
+@mixin scale-in($duration: 0.25s, $delay: 0s) {
+  animation: scaleIn $duration ease-out $delay both;
+}
+
+@mixin pulse($duration: 1.5s) {
+  animation: pulse $duration ease-in-out infinite;
+}
+
+@mixin skeleton($bg: rgba(0, 0, 0, 0.06)) {
+  background: linear-gradient(90deg, $bg 25%, rgba(0, 0, 0, 0.1) 50%, $bg 75%);
+  background-size: 200% 100%;
+  animation: skeleton 1.5s ease-in-out infinite;
+  border-radius: 8rpx;
+}
+
+/* ========== 关键帧 ========== */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(30rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-30rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes skeleton {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes float-up {
+  0% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-40rpx); }
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ========== 过渡工具类 ========== */
+
+.transition-fast {
+  transition: all 0.15s ease;
+}
+
+.transition-normal {
+  transition: all 0.25s ease;
+}
+
+.transition-slow {
+  transition: all 0.4s ease;
+}
+
+/* ========== 骨架屏组件样式 ========== */
+
+.skeleton-block {
+  @include skeleton;
+}
+
+.skeleton-text {
+  @include skeleton;
+  height: 26rpx;
+  margin-bottom: 16rpx;
+
+  &:last-child {
+    width: 60%;
+  }
+}
+
+.skeleton-avatar {
+  @include skeleton;
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 50%;
+}
+
+.skeleton-card {
+  @include skeleton;
+  height: 200rpx;
+  border-radius: 16rpx;
+}
+
+/* ========== 页面过渡动画 ========== */
+
+.page-enter-active {
+  animation: slideUp 0.3s ease-out;
+}
+
+.page-leave-active {
+  animation: fadeIn 0.2s ease-in reverse;
+}
+
+/* ========== 列表交错动画 ========== */
+
+@for $i from 1 through 10 {
+  .stagger-#{$i} {
+    animation-delay: #{$i * 0.05}s;
+  }
+}
+
+.stagger-item {
+  opacity: 0;
+  animation: slideUp 0.3s ease-out both;
+}
+
+/* ========== 滚动优化 ========== */
+
+.optimize-scroll {
+  -webkit-overflow-scrolling: touch;
+  will-change: scroll-position;
+  transform: translateZ(0);
+}
+
+/* 开启硬件加速 */
+.gpu-accelerated {
+  transform: translateZ(0);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}

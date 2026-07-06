@@ -1,0 +1,137 @@
+{
+  "pages": [
+    {
+      "path": "pages/login/index",
+      "style": {
+        "navigationBarTitleText": "登录"
+        // #ifdef H5
+        ,"navigationStyle": "custom"
+        // #endif
+        // #ifdef MP-WEIXIN
+        ,"navigationStyle": "default"
+        // #endif
+      }
+    },
+    {
+      "path": "pages/market/index",
+      "style": {
+        "navigationBarTitleText": "行情",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/selection/index",
+      "style": {
+        "navigationBarTitleText": "选股",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/portfolio/index",
+      "style": {
+        "navigationBarTitleText": "持仓",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/portfolio/history",
+      "style": {
+        "navigationBarTitleText": "交易记录"
+      }
+    },
+    {
+      "path": "pages/advisor/index",
+      "style": {
+        "navigationBarTitleText": "AI 助手",
+        "enablePullDownRefresh": true
+      }
+    },
+    {
+      "path": "pages/detail/index",
+      "style": {
+        "navigationBarTitleText": "行情详情"
+        // #ifdef H5
+        ,"navigationStyle": "custom"
+        // #endif
+        // #ifdef MP-WEIXIN
+        ,"navigationStyle": "default"
+        // #endif
+      }
+    },
+    {
+      "path": "pages/watchlist/index",
+      "style": {
+        "navigationBarTitleText": "自选股"
+      }
+    },
+    {
+      "path": "pages/mine/index",
+      "style": {
+        "navigationBarTitleText": "我的"
+      }
+    },
+    {
+      "path": "pages/mine/notifications",
+      "style": {
+        "navigationBarTitleText": "消息中心"
+      }
+    },
+    {
+      "path": "pages/mine/settings",
+      "style": {
+        "navigationBarTitleText": "设置"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "AI-Stock",
+    "navigationBarBackgroundColor": "#1A1A2E",
+    "backgroundColor": "#F5F5F7",
+    "animationType": "slide-in-right",
+    "animationDuration": 250
+    // #ifdef H5
+    ,"app-plus": {
+      "background": "#F5F5F7"
+    }
+    // #endif
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#4A90E2",
+    "borderStyle": "black",
+    "backgroundColor": "#FFFFFF",
+    "list": [
+      {
+        "pagePath": "pages/market/index",
+        "text": "行情",
+        "iconPath": "static/tabbar/market.png",
+        "selectedIconPath": "static/tabbar/market-active.png"
+      },
+      {
+        "pagePath": "pages/selection/index",
+        "text": "选股",
+        "iconPath": "static/tabbar/selection.png",
+        "selectedIconPath": "static/tabbar/selection-active.png"
+      },
+      {
+        "pagePath": "pages/portfolio/index",
+        "text": "持仓",
+        "iconPath": "static/tabbar/portfolio.png",
+        "selectedIconPath": "static/tabbar/portfolio-active.png"
+      },
+      {
+        "pagePath": "pages/advisor/index",
+        "text": "AI助手",
+        "iconPath": "static/tabbar/advisor.png",
+        "selectedIconPath": "static/tabbar/advisor-active.png"
+      },
+      {
+        "pagePath": "pages/mine/index",
+        "text": "我的",
+        "iconPath": "static/tabbar/mine.png",
+        "selectedIconPath": "static/tabbar/mine-active.png"
+      }
+    ]
+  }
+}
