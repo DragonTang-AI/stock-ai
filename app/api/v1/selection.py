@@ -90,3 +90,32 @@ async def get_prescreen(
     可对接后续 4-Agent 深度分析流程。
     """
     return await get_prescreen_candidates(market=market, limit=limit)
+
+
+# ── 4-Agent 选股委员会接口 ────────────────────────────────────────────────
+from datetime import date
+from app.schemas.committee import CommitteeRunResponse
+from app.services.committee_service import run_committee_analysis
+
+
+@router.get("/committee", response_model=CommitteeRunResponse)
+async def get_committee(
+    market: str = Query("A", description="市场代码: A/HK"),
+    limit: int = Query(5, ge=1, le=5, description="输出信号上限"),
+    days_back: int = Query(0, ge=0, le=5, description="往前多少个交易日（0=今日）"),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """
+    4-Agent 选股委员会（LangGraph）。
+
+    流程：Prescreen 粗筛（50只）→ 3个分析师Agent → 投委会Agent → Signal列表
+    Fallback：LLM 不可用时自动降级为确定性因子评分
+
+    返回 Top N Signal（按置信分降序），包含三维度 Agent 评分和推荐理由。
+    """
+    trade_date = date.today()
+    return await run_committee_analysis(
+        market=market,
+        trade_date=trade_date,
+        signal_limit=limit,
+    )

@@ -48,10 +48,18 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 7
 
     # ── LLM ──────────────────────────────────────────────
+    llm_enabled: bool = False  # V1 默认关闭，走确定性 fallback
+    llm_provider: str = "anthropic"
+    llm_backup_provider: str = "deepseek"
     llm_primary_api_key: str = ""
-    llm_primary_model: str = "claude-sonnet-4-20250514"
     llm_backup_api_key: str = ""
+    llm_primary_model: str = "claude-sonnet-4-20250514"
     llm_backup_model: str = "deepseek-chat"
+    llm_api_base: str = ""
+    llm_backup_api_base: str = ""
+    llm_max_output_tokens: int = 1024
+    llm_timeout_seconds: float = 20.0
+    llm_max_retries: int = 2
 
     # ── 数据源 ───────────────────────────────────────────
     akshare_cache_ttl: int = 300  # 秒

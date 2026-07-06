@@ -71,7 +71,12 @@ async def get_prescreen_candidates(
         else:
             stocks.append(item)
 
-    candidates = run_prescreen(stocks, limit=effective_limit)
+    candidates = run_prescreen(
+        stocks,
+        market=market,
+        trade_date=trade_date_str,
+        limit=effective_limit,
+    )
 
     return PrescreenResponse(
         market=market,

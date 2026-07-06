@@ -56,9 +56,26 @@ class SignalStatus(str, Enum):
 # ─────────────────────────────── 原因码枚举 ──────────────────────────────
 
 class ReasonCode(str, Enum):
-    """推荐理由编码（可组合）"""
+    """推荐理由编码（可组合）— 包含 committee agent 所有 reason_code"""
 
-    # 技术面
+    # ── Committee Agent 原因码（与 orchestrator REASON_CODE_VOCAB 对齐）
+    MOMENTUM = "momentum"             # 动量强
+    BREAKOUT = "breakout"             # 突破
+    OVERSOLD = "oversold"            # 超卖
+    OVERBOUGHT = "overbought"         # 超买
+    UNDERVALUED = "undervalued"       # 低估
+    OVERVALUED = "overvalued"         # 高估
+    EARNINGS_BEAT = "earnings_beat"   # 业绩超预期
+    EARNINGS_MISS = "earnings_miss"   # 业绩低于预期
+    HIGH_ROE = "high_roe"            # 高 ROE
+    HIGH_DEBT = "high_debt"          # 高负债
+    POSITIVE_NEWS = "positive_news"   # 正面新闻
+    NEGATIVE_NEWS = "negative_news"   # 负面新闻
+    SECTOR_ROTATION = "sector_rotation"  # 板块轮动
+    STOP_LOSS_HIT = "stop_loss_hit"   # 止损触发
+    TAKE_PROFIT_HIT = "take_profit_hit"  # 止盈触发
+
+    # ── 扩展：技术面
     TECH_MA_GOLDEN = "TECH_MA_GOLDEN"           # 均线金叉
     TECH_MA_DEAD = "TECH_MA_DEAD"               # 均线死叉
     TECH_RSI_OVERSOLD = "TECH_RSI_OVERSOLD"    # RSI 超卖
@@ -69,17 +86,17 @@ class ReasonCode(str, Enum):
     TECH_TREND_UP = "TECH_TREND_UP"            # 上升趋势
     TECH_TREND_DOWN = "TECH_TREND_DOWN"        # 下降趋势
 
-    # 基本面
+    # ── 扩展：基本面
     FUND_PE_LOW = "FUND_PE_LOW"                 # PE 低估
     FUND_PE_HIGH = "FUND_PE_HIGH"               # PE 高估
     FUND_PB_LOW = "FUND_PB_LOW"                 # PB 低估
     FUND_PROFIT_GROW = "FUND_PROFIT_GROW"       # 净利润增长
-    FUND_ROE_HIGH = "FUND_ROE_HIGH"            # ROE 高
-    FUND_DEBT_LOW = "FUND_DEBT_LOW"            # 负债率低
+    FUND_ROE_HIGH_EXT = "FUND_ROE_HIGH"        # ROE 高
+    FUND_DEBT_LOW_EXT = "FUND_DEBT_LOW"        # 负债率低
     FUND_CASH_RICH = "FUND_CASH_RICH"          # 现金流充裕
     FUND_DIVIDEND_HIGH = "FUND_DIVIDEND_HIGH"  # 高股息
 
-    # 舆情
+    # ── 扩展：舆情
     SENT_POSITIVE = "SENT_POSITIVE"             # 正面舆情
     SENT_NEGATIVE = "SENT_NEGATIVE"            # 负面舆情
     SENT_NEWS_HOT = "SENT_NEWS_HOT"           # 新闻热点
@@ -88,7 +105,7 @@ class ReasonCode(str, Enum):
     SENT_BANNER_PULL = "SENT_BANNER_PULL"     # 公告利好
     SENT_BANNER_BAD = "SENT_BANNER_BAD"       # 公告利空
 
-    # 风控
+    # ── 风控
     RISK_STOP_LOSS = "RISK_STOP_LOSS"          # 止损触发
     RISK_TAKE_PROFIT = "RISK_TAKE_PROFIT"      # 止盈触发
     RISK_POSITION_LIMIT = "RISK_POSITION_LIMIT"  # 仓位超限
@@ -114,6 +131,10 @@ class Signal(BaseModel):
     symbol: str = Field(
         ...,
         description="股票代码，含市场后缀，如 600519.SH / 0700.HK"
+    )
+    symbol_name: str | None = Field(
+        default=None,
+        description="股票名称（committee agent 使用）"
     )
     market: MarketType = Field(
         ...,
@@ -167,6 +188,12 @@ class Signal(BaseModel):
     tags: list[str] = Field(
         default_factory=list,
         description="附加标签，如 momentum / value / dividend"
+    )
+
+    # ── Committee Agent 评分（内部使用，投委会输出）
+    agent_scores: AgentScores | None = Field(
+        default=None,
+        description="三维度 Agent 评分（技术面/基本面/舆情），committee agent 专用"
     )
     
     # ── 元数据 ──
@@ -252,6 +279,13 @@ class SignalExecution(BaseModel):
 
 
 # ─────────────────────────────── Agent 评分 ───────────────────────────────
+
+class AgentScores(BaseModel):
+    """三维度 Agent 评分（技术面 / 基本面 / 舆情），committee agent 输出"""
+    technical: int = Field(ge=0, le=100, description="技术面评分 0-100")
+    fundamental: int = Field(ge=0, le=100, description="基本面评分 0-100")
+    sentiment: int = Field(ge=-50, le=50, description="舆情评分 -50~50")
+
 
 class AgentScore(BaseModel):
     """单 Agent 评分（内部使用，不暴露给交易层）"""
