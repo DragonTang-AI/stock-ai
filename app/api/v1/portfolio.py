@@ -30,7 +30,12 @@ from app.schemas.trading import (
     OrderRequest,
     TradeListResponse,
     PortfolioAnalyticsResponse,
+    EquityCurveResponse,
+    AttributionResponse,
+    DashboardSummaryResponse,
+    StatisticsResponse,
 )
+from datetime import datetime
 from app.services.trading import (
     get_account_info,
     get_positions_summary,
@@ -164,3 +169,131 @@ async def get_trades_endpoint(
     """获取成交记录"""
     items, total = await get_trades(db, current_user, limit=limit, offset=offset)
     return {"success": True, "data": items, "total": total}
+
+
+@router.get("/equity_curve", response_model=EquityCurveResponse)
+async def get_equity_curve(
+    period: str = Query("1m", description="期限：1w/1m/3m/6m/1y/all"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    收益率曲线
+    
+    基于账户初始资金 + 当前总资产计算。
+    TODO: 未来接入历史每日快照后生成完整曲线。
+    """
+    from app.services.trading import INITIAL_BALANCE, get_or_create_account, get_positions
+    account = await get_or_create_account(db, current_user)
+    positions = await get_positions(db, current_user)
+    total_market_value = sum(p.market_value for p in positions)
+    total_equity = float(account.balance) + total_market_value
+    
+    today = datetime.now().strftime("%Y-%m-%d")
+    points = [
+        {"date": "start", "equity": INITIAL_BALANCE, "benchmark": INITIAL_BALANCE},
+        {"date": today, "equity": round(total_equity, 2), "benchmark": round(total_equity, 2)},
+    ]
+    return {"success": True, "data": points}
+
+
+@router.get("/attribution", response_model=AttributionResponse)
+async def get_attribution(
+    period: str = Query("1m", description="期限：1w/1m/3m/6m/1y/all"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """归因分析：各持仓盈亏贡献占比"""
+    from app.services.trading import get_positions
+    positions = await get_positions(db, current_user)
+    if not positions:
+        return {"success": True, "data": []}
+    
+    total_profit = sum(p.profit for p in positions)
+    if total_profit == 0:
+        return {"success": True, "data": [{"label": p.name, "contribution": 0, "percentage": 0} for p in positions]}
+    
+    items = [
+        {
+            "label": f"{p.name}({p.symbol})",
+            "contribution": round(p.profit, 2),
+            "percentage": round(abs(p.profit) / abs(total_profit) * 100, 2),
+        }
+        for p in sorted(positions, key=lambda x: abs(x.profit), reverse=True)
+    ]
+    return {"success": True, "data": items}
+
+
+@router.get("/summary", response_model=DashboardSummaryResponse)
+async def get_dashboard_summary(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """看板概览：总收益、年化收益、夏普比、最大回撤等"""
+    from app.services.trading import INITIAL_BALANCE, get_or_create_account, get_positions
+    account = await get_or_create_account(db, current_user)
+    positions = await get_positions(db, current_user)
+    
+    total_market_value = sum(p.market_value for p in positions)
+    total_equity = float(account.balance) + total_market_value
+    total_return = round(total_equity - INITIAL_BALANCE, 2)
+    total_return_pct = round(total_return / INITIAL_BALANCE * 100, 4) if INITIAL_BALANCE > 0 else 0
+    
+    winning = [p for p in positions if p.profit > 0]
+    win_rate = round(len(winning) / len(positions) * 100, 2) if positions else 0
+    
+    return {
+        "success": True,
+        "data": {
+            "totalReturn": total_return_pct,
+            "annualizedReturn": total_return_pct,
+            "beatBenchmark": 0,
+            "sharpeRatio": 0,
+            "maxDrawdown": 0,
+            "winRate": win_rate,
+        },
+    }
+
+
+@router.get("/statistics", response_model=StatisticsResponse)
+async def get_statistics(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """统计指标：胜率、盈亏比、单笔最大盈亏、夏普比等"""
+    from app.services.trading import INITIAL_BALANCE, get_or_create_account, get_positions, get_trades
+    account = await get_or_create_account(db, current_user)
+    positions = await get_positions(db, current_user)
+    trades_list, _ = await get_trades(db, current_user)
+    
+    total_market_value = sum(p.market_value for p in positions)
+    total_equity = float(account.balance) + total_market_value
+    total_return = round(total_equity - INITIAL_BALANCE, 2)
+    
+    winning = [p for p in positions if p.profit > 0]
+    losing = [p for p in positions if p.profit < 0]
+    win_rate = round(len(winning) / len(positions) * 100, 2) if positions else 0
+    
+    # 盈亏比（平均盈利 / 平均亏损的绝对值）
+    avg_win = sum(p.profit for p in winning) / len(winning) if winning else 0
+    avg_loss = abs(sum(p.profit for p in losing)) / len(losing) if losing else 1
+    profit_loss_ratio = round(avg_win / avg_loss, 2) if avg_loss > 0 else 0
+    
+    # 单只最大盈亏
+    max_profit = max((p.profit for p in positions), default=0)
+    max_loss = min((p.profit for p in positions), default=0)
+    
+    # 最大回撤（简化为总收益跌幅，TODO：接入逐日追踪）
+    max_drawdown = 0 if total_return >= 0 else round(abs(total_return) / INITIAL_BALANCE * 100, 2)
+    
+    return {
+        "success": True,
+        "data": {
+            "winRate": win_rate,
+            "profitLossRatio": profit_loss_ratio,
+            "maxSingleProfit": round(max_profit, 2),
+            "maxSingleLoss": round(max_loss, 2),
+            "sharpeRatio": 0,
+            "maxDrawdown": max_drawdown,
+        },
+    }

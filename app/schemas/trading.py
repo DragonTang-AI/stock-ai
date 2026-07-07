@@ -160,3 +160,62 @@ class PortfolioAnalyticsResponse(BaseModel):
     """持仓分析响应"""
     success: bool
     data: Optional[dict] = None
+
+
+# ============== 扩展分析 ==============
+class EquityPoint(BaseModel):
+    """收益率曲线数据点"""
+    date: str
+    equity: float
+    benchmark: float = 0
+
+
+class EquityCurveResponse(BaseModel):
+    """收益率曲线响应"""
+    success: bool
+    data: List[EquityPoint] = Field(default_factory=list)
+
+
+class AttributionItem(BaseModel):
+    """归因分析项"""
+    label: str
+    contribution: float
+    percentage: float
+
+
+class AttributionResponse(BaseModel):
+    """归因分析响应"""
+    success: bool
+    data: List[AttributionItem] = Field(default_factory=list)
+
+
+class DashboardSummary(BaseModel):
+    """看板概览"""
+    totalReturn: float = 0
+    annualizedReturn: float = 0
+    beatBenchmark: float = 0
+    sharpeRatio: float = 0
+    maxDrawdown: float = 0
+    winRate: float = 0
+
+
+class DashboardSummaryResponse(BaseModel):
+    """看板概览响应"""
+    success: bool
+    data: DashboardSummary = Field(default_factory=DashboardSummary)
+
+
+class StatisticsData(BaseModel):
+    """统计指标"""
+    winRate: float = 0
+    profitLossRatio: float = 0
+    maxSingleProfit: float = 0
+    maxSingleLoss: float = 0
+    sharpeRatio: float = 0
+    maxDrawdown: float = 0
+
+
+class StatisticsResponse(BaseModel):
+    """统计指标响应"""
+    success: bool
+    data: StatisticsData = Field(default_factory=StatisticsData)
