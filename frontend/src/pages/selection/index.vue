@@ -1,9 +1,7 @@
 <template>
   <view class="selection-page">
-    <!-- 加载 -->
-    <view v-if="loading" class="state-view">
-      <text class="state-text">加载中...</text>
-    </view>
+    <!-- 骨架屏 -->
+    <LoadingSkeleton v-if="loading" scene="selection" :rows="3" />
 
     <!-- 委员会分析结果 -->
     <view v-else-if="results.length > 0">
@@ -88,10 +86,15 @@
       <button class="btn-retry" @click="loadResults">重试</button>
     </view>
   </view>
+  <Disclaimer />
 </template>
 
 <script setup lang="ts">
+import Disclaimer from '@/components/compliance/Disclaimer.vue'
 import { ref, reactive, onMounted } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
+import { trackPageView, trackAction } from '@/utils/tracker'
 import {
   fetchCommitteeResults,
   addToWatchlist,
@@ -150,6 +153,7 @@ async function handleToggleWatch(symbol: string) {
       await addToWatchlist(symbol)
       watchlistSet.add(symbol)
       uni.showToast({ title: '已加入自选', icon: 'success' })
+      trackAction('add_watchlist', { symbol })
     }
   } catch {
     uni.showToast({ title: '操作失败', icon: 'none' })
@@ -157,7 +161,7 @@ async function handleToggleWatch(symbol: string) {
 }
 
 function handleViewDetail(symbol: string) {
-  uni.navigateTo({ url: `/pages/detail/index?code=${symbol}` })
+  uni.navigateTo({ url: `/pages/selection/detail?symbol=${encodeURIComponent(symbol)}` })
 }
 
 async function loadResults() {
@@ -174,6 +178,10 @@ async function loadResults() {
 
 onMounted(() => {
   loadResults()
+})
+
+onShow(() => {
+  trackPageView('selection')
 })
 </script>
 
@@ -279,15 +287,15 @@ onMounted(() => {
 
   &.buy {
     background: rgba(239, 83, 80, 0.1);
-    color: #EF5350;
+    color: var(--color-up, #EF5350);
   }
   &.sell {
     background: rgba(38, 166, 154, 0.1);
-    color: #26A69A;
+    color: var(--color-down, #26A69A);
   }
   &.hold {
     background: rgba(153, 153, 153, 0.1);
-    color: #999;
+    color: var(--text-hint, #999);
   }
 }
 
@@ -375,15 +383,15 @@ onMounted(() => {
 
   &.buy {
     background: rgba(239, 83, 80, 0.1);
-    color: #EF5350;
+    color: var(--color-up, #EF5350);
   }
   &.sell {
     background: rgba(38, 166, 154, 0.1);
-    color: #26A69A;
+    color: var(--color-down, #26A69A);
   }
   &.hold {
     background: rgba(153, 153, 153, 0.1);
-    color: #999;
+    color: var(--text-hint, #999);
   }
 }
 
@@ -430,7 +438,7 @@ onMounted(() => {
   flex: 1;
   padding: 18rpx;
   font-size: $font-size-sm;
-  color: #FFFFFF;
+  color: #fff;
   background: $color-primary;
   border-radius: 8rpx;
   border: none;

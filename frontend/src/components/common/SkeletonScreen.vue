@@ -54,6 +54,7 @@ withDefaults(defineProps<{
 </script>
 
 <style lang="scss" scoped>
+/* 骨架块被 LoadingSkeleton.vue 的全局样式接管（.sk-block），此处只保留组件专属布局 */
 .skeleton-list-item {
   display: flex;
   align-items: center;
@@ -65,8 +66,10 @@ withDefaults(defineProps<{
   width: 72rpx;
   height: 72rpx;
   border-radius: 50%;
-  @include skeleton;
   flex-shrink: 0;
+  background: linear-gradient(90deg, rgba(0,0,0,0.06) 25%, rgba(0,0,0,0.10) 50%, rgba(0,0,0,0.06) 75%);
+  background-size: 200% 100%;
+  animation: sk-shimmer 1.5s ease-in-out infinite;
 }
 
 .skeleton-list-content {
@@ -97,5 +100,10 @@ withDefaults(defineProps<{
   display: flex;
   gap: 16rpx;
   padding: 24rpx 32rpx;
+}
+
+@keyframes sk-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 </style>

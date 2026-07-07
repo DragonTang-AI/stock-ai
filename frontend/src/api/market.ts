@@ -3,6 +3,7 @@
  * 对应后端 /api/v1/market
  */
 import { request } from '@/utils/request'
+import { cachedRequest, clearCache } from '@/utils/cache'
 
 /** K线数据点 */
 export interface KlinePoint {
@@ -41,20 +42,36 @@ export interface KlineResponse {
   points: KlinePoint[]
 }
 
-/** 获取 K 线数据 */
+/** 获取 K 线数据（缓存 10 分钟，K线数据变化慢） */
 export function fetchKline(params: {
   code: string
   period?: 'day' | 'week' | 'month'
   count?: number
 }): Promise<KlineResponse> {
-  return request<{ success: boolean; data: KlineResponse }>(
-    '/market/kline', { method: 'GET', params }
-  ).then(res => res.data)
+  return cachedRequest(
+    'market:kline',
+    () => request<{ success: boolean; data: KlineResponse }>(
+      '/market/kline', { method: 'GET', params }
+    ).then(res => res.data),
+    params,
+    { ttl: 10 * 60 * 1000 }
+  )
 }
 
-/** 获取实时行情 */
+/** 获取实时行情（缓存 30 秒，行情变化快） */
 export function fetchQuote(code: string): Promise<QuoteSnapshot> {
-  return request<{ success: boolean; data: QuoteSnapshot }>(
-    `/market/quote/${code}`, { method: 'GET' }
-  ).then(res => res.data)
+  return cachedRequest(
+    'market:quote',
+    () => request<{ success: boolean; data: QuoteSnapshot }>(
+      `/market/quote/${code}`, { method: 'GET' }
+    ).then(res => res.data),
+    { code },
+    { ttl: 30 * 1000 }
+  )
+}
+
+/** 清除行情相关缓存 */
+export function clearMarketCache(): void {
+  clearCache('market:quote')
+  clearCache('market:kline')
 }

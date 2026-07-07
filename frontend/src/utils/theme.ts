@@ -1,5 +1,12 @@
 /**
  * 深色模式管理
+ *
+ * 主题切换通过 CSS class (.dark) 驱动，SCSS 变量定义在 styles/dark-theme.scss 中。
+ * 本模块仅负责：
+ *   1. 持久化用户偏好 (localStorage)
+ *   2. 在 documentElement 上切换 .dark class
+ *   3. 监听系统主题变化（跟随系统模式）
+ *   4. 通知订阅者主题变化
  */
 
 const THEME_KEY = 'ai-stock:theme'
@@ -13,41 +20,21 @@ interface ThemeState {
 
 let listeners: Array<(isDark: boolean) => void> = []
 
-/**
- * 深色模式 CSS 变量映射
- */
-const darkVars: Record<string, string> = {
-  '--bg-page': '#0F0F23',
-  '--bg-card': '#1A1A2E',
-  '--bg-primary': '#16213E',
-  '--bg-secondary': '#0F3460',
-  '--text-primary': '#E0E0E0',
-  '--text-secondary': '#A0A0A0',
-  '--text-hint': '#666666',
-  '--text-inverse': '#FFFFFF',
-  '--border-color': '#2A2A3E',
-}
-
-const lightVars: Record<string, string> = {
-  '--bg-page': '#F5F5F7',
-  '--bg-card': '#FFFFFF',
-  '--bg-primary': '#1A1A2E',
-  '--bg-secondary': '#16213E',
-  '--text-primary': '#1F1F1F',
-  '--text-secondary': '#666666',
-  '--text-hint': '#999999',
-  '--text-inverse': '#FFFFFF',
-  '--border-color': '#E5E5E5',
+function prefersDark(): boolean {
+  // #ifdef H5
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
+  // #endif
+  // #ifndef H5
+  return false
+  // #endif
 }
 
 export function getThemeState(): ThemeState {
   const stored = uni.getStorageSync(THEME_KEY)
   if (stored) {
     const mode = stored as ThemeMode
-    return {
-      mode,
-      isDark: mode === 'dark' || (mode === 'system' && prefersDark()),
-    }
+    const isDark = mode === 'dark' || (mode === 'system' && prefersDark())
+    return { mode, isDark }
   }
   return { mode: 'light', isDark: false }
 }
@@ -58,24 +45,14 @@ export function setThemeMode(mode: ThemeMode) {
   notifyListeners()
 }
 
-function prefersDark(): boolean {
-  // #ifdef H5
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
-  // #endif
-  // #ifndef H5
-  return false
-  // #endif
-}
-
+/**
+ * 应用主题：仅通过 .dark class 驱动 SCSS 变量切换。
+ * 不手动设置 style.setProperty —— 所有变量由 light-theme.scss / dark-theme.scss 负责。
+ */
 export function applyTheme() {
-  const { isDark } = getThemeState()
-  const vars = isDark ? darkVars : lightVars
-
   // #ifdef H5
   const root = document.documentElement
-  Object.entries(vars).forEach(([key, value]) => {
-    root.style.setProperty(key, value)
-  })
+  const { isDark } = getThemeState()
   if (isDark) {
     root.classList.add('dark')
   } else {

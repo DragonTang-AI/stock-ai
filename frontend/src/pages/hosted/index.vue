@@ -1,165 +1,369 @@
 <template>
   <view class="hosted-page">
-    <!-- 状态卡片 -->
-    <view class="status-card" v-if="status">
+    <!-- 骨架屏 -->
+    <LoadingSkeleton v-if="isLoading" scene="hosted" :rows="3" />
+
+    <!-- 审核模式提示 -->
+    <view class="audit-banner" v-if="status?.is_audit_mode">
+      <view class="audit-icon">⚠</view>
+      <view class="audit-content">
+        <text class="audit-title">审核模式</text>
+        <text class="audit-desc">AI托管存在风险，请密切关注。审核模式下交易功能暂停。</text>
+      </view>
+    </view>
+
+    <!-- 托管状态卡片 -->
+    <view class="status-card">
       <view class="status-header">
         <view class="status-left">
-          <text class="status-title">AI托管</text>
-          <view class="status-badge" :class="{ active: status.is_active }">
-            <text>{{ status.is_active ? '运行中' : '已关闭' }}</text>
+          <text class="status-title">AI 托管</text>
+          <view
+            class="status-badge"
+            :class="{ active: status?.is_active }"
+          >
+            {{ status?.is_active ? '已开启' : '已关闭' }}
           </view>
         </view>
         <switch
-          :checked="status.is_active"
+          :checked="status?.is_active ?? false"
+          :disabled="isSwitching || (status?.is_audit_mode ?? false)"
           @change="handleToggle"
           color="#4A90E2"
         />
       </view>
-      <view class="status-body" v-if="status.is_active">
-        <view class="status-row">
-          <text class="s-label">当前模式</text>
-          <text class="s-value">{{ status.mode || '-' }}</text>
+
+      <view class="status-grid" v-if="status?.is_active">
+        <view class="grid-item">
+          <text class="grid-label">托管模式</text>
+          <text class="grid-value">{{ status.mode === 'AI_HOSTED' ? 'AI 自动' : '手动' }}</text>
         </view>
-        <view class="status-row">
-          <text class="s-label">今日成交</text>
-          <text class="s-value">{{ status.total_trades }} 笔</text>
+        <view class="grid-item">
+          <text class="grid-label">风险等级</text>
+          <text class="grid-value risk-tag" :class="'risk-' + status.risk_level">
+            {{ riskLabel(status.risk_level) }}
+          </text>
         </view>
-        <view class="status-row">
-          <text class="s-label">今日盈亏</text>
-          <text class="s-value" :class="(status.daily_loss_pct ?? 0) >= 0 ? 'up' : 'down'">
+        <view class="grid-item">
+          <text class="grid-label">今日信号</text>
+          <text class="grid-value">{{ status.active_signals_today }} 条</text>
+        </view>
+        <view class="grid-item">
+          <text class="grid-label">今日盈亏</text>
+          <text class="grid-value" :class="(status.daily_loss_pct ?? 0) >= 0 ? 'up' : 'down'">
             {{ (status.daily_loss_pct ?? 0) >= 0 ? '+' : '' }}{{ ((status.daily_loss_pct ?? 0) * 100).toFixed(2) }}%
           </text>
         </view>
-        <view class="status-row">
-          <text class="s-label">最后更新</text>
-          <text class="s-value muted">{{ formatTime(status.is_active ? status.enabled_at : status.disabled_at) }}</text>
+        <view class="grid-item">
+          <text class="grid-label">今日成交</text>
+          <text class="grid-value">{{ status.total_trades }} 笔</text>
+        </view>
+        <view class="grid-item">
+          <text class="grid-label">开启时间</text>
+          <text class="grid-value muted">{{ formatDate(status.enabled_at) }}</text>
         </view>
       </view>
     </view>
 
-    <!-- 风控参数 -->
-    <view class="section" v-if="status && status.is_active">
+    <!-- 托管设置 -->
+    <view class="section" v-if="status?.is_active">
       <view class="section-header">
-        <text class="section-title">风控参数</text>
-        <text class="section-action" @click="showConfig = !showConfig">
-          {{ showConfig ? '收起' : '修改' }}
-        </text>
+        <text class="section-title">托管设置</text>
       </view>
 
-      <view class="config-readonly" v-if="!showConfig">
-        <view class="cfg-row">
-          <text class="cfg-label">最低置信度</text>
-          <text class="cfg-value">{{ status.min_confidence != null ? status.min_confidence + '%' : '-' }}</text>
+      <!-- 风险等级 -->
+      <view class="setting-item">
+        <view class="setting-label">
+          <text class="s-name">风险等级</text>
+          <text class="s-desc">决定 AI 交易策略的激进程度</text>
         </view>
-        <view class="cfg-row">
-          <text class="cfg-label">最大仓位比例</text>
-          <text class="cfg-value">{{ status.max_position_ratio != null ? (status.max_position_ratio * 100).toFixed(0) + '%' : '-' }}</text>
-        </view>
-      </view>
-
-      <view class="config-edit" v-else>
-        <view class="cfg-edit-row">
-          <text class="cfg-label">最低置信度 (%)</text>
-          <view class="cfg-input-wrap">
-            <input class="cfg-input" v-model="configForm.min_confidence" type="number" placeholder="60-100" />
-            <text class="cfg-unit">%</text>
+        <view class="risk-selector">
+          <view
+            v-for="lvl in riskLevels"
+            :key="lvl.value"
+            class="risk-option"
+            :class="{ selected: configForm.risk_level === lvl.value }"
+            @click="configForm.risk_level = lvl.value as RiskLevel"
+          >
+            <text class="risk-dot" :class="'risk-' + lvl.value"></text>
+            <text class="risk-name">{{ lvl.label }}</text>
           </view>
         </view>
-        <view class="cfg-hint">建议范围 60-90，越高越保守</view>
-
-        <view class="cfg-edit-row">
-          <text class="cfg-label">最大仓位比例 (%)</text>
-          <view class="cfg-input-wrap">
-            <input class="cfg-input" v-model="configForm.max_position_ratio" type="number" placeholder="5-30" />
-            <text class="cfg-unit">%</text>
-          </view>
-        </view>
-        <view class="cfg-hint">单策略最大持仓占总资产比例，建议 ≤20</view>
-
-        <button class="btn-save" :disabled="savingConfig" @click="handleSaveConfig">
-          {{ savingConfig ? '保存中...' : '保存修改' }}
-        </button>
       </view>
+
+      <!-- 单笔限额 -->
+      <view class="setting-item">
+        <view class="setting-label">
+          <text class="s-name">单笔限额（元）</text>
+          <text class="s-desc">单次交易金额上限</text>
+        </view>
+        <view class="input-wrap">
+          <input
+            class="s-input"
+            v-model="configForm.single_trade_limit"
+            type="digit"
+            placeholder="如 50000"
+            :adjust-position="true"
+            :cursor-spacing="20"
+          />
+        </view>
+      </view>
+
+      <!-- 日限额 -->
+      <view class="setting-item">
+        <view class="setting-label">
+          <text class="s-name">日限额（元）</text>
+          <text class="s-desc">单日总交易金额上限</text>
+        </view>
+        <view class="input-wrap">
+          <input
+            class="s-input"
+            v-model="configForm.daily_trade_limit"
+            type="digit"
+            placeholder="如 200000"
+            :adjust-position="true"
+            :cursor-spacing="20"
+          />
+        </view>
+      </view>
+
+      <!-- 行业集中度 -->
+      <view class="setting-item">
+        <view class="setting-label">
+          <text class="s-name">行业集中度（%）</text>
+          <text class="s-desc">单一行业持仓占总资产比例上限</text>
+        </view>
+        <view class="input-wrap">
+          <input
+            class="s-input"
+            v-model="configForm.industry_concentration"
+            type="digit"
+            placeholder="如 30"
+            :adjust-position="true"
+            :cursor-spacing="20"
+          />
+          <text class="input-suffix">%</text>
+        </view>
+      </view>
+
+      <!-- 自动止损 -->
+      <view class="setting-item">
+        <view class="setting-label">
+          <text class="s-name">自动止损</text>
+          <text class="s-desc">达到止损线自动平仓</text>
+        </view>
+        <switch
+          :checked="configForm.auto_stop_loss"
+          @change="configForm.auto_stop_loss = ($event as any).detail.value"
+          color="#4A90E2"
+        />
+      </view>
+
+      <button
+        class="btn-primary"
+        :disabled="savingConfig"
+        @click="handleSaveConfig"
+      >
+        {{ savingConfig ? '保存中...' : '保存设置' }}
+      </button>
     </view>
 
-    <!-- 执行日志 -->
-    <view class="section" v-if="status && status.is_active && logs.length">
+    <!-- 信号日志 -->
+    <view class="section" v-if="status?.is_active">
       <view class="section-header">
-        <text class="section-title">执行日志</text>
-        <text class="section-action" @click="loadLogs">刷新</text>
+        <text class="section-title">信号日志</text>
+        <text class="section-action" @click="loadSignals">刷新</text>
       </view>
 
-      <view class="log-list">
-        <view class="log-item" v-for="log in logs" :key="log.id">
-          <view class="log-header">
-            <text class="log-action" :class="log.action === 'BUY' ? 'up' : 'down'">
-              {{ log.action === 'BUY' ? '买入' : log.action === 'SELL' ? '卖出' : log.action }}
+      <view class="signal-list">
+        <view
+          class="signal-item"
+          v-for="sig in signals"
+          :key="sig.id"
+        >
+          <view class="signal-row top">
+            <view class="signal-action" :class="actionClass(sig.action)">
+              <text>{{ actionIcon(sig.action) }}</text>
+              <text>{{ actionLabel(sig.action) }}</text>
+            </view>
+            <text class="signal-symbol">{{ sig.symbol }}</text>
+            <text class="signal-status" :class="'status-' + sig.status">
+              {{ statusLabel(sig.status) }}
             </text>
-            <text class="log-symbol">{{ log.symbol }}</text>
-            <text class="log-confidence" v-if="log.signal_id">置信度 {{ log.signal_id.slice(0, 8) }}</text>
           </view>
-          <view class="log-body">
-            <text class="log-msg">{{ log.reason || '-' }}</text>
-          </view>
-          <view class="log-footer">
-            <text class="log-result" :class="log.status === 'TRIGGERED' ? 'up' : 'down'">
-              {{ log.status === 'TRIGGERED' ? '触发' : log.status === 'BLOCKED' ? '阻止' : log.status === 'SKIPPED' ? '跳过' : log.status }}
+          <view class="signal-row mid">
+            <text class="signal-price" v-if="sig.price">
+              价格 {{ formatPrice(sig.price) }}
             </text>
-            <text class="log-time">{{ formatTime(log.created_at) }}</text>
+            <text class="signal-confidence">
+              置信度 {{ sig.confidence }}%
+            </text>
+          </view>
+          <view class="signal-row bottom">
+            <text class="signal-reason" v-if="sig.reason">{{ sig.reason }}</text>
+            <text class="signal-time">{{ formatTime(sig.created_at) }}</text>
           </view>
         </view>
       </view>
 
-      <view class="log-more" v-if="logTotal > logs.length" @click="loadMoreLogs">
-        <text>加载更多 ({{ logTotal - logs.length }}条)</text>
+      <view class="list-more" v-if="signalTotal > signals.length" @click="loadMoreSignals">
+        <text>加载更多 ({{ signalTotal - signals.length }} 条)</text>
+      </view>
+
+      <view class="signal-empty" v-if="!signals.length && !loadingSignals">
+        <text>暂无信号日志</text>
       </view>
     </view>
 
-    <!-- 加载状态 -->
+    <!-- 免责声明 -->
+    <view class="disclaimer" v-if="status?.disclaimer">
+      <text>{{ status.disclaimer }}</text>
+    </view>
+
+    <!-- 加载中 -->
     <view class="loading-state" v-if="isLoading">
-      <text class="loading-text">加载中...</text>
+      <text>加载中...</text>
     </view>
 
     <!-- 空状态 -->
     <view class="empty-state" v-if="!isLoading && !status">
-      <text class="empty-text">AI托管服务未就绪</text>
+      <text>AI托管服务未就绪</text>
       <button class="btn-retry" @click="loadStatus">重试</button>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
+import { trackPageView, trackAction } from '@/utils/tracker'
 import {
-  getHostedStatus, switchHosted, updateHostedConfig, getHostedLogs,
-  type HostedStatus, type HostedLog, type HostedMode,
+  getHostedStatus,
+  switchHosted,
+  updateHostedConfig,
+  getHostedSignals,
+  type HostedStatus,
+  type HostedSignal,
+  type HostedMode,
+  type RiskLevel,
+  type HostedConfigRequest,
+  RiskLevelLabel,
 } from '@/api/hosted'
+
+const riskLevels = [
+  { value: 'conservative' as RiskLevel, label: '保守' },
+  { value: 'balanced' as RiskLevel, label: '平衡' },
+  { value: 'aggressive' as RiskLevel, label: '激进' },
+]
 
 const isLoading = ref(false)
 const savingConfig = ref(false)
+const isSwitching = ref(false)
+const loadingSignals = ref(false)
 const status = ref<HostedStatus | null>(null)
-const logs = ref<HostedLog[]>([])
-const logTotal = ref(0)
-const logOffset = ref(0)
-const showConfig = ref(false)
-const configForm = ref({ min_confidence: '', max_position_ratio: '' })
+
+const signals = ref<HostedSignal[]>([])
+const signalTotal = ref(0)
+const signalOffset = ref(0)
+
+const configForm = reactive<HostedConfigRequest & { single_trade_limit: string; daily_trade_limit: string; industry_concentration: string }>({
+  risk_level: 'balanced',
+  single_trade_limit: '',
+  daily_trade_limit: '',
+  industry_concentration: '',
+  auto_stop_loss: true,
+})
+
+function riskLabel(level: RiskLevel): string {
+  return RiskLevelLabel[level] || level
+}
+
+function actionIcon(action: string): string {
+  switch (action) {
+    case 'BUY':
+    case 'ADD':
+      return '🟢'
+    case 'HOLD':
+      return '🟡'
+    case 'SELL':
+    case 'REDUCE':
+      return '🔴'
+    default:
+      return ''
+  }
+}
+
+function actionLabel(action: string): string {
+  switch (action) {
+    case 'BUY':
+      return '买入'
+    case 'ADD':
+      return '加仓'
+    case 'HOLD':
+      return '持仓'
+    case 'SELL':
+      return '卖出'
+    case 'REDUCE':
+      return '减仓'
+    default:
+      return action
+  }
+}
+
+function actionClass(action: string): string {
+  if (action === 'BUY' || action === 'ADD') return 'up'
+  if (action === 'SELL' || action === 'REDUCE') return 'down'
+  return 'neutral'
+}
+
+function statusLabel(status: string): string {
+  switch (status) {
+    case 'PENDING':
+      return '待执行'
+    case 'EXECUTED':
+      return '已执行'
+    case 'REJECTED':
+      return '已拒绝'
+    case 'CANCELLED':
+      return '已取消'
+    case 'EXPIRED':
+      return '已过期'
+    default:
+      return status
+  }
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return '-'
+  const d = new Date(iso)
+  const m = (d.getMonth() + 1).toString().padStart(2, '0')
+  const day = d.getDate().toString().padStart(2, '0')
+  return `${m}-${day}`
+}
 
 function formatTime(iso: string): string {
   if (!iso) return '-'
   const d = new Date(iso)
-  return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  const m = (d.getMonth() + 1).toString().padStart(2, '0')
+  const day = d.getDate().toString().padStart(2, '0')
+  const h = d.getHours().toString().padStart(2, '0')
+  const min = d.getMinutes().toString().padStart(2, '0')
+  return `${m}-${day} ${h}:${min}`
 }
 
+function formatPrice(price: number): string {
+  return price.toFixed(2)
+}
+
+/* ---- 数据加载 ---- */
 async function loadStatus() {
   isLoading.value = true
   try {
     status.value = await getHostedStatus()
-    configForm.value = {
-      min_confidence: status.value.min_confidence != null ? String(status.value.min_confidence) : '',
-      max_position_ratio: status.value.max_position_ratio != null ? String((status.value.max_position_ratio * 100).toFixed(0)) : '',
+    fillConfigForm(status.value)
+    if (status.value.is_active) {
+      await loadSignals()
     }
-    if (status.value.is_active) await loadLogs()
   } catch {
     status.value = null
   } finally {
@@ -167,39 +371,57 @@ async function loadStatus() {
   }
 }
 
+function fillConfigForm(s: HostedStatus) {
+  configForm.risk_level = s.risk_level || 'balanced'
+  configForm.single_trade_limit = s.single_trade_limit != null ? String(s.single_trade_limit) : ''
+  configForm.daily_trade_limit = s.daily_trade_limit != null ? String(s.daily_trade_limit) : ''
+  configForm.industry_concentration = s.industry_concentration != null ? String((s.industry_concentration * 100).toFixed(0)) : ''
+  configForm.auto_stop_loss = s.auto_stop_loss ?? true
+}
+
+/* ---- 开关 ---- */
 async function handleToggle(e: { detail: { value: boolean } }) {
   const wantActive = e.detail.value
-  const targetMode: HostedMode = wantActive ? 'AI_HOSTED' : 'MANUAL'
+  isSwitching.value = true
   try {
     uni.showLoading({ title: '切换中...' })
-    status.value = await switchHosted(targetMode)
-    configForm.value = {
-      min_confidence: status.value.min_confidence != null ? String(status.value.min_confidence) : '',
-      max_position_ratio: status.value.max_position_ratio != null ? String((status.value.max_position_ratio * 100).toFixed(0)) : '',
+    status.value = await switchHosted(wantActive ? 'AI_HOSTED' : 'MANUAL')
+    fillConfigForm(status.value)
+    if (wantActive) {
+      await loadSignals()
+    } else {
+      signals.value = []
+      signalTotal.value = 0
     }
-    if (wantActive) await loadLogs()
+    uni.showToast({ title: wantActive ? '已开启AI托管' : '已关闭AI托管', icon: 'success' })
+    trackAction(wantActive ? 'hosted_enable' : 'hosted_disable', { mode: wantActive ? 'AI_HOSTED' : 'MANUAL' })
   } catch (err: any) {
     uni.showToast({ title: err?.message || '操作失败', icon: 'none' })
   } finally {
+    isSwitching.value = false
     uni.hideLoading()
   }
 }
 
+/* ---- 保存设置 ---- */
 async function handleSaveConfig() {
-  const minConf = parseFloat(configForm.value.min_confidence)
-  const maxPos = parseFloat(configForm.value.max_position_ratio)
-  if (isNaN(minConf) || isNaN(maxPos)) {
-    uni.showToast({ title: '请输入有效数值', icon: 'none' })
-    return
-  }
   savingConfig.value = true
   try {
-    status.value = await updateHostedConfig({
-      min_confidence: minConf,
-      max_position_ratio: maxPos / 100,  // % 转 0-1
-    })
-    showConfig.value = false
-    uni.showToast({ title: '已保存', icon: 'success' })
+    const body: HostedConfigRequest = { risk_level: configForm.risk_level }
+    if (configForm.single_trade_limit) {
+      body.single_trade_limit = parseFloat(configForm.single_trade_limit)
+    }
+    if (configForm.daily_trade_limit) {
+      body.daily_trade_limit = parseFloat(configForm.daily_trade_limit)
+    }
+    if (configForm.industry_concentration) {
+      body.industry_concentration = parseFloat(configForm.industry_concentration) / 100
+    }
+    body.auto_stop_loss = configForm.auto_stop_loss
+
+    status.value = await updateHostedConfig(body)
+    fillConfigForm(status.value)
+    uni.showToast({ title: '设置已保存', icon: 'success' })
   } catch (err: any) {
     uni.showToast({ title: err?.message || '保存失败', icon: 'none' })
   } finally {
@@ -207,35 +429,84 @@ async function handleSaveConfig() {
   }
 }
 
-async function loadLogs() {
+/* ---- 信号日志 ---- */
+async function loadSignals() {
+  loadingSignals.value = true
   try {
-    const res = await getHostedLogs({ limit: 20, offset: 0 })
-    logs.value = res.logs || []
-    logTotal.value = res.total || 0
-    logOffset.value = logs.value.length
-  } catch { /* ignore */ }
+    const res = await getHostedSignals({ limit: 15, offset: 0 })
+    signals.value = res.signals || []
+    signalTotal.value = res.total || 0
+    signalOffset.value = signals.value.length
+  } catch {
+    /* ignore */
+  } finally {
+    loadingSignals.value = false
+  }
 }
 
-async function loadMoreLogs() {
+async function loadMoreSignals() {
   try {
-    const res = await getHostedLogs({ limit: 20, offset: logOffset.value })
-    logs.value.push(...(res.logs || []))
-    logTotal.value = res.total || 0
-    logOffset.value = logs.value.length
-  } catch { /* ignore */ }
+    const res = await getHostedSignals({ limit: 15, offset: signalOffset.value })
+    signals.value.push(...(res.signals || []))
+    signalTotal.value = res.total || 0
+    signalOffset.value = signals.value.length
+  } catch {
+    /* ignore */
+  }
 }
 
 onMounted(loadStatus)
-onShow(() => { if (!status.value) loadStatus() })
+onShow(() => {
+  if (!status.value) loadStatus()
+  trackPageView('hosted')
+})
 </script>
 
 <style scoped lang="scss">
 .hosted-page {
   min-height: 100vh;
-  background: #f5f6fa;
-  padding-bottom: 32rpx;
+  background: var(--bg-page, #f5f6fa);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 48rpx);
 }
 
+/* ---- 审核模式横幅 ---- */
+.audit-banner {
+  margin: 16rpx 24rpx;
+  padding: 20rpx 24rpx;
+  background: #FFF3CD;
+  border: 2rpx solid #FFC107;
+  border-radius: 12rpx;
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+.audit-icon {
+  font-size: 36rpx;
+  line-height: 44rpx;
+  flex-shrink: 0;
+}
+
+.audit-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.audit-title {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #856404;
+}
+
+.audit-desc {
+  font-size: 24rpx;
+  color: #856404;
+  line-height: 1.5;
+}
+
+/* ---- 状态卡片 ---- */
 .status-card {
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
   margin: 16rpx 24rpx;
@@ -266,29 +537,58 @@ onShow(() => { if (!status.value) loadStatus() })
   padding: 4rpx 16rpx;
   border-radius: 20rpx;
   font-size: 22rpx;
-  background: rgba(255,255,255,0.15);
-  &.active { background: rgba(74,144,226,0.6); }
+  background: rgba(255, 255, 255, 0.15);
+
+  &.active {
+    background: rgba(74, 144, 226, 0.6);
+  }
 }
 
-.status-body {
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20rpx 16rpx;
+}
+
+.grid-item {
   display: flex;
   flex-direction: column;
-  gap: 16rpx;
+  gap: 6rpx;
 }
 
-.status-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.grid-label {
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.55);
 }
 
-.s-label { font-size: 26rpx; color: rgba(255,255,255,0.6); }
-.s-value { font-size: 26rpx; font-weight: 600; }
-.muted { opacity: 0.6; }
+.grid-value {
+  font-size: 26rpx;
+  font-weight: 600;
+}
 
-/* Section */
+.muted {
+  font-size: 22rpx;
+  font-weight: 400;
+  opacity: 0.6;
+}
+
+.risk-tag {
+  display: inline;
+
+  &.risk-conservative { color: var(--color-down, #34C759);
+  }
+
+  &.risk-balanced {
+    color: #FFC107;
+  }
+
+  &.risk-aggressive { color: var(--color-up, #E25C5C);
+  }
+}
+
+/* ---- Section ---- */
 .section {
-  background: #fff;
+  background: var(--bg-card, #fff);
   margin: 16rpx 24rpx;
   border-radius: 16rpx;
   padding: 24rpx;
@@ -302,158 +602,288 @@ onShow(() => { if (!status.value) loadStatus() })
 }
 
 .section-title {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #1a1a2e;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--text-primary, #1a1a2e);
 }
 
 .section-action {
   font-size: 24rpx;
-  color: #4A90E2;
+  color: var(--color-primary, #4A90E2);
 }
 
-/* Config */
-.cfg-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16rpx 0;
-  border-bottom: 1rpx solid #f0f0f0;
-  &:last-child { border-bottom: none; }
+/* ---- 设置项 ---- */
+.setting-item {
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid var(--border-color, #f0f0f0);
+
+  &:last-of-type {
+    border-bottom: none;
+  }
 }
 
-.cfg-label { font-size: 26rpx; color: #666; }
-.cfg-value { font-size: 26rpx; font-weight: 600; color: #1a1a2e; }
-
-.cfg-edit-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8rpx;
+.setting-label {
+  margin-bottom: 12rpx;
 }
 
-.cfg-input-wrap {
-  display: flex;
-  align-items: center;
-  background: #f5f6fa;
-  border-radius: 8rpx;
-  padding: 8rpx 16rpx;
+.s-name {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: var(--text-primary, #1a1a2e);
 }
 
-.cfg-input {
-  width: 100rpx;
-  text-align: right;
-  font-size: 26rpx;
-  font-weight: 600;
-  color: #1a1a2e;
-}
-
-.cfg-unit { font-size: 22rpx; color: #999; margin-left: 4rpx; }
-
-.cfg-hint {
+.s-desc {
   font-size: 22rpx;
-  color: #ccc;
-  margin-bottom: 16rpx;
-  padding-left: 0;
+  color: var(--text-hint, #999);
+  margin-left: 12rpx;
 }
 
-.btn-save {
-  margin-top: 24rpx;
-  background: #4A90E2;
+.setting-item:has(switch) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  .setting-label {
+    margin-bottom: 0;
+  }
+}
+
+/* ---- 风险等级选择器 ---- */
+.risk-selector {
+  display: flex;
+  gap: 12rpx;
+}
+
+.risk-option {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  padding: 16rpx 0;
+  border-radius: 12rpx;
+  background: var(--bg-input, #f5f6fa);
+  border: 2rpx solid transparent;
+
+  &.selected {
+    background: #EDF4FD;
+    border-color: var(--color-primary, #4A90E2);
+  }
+}
+
+.risk-dot {
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+
+  &.risk-conservative {
+    background: #34C759;
+  }
+
+  &.risk-balanced {
+    background: #FFC107;
+  }
+
+  &.risk-aggressive {
+    background: #E25C5C;
+  }
+}
+
+.risk-name {
+  font-size: 26rpx;
+  color: var(--text-primary, #1a1a2e);
+  font-weight: 500;
+}
+
+/* ---- 输入框 ---- */
+.input-wrap {
+  display: flex;
+  align-items: center;
+  background: var(--bg-input, #f5f6fa);
+  border-radius: 10rpx;
+  padding: 14rpx 20rpx;
+}
+
+.s-input {
+  flex: 1;
+  font-size: 28rpx;
+  color: var(--text-primary, #1a1a2e);
+}
+
+.input-suffix {
+  font-size: 24rpx;
+  color: var(--text-hint, #999);
+  margin-left: 8rpx;
+}
+
+/* ---- 按钮 ---- */
+.btn-primary {
+  margin-top: 32rpx;
+  background: var(--color-primary, #4A90E2);
   color: #fff;
   border-radius: 12rpx;
   font-size: 28rpx;
-  height: 80rpx;
-  line-height: 80rpx;
-  &[disabled] { opacity: 0.5; }
+  height: 88rpx;
+  line-height: 88rpx;
+
+  &[disabled] {
+    opacity: 0.5;
+  }
 }
 
-/* Logs */
-.log-list { display: flex; flex-direction: column; gap: 4rpx; }
-
-.log-item {
-  padding: 20rpx;
-  background: #f8f9fc;
-  border-radius: 12rpx;
-  margin-bottom: 12rpx;
-  &:last-child { margin-bottom: 0; }
-}
-
-.log-header {
+/* ---- 信号日志 ---- */
+.signal-list {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 12rpx;
-  margin-bottom: 8rpx;
 }
 
-.log-action {
-  font-size: 24rpx;
-  font-weight: 600;
+.signal-item {
+  padding: 20rpx;
+  background: var(--bg-input, #f8f9fc);
+  border-radius: 12rpx;
 }
 
-.log-symbol {
-  font-size: 24rpx;
-  font-weight: 600;
-  color: #1a1a2e;
-}
-
-.log-confidence {
-  font-size: 22rpx;
-  color: #999;
-  margin-left: auto;
-}
-
-.log-body {
-  margin-bottom: 6rpx;
-}
-
-.log-msg {
-  font-size: 24rpx;
-  color: #666;
-}
-
-.log-footer {
+.signal-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+
+  &.top {
+    margin-bottom: 10rpx;
+  }
+
+  &.mid {
+    margin-bottom: 6rpx;
+  }
+
+  &.bottom {
+    justify-content: space-between;
+  }
 }
 
-.log-result {
+.signal-action {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
+.signal-symbol {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a2e);
+  margin-left: 12rpx;
+  flex: 1;
+}
+
+.signal-status {
   font-size: 22rpx;
+  padding: 2rpx 12rpx;
+  border-radius: 20rpx;
+  background: var(--bg-input, #e8e8e8);
+  color: var(--text-secondary, #666);
+
+  &.status-EXECUTED {
+    background: #D4EDDA;
+    color: #155724;
+  }
+
+  &.status-REJECTED {
+    background: #F8D7DA;
+    color: #721C24;
+  }
+
+  &.status-PENDING {
+    background: #D1ECF1;
+    color: #0C5460;
+  }
+
+  &.status-CANCELLED,
+  &.status-EXPIRED {
+    background: var(--bg-input, #e8e8e8);
+    color: var(--text-hint, #999);
+  }
 }
 
-.log-time {
-  font-size: 22rpx;
-  color: #ccc;
-}
-
-.log-more {
-  text-align: center;
-  padding: 20rpx 0 0;
+.signal-price {
   font-size: 24rpx;
-  color: #4A90E2;
+  color: var(--text-secondary, #666);
+  margin-right: 24rpx;
 }
 
-/* Colors */
-.up { color: #E25C5C; }
-.down { color: #34C759; }
-.neutral { color: #1a1a2e; }
+.signal-confidence {
+  font-size: 24rpx;
+  color: var(--color-primary, #4A90E2);
+}
 
-/* States */
-.loading-state, .empty-state {
+.signal-reason {
+  font-size: 22rpx;
+  color: var(--text-hint, #999);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 16rpx;
+}
+
+.signal-time {
+  font-size: 22rpx;
+  color: var(--text-hint, #ccc);
+  flex-shrink: 0;
+}
+
+.signal-empty {
+  text-align: center;
+  padding: 60rpx 0;
+  font-size: 26rpx;
+  color: var(--text-hint, #ccc);
+}
+
+.list-more {
+  text-align: center;
+  padding: 24rpx 0 0;
+  font-size: 24rpx;
+  color: var(--color-primary, #4A90E2);
+}
+
+/* ---- 免责声明 ---- */
+.disclaimer {
+  margin: 16rpx 24rpx;
+  padding: 20rpx 24rpx;
+  background: var(--bg-input, #f0f0f0);
+  border-radius: 12rpx;
+  font-size: 22rpx;
+  color: var(--text-hint, #999);
+  line-height: 1.6;
+}
+
+/* ---- 颜色 ---- */
+.up { color: var(--color-up, #E25C5C);
+}
+
+.down { color: var(--color-down, #34C759);
+}
+
+.neutral {
+  color: #FFC107;
+}
+
+/* ---- 状态页 ---- */
+.loading-state,
+.empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 120rpx 0;
+  font-size: 28rpx;
+  color: var(--text-hint, #999);
 }
 
-.loading-text { font-size: 28rpx; color: #999; }
-.empty-text { font-size: 28rpx; color: #999; margin-bottom: 16rpx; }
-
 .btn-retry {
-  margin-top: 16rpx;
-  background: #4A90E2;
+  margin-top: 24rpx;
+  background: var(--color-primary, #4A90E2);
   color: #fff;
   border-radius: 12rpx;
   font-size: 26rpx;

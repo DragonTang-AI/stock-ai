@@ -6,7 +6,7 @@
     </view>
 
     <!-- 行情头部 -->
-    <view v-else-if="quote" class="quote-header">
+    <view v-else-if="quote && !isFullscreen" class="quote-header">
       <view class="header-top">
         <text class="stock-name">{{ quote.name }}</text>
         <text class="stock-code">{{ quote.code }}</text>
@@ -54,8 +54,8 @@
       </view>
     </view>
 
-    <!-- 周期切换 -->
-    <view v-if="quote" class="period-bar">
+    <!-- 周期切换 + 全屏按钮 -->
+    <view v-if="quote && !isFullscreen" class="period-bar">
       <view
         v-for="p in periods"
         :key="p.value"
@@ -65,15 +65,44 @@
       >
         <text>{{ p.label }}</text>
       </view>
+      <view class="fullscreen-toggle" @click="toggleFullscreen">
+        <text>{{ isLandscape ? '退出全屏' : '全屏' }}</text>
+      </view>
     </view>
 
-    <!-- K线图 -->
-    <view v-if="quote" class="chart-area">
+    <!-- K线图（普通模式） -->
+    <view v-if="quote && !isFullscreen" class="chart-area">
       <KlineChart :points="klinePoints" :loading="klineLoading" :period="period" />
     </view>
 
+    <!-- K线图（全屏横屏模式） -->
+    <view v-if="isFullscreen" class="fullscreen-chart safe-fullscreen">
+      <view class="fullscreen-topbar">
+        <text class="fs-stock-name">{{ quote?.name }} {{ quote?.code }}</text>
+        <view class="fs-price-info">
+          <text class="fs-price">{{ formatPrice(quote?.price ?? 0) }}</text>
+          <text class="fs-change" :class="changeClass">{{ formatChangePct(quote?.change_pct ?? 0) }}</text>
+        </view>
+        <view class="fs-periods">
+          <text
+            v-for="p in periods"
+            :key="p.value"
+            class="fs-period"
+            :class="{ active: period === p.value }"
+            @click="switchPeriod(p.value)"
+          >{{ p.label }}</text>
+        </view>
+        <view class="fs-close" @click="toggleFullscreen">
+          <text>退出</text>
+        </view>
+      </view>
+      <view class="fullscreen-chart-body">
+        <KlineChart :points="klinePoints" :loading="klineLoading" :period="period" />
+      </view>
+    </view>
+
     <!-- 操作按钮 -->
-    <view v-if="quote" class="action-bar">
+    <view v-if="quote && !isFullscreen" class="action-bar">
       <button class="btn-primary" @click="handleAddWatchlist">
         <text>{{ isInWatchlist ? '已加入自选' : '加入自选' }}</text>
       </button>
@@ -85,12 +114,16 @@
       <button class="btn-retry" @click="loadData">重试</button>
     </view>
   </view>
+  <Disclaimer />
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import Disclaimer from '@/components/compliance/Disclaimer.vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import KlineChart from '@/components/market/KlineChart.vue'
 import { fetchQuote, fetchKline, type QuoteSnapshot, type KlinePoint } from '@/api/market'
+import { trackPageView } from '@/utils/tracker'
 
 const code = ref('')
 const quote = ref<QuoteSnapshot | null>(null)
@@ -100,6 +133,10 @@ const loading = ref(true)
 const klineLoading = ref(false)
 const error = ref('')
 const isInWatchlist = ref(false)
+
+// 横屏全屏模式
+const isFullscreen = ref(false)
+const isLandscape = ref(false)
 
 const periods = [
   { label: '日K', value: 'day' as const },
@@ -112,7 +149,39 @@ const changeClass = computed(() => {
   return quote.value.change >= 0 ? 'up' : 'down'
 })
 
+// 检测屏幕方向
+function checkOrientation() {
+  // #ifdef H5
+  isLandscape.value = window.innerWidth > window.innerHeight
+  // #endif
+  // #ifdef APP-PLUS
+  isLandscape.value = window.innerWidth > window.innerHeight
+  // #endif
+}
+
+function toggleFullscreen() {
+  isFullscreen.value = !isFullscreen.value
+  // #ifdef APP-PLUS
+  if (isFullscreen.value) {
+    plus.screen.lockOrientation('landscape')
+  } else {
+    plus.screen.lockOrientation('portrait-primary')
+  }
+  // #endif
+}
+
 onMounted(() => {
+  checkOrientation()
+  // 监听屏幕旋转
+  // #ifdef H5
+  window.addEventListener('orientationchange', checkOrientation)
+  window.addEventListener('resize', checkOrientation)
+  // #endif
+  // #ifdef APP-PLUS
+  window.addEventListener('orientationchange', checkOrientation)
+  window.addEventListener('resize', checkOrientation)
+  // #endif
+
   // 从路由参数获取股票代码
   const pages = getCurrentPages()
   const currentPage = pages[pages.length - 1] as any
@@ -124,6 +193,20 @@ onMounted(() => {
     error.value = '缺少股票代码参数'
     loading.value = false
   }
+})
+
+onUnmounted(() => {
+  // 清理监听
+  // #ifdef H5
+  window.removeEventListener('orientationchange', checkOrientation)
+  window.removeEventListener('resize', checkOrientation)
+  // #endif
+  // #ifdef APP-PLUS
+  window.removeEventListener('orientationchange', checkOrientation)
+  window.removeEventListener('resize', checkOrientation)
+  // 退出全屏时恢复竖屏
+  plus.screen.lockOrientation('portrait-primary')
+  // #endif
 })
 
 async function loadData() {
@@ -202,6 +285,10 @@ function formatPct(v: number): string {
   if (v == null) return '--'
   return v.toFixed(2) + '%'
 }
+
+onShow(() => {
+  trackPageView('trade_detail', { code: code.value })
+})
 </script>
 
 <style lang="scss" scoped>
@@ -292,12 +379,12 @@ function formatPct(v: number): string {
 
   &.up {
     background: rgba(239, 83, 80, 0.1);
-    color: #EF5350;
+    color: var(--color-up, #EF5350);
   }
 
   &.down {
     background: rgba(38, 166, 154, 0.1);
-    color: #26A69A;
+    color: var(--color-down, #26A69A);
   }
 }
 
@@ -330,8 +417,8 @@ function formatPct(v: number): string {
   color: $text-primary;
   font-weight: 500;
 
-  &.up { color: #EF5350; }
-  &.down { color: #26A69A; }
+  &.up { color: var(--color-up, #EF5350); }
+  &.down { color: var(--color-down, #26A69A); }
 }
 
 // ---- 周期切换 ----
@@ -363,6 +450,101 @@ function formatPct(v: number): string {
   padding: 16rpx 0;
 }
 
+// ---- 全屏按钮 ----
+.fullscreen-toggle {
+  margin-left: auto;
+  padding: 20rpx 24rpx;
+  font-size: $font-size-sm;
+  color: $color-primary;
+  font-weight: 500;
+  cursor: pointer;
+  flex-shrink: 0;
+  border-left: 1rpx solid $border-color;
+}
+
+// ---- 全屏横屏 K线 ----
+.fullscreen-chart {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 999;
+  background: $bg-card;
+  display: flex;
+  flex-direction: column;
+}
+
+.fullscreen-topbar {
+  display: flex;
+  align-items: center;
+  padding: 12rpx 24rpx;
+  background: $bg-primary;
+  color: $text-inverse;
+  flex-shrink: 0;
+  gap: 16rpx;
+  min-height: 88rpx;
+}
+
+.fs-stock-name {
+  font-size: $font-size-base;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.fs-price-info {
+  display: flex;
+  align-items: baseline;
+  gap: 8rpx;
+}
+
+.fs-price {
+  font-size: $font-size-lg;
+  font-weight: 700;
+}
+
+.fs-change {
+  font-size: $font-size-sm;
+  &.up { color: var(--color-up, #E25C5C); }
+  &.down { color: var(--color-down, #34C759); }
+}
+
+.fs-periods {
+  display: flex;
+  gap: 8rpx;
+  margin-left: auto;
+}
+
+.fs-period {
+  padding: 8rpx 20rpx;
+  font-size: $font-size-sm;
+  color: rgba(255,255,255,0.6);
+  border-radius: 6rpx;
+  cursor: pointer;
+
+  &.active {
+    color: #fff;
+    background: rgba(255,255,255,0.15);
+    font-weight: 600;
+  }
+}
+
+.fs-close {
+  padding: 8rpx 16rpx;
+  font-size: $font-size-sm;
+  color: $text-inverse;
+  background: rgba(255,255,255,0.15);
+  border-radius: 6rpx;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.fullscreen-chart-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 // ---- 操作栏 ----
 .action-bar {
   padding: 24rpx 32rpx;
@@ -371,7 +553,7 @@ function formatPct(v: number): string {
     width: 100%;
     padding: 24rpx;
     font-size: $font-size-base;
-    color: #FFFFFF;
+    color: #fff;
     background: $color-primary;
     border-radius: 12rpx;
     border: none;
@@ -379,5 +561,10 @@ function formatPct(v: number): string {
 
     &::after { border: none; }
   }
+}
+
+/* 免责声明 */
+.disclaimer-wrapper {
+  margin-top: auto;
 }
 </style>

@@ -179,6 +179,7 @@ onMounted(() => {
 .notification-center {
   min-height: 100vh;
   background: $bg-page;
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .header {

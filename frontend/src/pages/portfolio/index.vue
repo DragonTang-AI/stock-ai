@@ -1,7 +1,16 @@
 <template>
   <view class="portfolio-page">
+    <!-- 离线提示横幅 -->
+    <view v-if="offline" class="offline-banner">
+      <text class="offline-icon">&#x1F4F6;</text>
+      <text class="offline-text">当前处于离线模式，数据可能不是最新的</text>
+    </view>
+
+    <!-- 骨架屏 -->
+    <LoadingSkeleton v-if="isLoading" scene="portfolio" :rows="4" />
+
     <!-- 账户卡片 -->
-    <view class="account-card" v-if="account">
+    <view class="account-card fade-in-view" v-else-if="account">
       <view class="account-header">
         <text class="account-type">模拟账户</text>
         <button class="btn-refresh" @click="refreshAll">刷新</button>
@@ -26,15 +35,22 @@
         <view class="stat-divider"></view>
         <view class="stat-item">
           <text class="stat-label">累计盈亏</text>
-          <text class="stat-value" :class="account.profit >= 0 ? 'up' : 'down'">
-            {{ account.profit >= 0 ? '+' : '' }}{{ account.profit.toFixed(2) }}
-          </text>
+          <NumberRolling
+            class="stat-value"
+            :class="account.profit >= 0 ? 'up' : 'down'"
+            :value="account.profit"
+            :precision="2"
+            :prefix="account.profit >= 0 ? '+' : ''"
+            :color-rule="'auto'"
+            :duration="500"
+            :immediate="true"
+          />
         </view>
       </view>
     </view>
 
     <!-- 持仓分析看板 -->
-    <view class="analytics-board" v-if="analytics">
+    <view class="analytics-board fade-in-view" v-if="!isLoading && analytics">
       <view class="analytics-board-header">
         <text class="analytics-board-title">持仓分析</text>
         <text class="analytics-link" @click="goAnalytics">查看完整分析 →</text>
@@ -43,22 +59,49 @@
       <view class="analytics-card">
         <text class="analytics-card-title">盈亏概览</text>
         <view class="overview-main">
-          <text class="overview-pnl" :class="analytics.total_profit >= 0 ? 'up' : 'down'">
-            {{ analytics.total_profit >= 0 ? '+' : '' }}&yen;{{ formatMoney(Math.abs(analytics.total_profit)) }}
-          </text>
-          <text class="overview-pnl-pct" :class="analytics.total_profit >= 0 ? 'up' : 'down'">
-            ({{ analytics.total_profit_pct >= 0 ? '+' : '' }}{{ analytics.total_profit_pct.toFixed(2) }}%)
-          </text>
+          <NumberRolling
+            class="overview-pnl"
+            :class="analytics.total_profit >= 0 ? 'up' : 'down'"
+            :value="Math.abs(analytics.total_profit)"
+            :precision="2"
+            :prefix="(analytics.total_profit >= 0 ? '+¥' : '-¥')"
+            :color-rule="'auto'"
+            :duration="600"
+            :thousandth="true"
+          />
+          <NumberRolling
+            class="overview-pnl-pct"
+            :class="analytics.total_profit_pct >= 0 ? 'up' : 'down'"
+            :value="analytics.total_profit_pct"
+            :precision="2"
+            :prefix="'(' + (analytics.total_profit_pct >= 0 ? '+' : '')"
+            :suffix="'%)'"
+            :color-rule="'auto'"
+            :duration="500"
+          />
         </view>
         <view class="overview-sub">
           <view class="overview-sub-item">
             <text class="sub-label">今日盈亏</text>
-            <text class="sub-value" :class="analytics.daily_profit >= 0 ? 'up' : 'down'">
-              &yen;{{ analytics.daily_profit >= 0 ? '+' : '' }}{{ analytics.daily_profit.toFixed(2) }}
-            </text>
-            <text class="sub-pct" :class="analytics.daily_profit >= 0 ? 'up' : 'down'">
-              ({{ analytics.daily_profit_pct >= 0 ? '+' : '' }}{{ analytics.daily_profit_pct.toFixed(2) }}%)
-            </text>
+            <NumberRolling
+              class="sub-value"
+              :class="analytics.daily_profit >= 0 ? 'up' : 'down'"
+              :value="analytics.daily_profit"
+              :precision="2"
+              :prefix="'¥' + (analytics.daily_profit >= 0 ? '+' : '')"
+              :color-rule="'auto'"
+              :duration="500"
+            />
+            <NumberRolling
+              class="sub-pct"
+              :class="analytics.daily_profit_pct >= 0 ? 'up' : 'down'"
+              :value="analytics.daily_profit_pct"
+              :precision="2"
+              :prefix="'(' + (analytics.daily_profit_pct >= 0 ? '+' : '')"
+              :suffix="'%)'"
+              :color-rule="'auto'"
+              :duration="400"
+            />
           </view>
           <view class="overview-sub-item">
             <text class="sub-label">持仓市值</text>
@@ -141,14 +184,6 @@
 
     <!-- 持仓 Tab -->
     <scroll-view v-if="activeTab === 'positions'" class="content" scroll-y>
-      <!-- 骨架屏 -->
-      <view v-if="isLoading" class="skeleton-list">
-        <view v-for="i in 4" :key="i" class="skeleton-item">
-          <view class="skeleton-line title"></view>
-          <view class="skeleton-line price"></view>
-        </view>
-      </view>
-
       <!-- 空持仓 -->
       <view v-else-if="positions.length === 0" class="empty-state">
         <text class="empty-icon">&#x1F4ED;</text>
@@ -193,7 +228,13 @@
         <view class="trade-form">
           <view class="form-row">
             <text class="form-label">股票</text>
-            <input class="form-input" v-model="orderForm.symbol" placeholder="代码 如 000001.SZ" />
+            <input
+              class="form-input"
+              v-model="orderForm.symbol"
+              placeholder="代码 如 000001.SZ"
+              :adjust-position="true"
+              :cursor-spacing="20"
+            />
             <view class="side-toggle">
               <view class="side-btn buy" :class="{ active: orderForm.side === 'buy' }" @click="orderForm.side = 'buy'">买</view>
               <view class="side-btn sell" :class="{ active: orderForm.side === 'sell' }" @click="orderForm.side = 'sell'">卖</view>
@@ -201,7 +242,14 @@
           </view>
           <view class="form-row">
             <text class="form-label">数量</text>
-            <input class="form-input" v-model="orderForm.quantity" type="number" placeholder="100 股整数倍" />
+            <input
+              class="form-input"
+              v-model="orderForm.quantity"
+              type="number"
+              placeholder="100 股整数倍"
+              :adjust-position="true"
+              :cursor-spacing="20"
+            />
             <button class="btn-submit" :class="orderForm.side" :disabled="submitting" @click="submitOrder">
               {{ submitting ? '提交中...' : (orderForm.side === 'buy' ? '买入' : '卖出') }}
             </button>
@@ -247,13 +295,31 @@
       </view>
     </scroll-view>
     <Disclaimer />
+
+    <!-- 下单二次确认 -->
+    <ConfirmDialog
+      :visible="showOrderConfirm"
+      :title="(pendingOrderData?.side === 'buy' ? '确认买入' : '确认卖出')"
+      :message="confirmOrderMessage"
+      :impact="confirmOrderImpact"
+      :confirm-text="pendingOrderData?.side === 'buy' ? '确认买入' : '确认卖出'"
+      :cancel-text="'取消'"
+      @confirm="confirmSubmitOrder"
+      @cancel="cancelSubmitOrder"
+    />
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import { trackPageView } from '@/utils/tracker'
 import Disclaimer from '@/components/compliance/Disclaimer.vue'
+import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
+import NumberRolling from '@/components/common/NumberRolling.vue'
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import { isOfflineMode, onNetworkChange } from '@/utils/offline'
+import type { NetworkInfo } from '@/utils/network'
 import {
   getAccount, getPositions, getOrders, placeOrder, getTrades, getPortfolioAnalytics,
   type AccountInfo, type PositionItem, type OrderItem, type TradeItem, type PositionAnalytics,
@@ -281,9 +347,34 @@ const orders = ref<OrderItem[]>([])
 const trades = ref<TradeItem[]>([])
 const orderForm = ref({ symbol: '', side: 'buy' as 'buy' | 'sell', quantity: '' })
 
+// ─── 离线状态 ───
+const offline = ref(isOfflineMode())
+let unsubNetwork: (() => void) | null = null
+
 // T-M011 持仓分析
 const analytics = ref<PositionAnalytics | null>(null)
 const sectorColors = ['#3B82F6', '#F59E0B', '#10B981', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316']
+
+// ─── 二次确认 ───
+const showOrderConfirm = ref(false)
+const pendingOrderData = ref<{ symbol: string; side: 'buy' | 'sell'; quantity: number } | null>(null)
+
+/** 确认弹窗信息 */
+const confirmOrderMessage = computed(() => {
+  if (!pendingOrderData.value) return ''
+  const { symbol, side, quantity } = pendingOrderData.value
+  const action = side === 'buy' ? '买入' : '卖出'
+  return `${action} ${symbol}，数量 ${quantity} 股`
+})
+
+const confirmOrderImpact = computed(() => {
+  if (!pendingOrderData.value) return ''
+  const { side } = pendingOrderData.value
+  if (side === 'buy') {
+    return '下单后将扣减可用余额，A 股实行 T+1 结算规则，买入当日不可卖出。'
+  }
+  return '卖出后将释放持仓，成交后将收取印花税（0.1%）。请确认持仓数量充足。'
+})
 
 function formatMoney(v: number): string {
   if (v == null) return '0.00'
@@ -362,9 +453,20 @@ async function submitOrder() {
     return
   }
 
+  // 二次确认弹窗
+  pendingOrderData.value = { symbol: sym, side: orderForm.value.side, quantity: qty }
+  showOrderConfirm.value = true
+}
+
+/** 确认下单 */
+async function confirmSubmitOrder() {
+  if (!pendingOrderData.value) return
+  const { symbol, side, quantity } = pendingOrderData.value
+
+  showOrderConfirm.value = false
   submitting.value = true
   try {
-    await placeOrder({ symbol: sym, side: orderForm.value.side, quantity: qty, order_type: 'market' })
+    await placeOrder({ symbol, side, quantity, order_type: 'market' })
     uni.showToast({ title: '下单成功', icon: 'success' })
     orderForm.value = { symbol: '', side: 'buy', quantity: '' }
     await Promise.all([loadAccount(), loadPositions()])
@@ -383,15 +485,63 @@ async function submitOrder() {
     }
   } finally {
     submitting.value = false
+    pendingOrderData.value = null
   }
 }
 
-onMounted(() => { refreshAll() })
-onShow(() => { loadAnalytics() })
+/** 取消下单 */
+function cancelSubmitOrder() {
+  showOrderConfirm.value = false
+  pendingOrderData.value = null
+}
+
+onMounted(() => {
+  refreshAll()
+  // 注册网络状态监听
+  unsubNetwork = onNetworkChange((info: NetworkInfo) => {
+    offline.value = !info.isConnected
+  })
+})
+
+onUnmounted(() => {
+  // 清理网络监听
+  if (unsubNetwork) {
+    unsubNetwork()
+    unsubNetwork = null
+  }
+})
+
+onShow(() => {
+  loadAnalytics()
+  // 回前台时刷新离线状态
+  offline.value = isOfflineMode()
+  trackPageView('portfolio')
+})
 </script>
 
 <style lang="scss" scoped>
 .portfolio-page { min-height: 100vh; background: $bg-page; padding-bottom: env(safe-area-inset-bottom); }
+
+/* Offline Banner */
+.offline-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  padding: 16rpx 24rpx;
+  background: rgba(255, 193, 7, 0.12);
+  border-bottom: 1rpx solid rgba(255, 193, 7, 0.3);
+}
+
+.offline-icon {
+  font-size: 28rpx;
+}
+
+.offline-text {
+  font-size: $font-size-sm;
+  color: #F57F17;
+  font-weight: 500;
+}
 
 /* Account Card */
 .account-card {
@@ -415,8 +565,8 @@ onShow(() => { loadAnalytics() })
 .stat-item { flex: 1; display: flex; flex-direction: column; }
 .stat-label { font-size: $font-size-xs; color: rgba(255,255,255,0.6); margin-bottom: 8rpx; }
 .stat-value { font-size: $font-size-lg; font-weight: 600;
-  &.up { color: #FF6B6B; }
-  &.down { color: #51CF66; }
+  &.up { color: var(--color-up, #FF6B6B); }
+  &.down { color: var(--color-down, #51CF66); }
 }
 .stat-divider { width: 1rpx; height: 60rpx; background: rgba(255,255,255,0.2); }
 

@@ -1,0 +1,71 @@
+/**
+ * AI-Stock 深色主题 CSS 变量覆盖
+ */
+
+/* 与 variables.scss 中的 CSS 变量保持一一对应 */
+.dark,
+[data-theme='dark'] {
+  /* ========== 背景 ========== */
+  --bg-page: #0F0F23;
+  --bg-card: #1A1A2E;
+  --bg-primary: #16213E;
+  --bg-secondary: #0F3460;
+  --bg-input: #1E1E36;
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-mask: rgba(0, 0, 0, 0.7);
+
+  /* ========== 文字 ========== */
+  --text-primary: #E0E0E0;
+  --text-secondary: #A0A0A0;
+  --text-hint: #666666;
+  --text-inverse: #FFFFFF;
+  --text-link: #6DB3F8;
+
+  /* ========== 语义 ========== */
+  --color-primary: #6DB3F8;
+  --color-success: #30D158;
+  --color-danger: #FF6961;
+  --color-warning: #FFB340;
+  --color-info: #64D2FF;
+
+  /* ========== 涨跌（深色模式下对比度更柔和） ========== */
+  --color-up: #FF6961;
+  --color-down: #30D158;
+
+  /* ========== 图表颜色 ========== */
+  --chart-line-1: #6DB3F8;
+  --chart-line-2: #FFB340;
+  --chart-line-3: #30D158;
+  --chart-area-fill: rgba(109, 179, 248, 0.15);
+  --chart-grid: #2A2A3E;
+  --chart-label: #888888;
+  --chart-tooltip-bg: #1E1E32;
+  --chart-tooltip-text: #E0E0E0;
+  --chart-tooltip-border: #3A3A5C;
+
+  /* ========== 边框与阴影 ========== */
+  --border-color: #2A2A3E;
+  --border-radius: 16rpx;
+  --shadow-card: 0 2rpx 16rpx rgba(0, 0, 0, 0.3);
+  --shadow-elevated: 0 4rpx 24rpx rgba(0, 0, 0, 0.5);
+
+  /* ========== 滚动条 ========== */
+  scrollbar-color: #3A3A5C transparent;
+
+  /* ========== Tabbar ========== */
+  --tabbar-bg: #1A1A2E;
+  --tabbar-color: #888888;
+  --tabbar-active-color: #6DB3F8;
+  --tabbar-border-color: #2A2A3E;
+
+  /* ========== Toast/Modal ========== */
+  --toast-bg: rgba(40, 40, 60, 0.95);
+  --modal-bg: #1A1A2E;
+  --modal-mask: rgba(0, 0, 0, 0.7);
+}
+
+/* 暗色模式下 echarts canvas 背景适配 */
+.dark .chart-canvas,
+[data-theme='dark'] .chart-canvas {
+  background: transparent;
+}

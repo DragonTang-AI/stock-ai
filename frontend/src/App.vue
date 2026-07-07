@@ -1,15 +1,38 @@
 <script setup lang="ts">
-import { onLaunch, onShow, onHide } from '@dcloudio/uni-app'
+import { onLaunch, onShow, onHide, onError } from '@dcloudio/uni-app'
+import { ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useComplianceStore } from '@/stores/compliance'
 import AuditBadge from '@/components/compliance/AuditBadge.vue'
 import { applyTheme } from '@/utils/theme'
+import { initNetworkMonitor, isOnline, onNetworkChange } from '@/utils/network'
+import { isOfflineMode, showOfflineToast } from '@/utils/offline'
+import { initTracker, trackJsError, flushEvents } from '@/utils/tracker'
+
+/** 全局离线状态（供各页面通过 provide/inject 使用） */
+const globalOffline = ref(false)
 
 onLaunch(() => {
   console.log('App Launch')
 
+  // 初始化埋点
+  initTracker()
+
   // 初始化深色模式
   applyTheme()
+
+  // 初始化网络监听
+  initNetworkMonitor()
+  globalOffline.value = !isOnline()
+
+  // 监听网络变化，更新全局状态
+  onNetworkChange((info) => {
+    globalOffline.value = !info.isConnected
+    // 断网时提示（静默更新，App 级别提示一次）
+    if (!info.isConnected) {
+      showOfflineToast()
+    }
+  })
 
   // #ifdef MP-WEIXIN
   // 微信小程序版本更新检查
@@ -54,11 +77,23 @@ onLaunch(() => {
 
 onShow(() => {
   console.log('App Show')
+  // 回前台时刷新网络状态
+  globalOffline.value = !isOnline()
 })
 
 onHide(() => {
   console.log('App Hide')
+  // 页面隐藏时刷新埋点队列
+  flushEvents()
 })
+
+onError((err: string) => {
+  // 全局 JS 错误捕获并上报
+  trackJsError(err)
+})
+
+// 提供给子组件的全局离线状态
+uni.$globalOffline = globalOffline
 </script>
 
 <template>
