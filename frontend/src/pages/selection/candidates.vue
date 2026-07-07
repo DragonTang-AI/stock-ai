@@ -325,12 +325,12 @@ async function loadCandidates(reset: boolean = false) {
     })
 
     if (reset) {
-      items.value = res.items
+      items.value = res
     } else {
-      items.value = [...items.value, ...res.items]
+      items.value = [...items.value, ...res]
     }
-    total.value = res.total
-    hasMore.value = res.has_more
+    total.value = items.value.length
+    hasMore.value = res.length >= 20
   } catch (e: any) {
     error.value = e?.message || '加载失败'
   } finally {

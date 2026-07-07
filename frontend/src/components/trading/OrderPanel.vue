@@ -17,13 +17,13 @@
     <view class="side-switch">
       <view
         class="side-btn"
-        :class="{ active: side === 'BUY' }"
-        @click="switchSide('BUY')"
+        :class="{ active: side === 'buy' }"
+        @click="switchSide('buy')"
       >买入</view>
       <view
         class="side-btn"
-        :class="{ active: side === 'SELL' }"
-        @click="switchSide('SELL')"
+        :class="{ active: side === 'sell' }"
+        @click="switchSide('sell')"
       >卖出</view>
     </view>
 
@@ -74,7 +74,7 @@
           <text class="fee-name">佣金（万2.5）</text>
           <text class="fee-val">¥ {{ formatAmount(estimatedCommission) }}</text>
         </view>
-        <view v-if="side === 'SELL'" class="fee-row">
+        <view v-if="side === 'sell'" class="fee-row">
           <text class="fee-name">印花税（卖出）</text>
           <text class="fee-val">¥ {{ formatAmount(estimatedStampTax) }}</text>
         </view>
@@ -91,7 +91,7 @@
 
     <!-- 可用资金 / 可用持仓 -->
     <view class="section balance-row">
-      <view v-if="side === 'BUY'" class="balance-item">
+      <view v-if="side === 'buy'" class="balance-item">
         <text class="balance-label">可用资金</text>
         <text class="balance-value" :class="{ danger: !sufficientCash }">¥ {{ formatAmount(accountCash) }}</text>
       </view>
@@ -106,10 +106,10 @@
     </view>
 
     <!-- 余额不足提示 -->
-    <view v-if="side === 'BUY' && !sufficientCash" class="warn-box">
+    <view v-if="side === 'buy' && !sufficientCash" class="warn-box">
       <text class="warn-text">可用资金不足，当前可用 ¥{{ formatAmount(accountCash) }}，所需 ¥{{ formatAmount(requiredFunds) }}</text>
     </view>
-    <view v-if="side === 'SELL' && !sufficientPosition" class="warn-box">
+    <view v-if="side === 'sell' && !sufficientPosition" class="warn-box">
       <text class="warn-text">可卖数量不足，当前可卖 {{ availableQty }} 股，委托 {{ qty }} 股</text>
     </view>
 
@@ -122,10 +122,10 @@
     <!-- 确认按钮 -->
     <button
       class="confirm-btn"
-      :class="{ buy: side === 'BUY', sell: side === 'SELL' }"
+      :class="{ buy: side === 'buy', sell: side === 'sell' }"
       :disabled="!canSubmit"
       @click="handleConfirm"
-    >{{ side === 'BUY' ? '确认买入' : '确认卖出' }}</button>
+    >{{ side === 'buy' ? '确认买入' : '确认卖出' }}</button>
   </view>
 
   <!-- 确认弹窗 -->
@@ -167,7 +167,7 @@ const emit = defineEmits<{
 }>()
 
 // ─── 状态 ───
-const side = ref<OrderSide>('BUY')
+const side = ref<OrderSide>('buy')
 const qty = ref(100)
 const customQty = ref<number | null>(null)
 const stockInfo = ref<TradingStockInfo>({} as TradingStockInfo)
@@ -212,7 +212,7 @@ const sufficientPosition = computed(() => {
 
 const canSubmit = computed(() => {
   if (!qty.value || qty.value <= 0) return false
-  if (side.value === 'BUY') return sufficientCash.value
+  if (side.value === 'buy') return sufficientCash.value
   return sufficientPosition.value
 })
 
@@ -290,7 +290,7 @@ function calcFeeLocal() {
   const commissionRate = 0.00025
   let commission = Math.round(amount * commissionRate * 100) / 100
   if (commission > 0 && commission < 5) commission = 5
-  const stampTax = side.value === 'SELL' ? Math.round(amount * 0.001 * 100) / 100 : 0
+  const stampTax = side.value === 'sell' ? Math.round(amount * 0.001 * 100) / 100 : 0
   const otherFees = Math.round(amount * 0.00002 * 100) / 100 // 过户费万0.2
   estimatedCommission.value = commission
   estimatedStampTax.value = stampTax

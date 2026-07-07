@@ -76,9 +76,9 @@ export interface StockAnalysisDetail {
 export function fetchCommitteeResults(): Promise<CommitteeResult[]> {
   return cachedRequest(
     'selection:committee',
-    () => request<{ success: boolean; data: CommitteeResult[] }>(
+    () => request<{ signals: CommitteeResult[] }>(
       '/selection/committee', { method: 'GET' }
-    ).then(res => res.data)
+    ).then(res => res.signals)
   )
 }
 

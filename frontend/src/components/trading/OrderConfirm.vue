@@ -15,8 +15,8 @@
         </view>
         <view class="summary-row">
           <text class="summary-label">方向</text>
-          <view class="side-tag" :class="order.side === 'BUY' ? 'buy' : 'sell'">
-            {{ order.side === 'BUY' ? '买入' : '卖出' }}
+          <view class="side-tag" :class="order.side === 'buy' ? 'buy' : 'sell'">
+            {{ order.side === 'buy' ? '买入' : '卖出' }}
           </view>
         </view>
         <view class="summary-row">
@@ -36,7 +36,7 @@
           <text class="summary-label">佣金</text>
           <text class="summary-value">¥ {{ formatAmount(order.commission) }}</text>
         </view>
-        <view v-if="order.side === 'SELL'" class="summary-row">
+        <view v-if="order.side === 'sell'" class="summary-row">
           <text class="summary-label">印花税</text>
           <text class="summary-value">¥ {{ formatAmount(order.stamp_tax) }}</text>
         </view>
@@ -49,8 +49,8 @@
           <text class="summary-value bold">¥ {{ formatAmount(order.totalFee) }}</text>
         </view>
         <view class="summary-row">
-          <text class="summary-label">实际{{ order.side === 'BUY' ? '支付' : '到账' }}</text>
-          <text class="summary-value bold" :class="order.side === 'BUY' ? 'pay' : 'recv'">
+          <text class="summary-label">实际{{ order.side === 'buy' ? '支付' : '到账' }}</text>
+          <text class="summary-value bold" :class="order.side === 'buy' ? 'pay' : 'recv'">
             ¥ {{ formatAmount(netAmount) }}
           </text>
         </view>
@@ -73,9 +73,9 @@
         <button class="btn-cancel" @click="handleCancel">取消</button>
         <button
           class="btn-submit"
-          :class="{ buy: order.side === 'BUY', sell: order.side === 'SELL' }"
+          :class="{ buy: order.side === 'buy', sell: order.side === 'sell' }"
           @click="handleSubmit"
-        >确认{{ order.side === 'BUY' ? '买入' : '卖出' }}</button>
+        >确认{{ order.side === 'buy' ? '买入' : '卖出' }}</button>
       </view>
     </view>
   </view>
@@ -89,7 +89,7 @@ const props = defineProps<{
   order: {
     symbol: string
     name: string
-    side: 'BUY' | 'SELL'
+    side: 'buy' | 'sell'
     qty: number
     price: number
     amount: number
@@ -117,7 +117,7 @@ const isLargeOrder = computed(() => {
 })
 
 const netAmount = computed(() => {
-  if (props.order.side === 'BUY') {
+  if (props.order.side === 'buy') {
     return Math.round((props.order.amount + props.order.totalFee) * 100) / 100
   }
   return Math.round((props.order.amount - props.order.totalFee) * 100) / 100

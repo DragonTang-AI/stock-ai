@@ -39,7 +39,7 @@ export interface Position {
 
 // ─── 订单 ───
 
-export type OrderSide = 'BUY' | 'SELL'
+export type OrderSide = 'buy' | 'sell'
 export type OrderType = 'MARKET' | 'LIMIT'
 export type OrderStatus = 'PENDING' | 'PARTIAL' | 'FILLED' | 'CANCELLED' | 'REJECTED' | 'EXPIRED'
 export type OrderSource = 'MANUAL' | 'AI_HOSTED'
