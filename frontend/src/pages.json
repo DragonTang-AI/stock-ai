@@ -34,6 +34,12 @@
       }
     },
     {
+      "path": "pages/portfolio/analytics",
+      "style": {
+        "navigationBarTitleText": "持仓分析"
+      }
+    },
+    {
       "path": "pages/portfolio/history",
       "style": {
         "navigationBarTitleText": "交易记录"
