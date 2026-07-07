@@ -1,0 +1,22 @@
+[Unit]
+Description=AI-Stock 每日 K 线采集任务 (P1-F4)
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/data/stockai/backend
+Environment=PYTHONPATH=/data/stockai/backend
+Environment=MARKET_DATA_SOURCE=sina
+Environment=DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/ai_stock
+Environment=COMPLIANCE_AI_HOSTED_ENABLED=true
+Environment=COMPLIANCE_IS_AUDIT_MODE=false
+Environment=COMPLIANCE_IS_LIVE_TRADING_ENABLED=false
+ExecStart=/data/stockai/venv/bin/python -m app.tasks.kline_scheduler
+# 失败重试（稳定性加固）
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=3
+
+[Install]
+WantedBy=multi-user.target

@@ -24,7 +24,8 @@ from app.schemas.selection import (
     StockPick,
     PickFactor,
 )
-from app.services.market import fetch_realtime_quotes, fetch_kline
+from app.services.market import fetch_realtime_quotes
+from app.services.kline_store import get_klines
 from app.schemas.market import QuoteItem, KLineItem
 
 logger = logging.getLogger(__name__)
@@ -503,7 +504,7 @@ async def _fetch_quote_with_kline(symbol: str) -> Optional[Tuple[QuoteItem, List
         if not quotes:
             return None
         quote = quotes[0]
-        klines = await fetch_kline(symbol, period="daily", count=30)
+        klines = await get_klines(symbol, count=250)
         return (quote, klines)
     except Exception as e:
         logger.warning(f"获取 {symbol} 数据失败: {e}")

@@ -1,0 +1,12 @@
+[Unit]
+Description=AI-Stock 每日 K 线采集定时器 (P1-F4)
+Wants=stockai-kline.service
+
+[Timer]
+# 每交易日 16:05 触发（A 股 15:00 收盘后）
+OnCalendar=Mon-Fri 16:05:00
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target
