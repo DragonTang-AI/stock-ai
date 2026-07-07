@@ -91,6 +91,7 @@ import { computed, onMounted, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useAuthStore } from '@/stores/auth'
 import { getCurrentUser } from '@/api/auth'
+import { fetchNotifications } from '@/api/notifications'
 
 const authStore = useAuthStore()
 
@@ -116,12 +117,23 @@ async function fetchUserInfo() {
 
 onMounted(() => {
   fetchUserInfo()
+  fetchUnreadCount()
 })
 
 // uni-app 页面生命周期
 onShow(() => {
   fetchUserInfo()
+  fetchUnreadCount()
 })
+
+async function fetchUnreadCount() {
+  try {
+    const res = await fetchNotifications({ limit: 1, offset: 0 })
+    unreadCount.value = res.unread_count
+  } catch {
+    // 静默失败
+  }
+}
 
 function navigateTo(url: string) {
   uni.navigateTo({ url })

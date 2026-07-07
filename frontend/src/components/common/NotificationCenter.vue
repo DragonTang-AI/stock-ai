@@ -1,22 +1,25 @@
 <template>
   <view class="notification-center">
-    <!-- 标题栏 -->
     <view class="header">
       <text class="title">消息中心</text>
       <view class="header-actions">
-        <view class="action-btn" @click="markAllAsRead">
+        <view class="action-btn" @click="handleMarkAllRead">
           <text class="action-text">全部已读</text>
         </view>
-        <view class="action-btn" @click="clearAll">
+        <view class="action-btn" @click="handleClearAll">
           <text class="action-text">清空</text>
         </view>
       </view>
     </view>
 
+    <!-- 加载中 -->
+    <view v-if="initialLoading" class="state-view">
+      <text class="state-text">加载中...</text>
+    </view>
+
     <!-- 空状态 -->
-    <view v-if="notifications.length === 0" class="empty-state">
-      <text class="empty-icon">📭</text>
-      <text class="empty-text">暂无新消息</text>
+    <view v-else-if="notifications.length === 0" class="state-view">
+      <text class="state-text">暂无新消息</text>
     </view>
 
     <!-- 通知列表 -->
@@ -42,24 +45,17 @@
         <view class="item-main">
           <view class="item-header">
             <text class="item-title">{{ item.title }}</text>
-            <text class="item-time">{{ formatTime(item.time) }}</text>
+            <text class="item-time">{{ formatTime(item.created_at) }}</text>
           </view>
           <text class="item-content">{{ item.content }}</text>
-          <view v-if="item.action" class="item-actions">
-            <button
-              v-for="(action, idx) in item.action"
-              :key="idx"
-              class="action-btn-small"
-              @click.stop="handleAction(item, action)"
-            >
-              {{ action.label }}
-            </button>
-          </view>
         </view>
         <view v-if="!item.read" class="unread-dot"></view>
       </view>
-      <view v-if="loading" class="loading-more">
+      <view v-if="loadingMore" class="loading-more">
         <text>加载中...</text>
+      </view>
+      <view v-else-if="!hasMore && notifications.length > 0" class="loading-more">
+        <text class="no-more">没有更多了</text>
       </view>
     </scroll-view>
   </view>
@@ -67,170 +63,115 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import {
+  fetchNotifications,
+  markAsRead,
+  markAllAsRead,
+  clearAllNotifications,
+  type NotificationItem,
+} from '@/api/notifications'
 
-interface NotificationAction {
-  label: string
-  value: string
-  url?: string
-  callback?: () => void
-}
-
-interface NotificationItem {
-  id: string
-  type: 'system' | 'price' | 'selection' | 'advisor' | 'trade'
-  title: string
-  content: string
-  time: number // timestamp
-  read: boolean
-  action?: NotificationAction[]
-  data?: Record<string, any>
-}
-
-const notifications = ref<NotificationItem[]>([
-  {
-    id: '1',
-    type: 'system',
-    title: '系统更新',
-    content: 'AI-Stock v0.1.0 已发布，新增设置页面和通知中心。',
-    time: Date.now() - 3600000 * 2,
-    read: true,
-  },
-  {
-    id: '2',
-    type: 'price',
-    title: '价格提醒',
-    content: '贵州茅台(600519) 已跌破 1600 元，当前 1589.50 元。',
-    time: Date.now() - 1800000,
-    read: false,
-    action: [
-      { label: '查看', value: 'view', url: '/pages/detail/index?code=600519' },
-    ],
-  },
-  {
-    id: '3',
-    type: 'selection',
-    title: '选股结果',
-    content: '今日选股策略「高成长低估值」已生成 5 只推荐股票。',
-    time: Date.now() - 600000,
-    read: false,
-    action: [
-      { label: '查看', value: 'view', url: '/pages/selection/index' },
-    ],
-  },
-  {
-    id: '4',
-    type: 'advisor',
-    title: 'AI 分析',
-    content: 'AI 助手已为您分析持仓组合，建议关注新能源板块。',
-    time: Date.now() - 300000,
-    read: false,
-    action: [
-      { label: '查看', value: 'view', url: '/pages/advisor/index' },
-    ],
-  },
-])
-
-const loading = ref(false)
+const notifications = ref<NotificationItem[]>([])
+const initialLoading = ref(true)
+const loadingMore = ref(false)
 const hasMore = ref(true)
+const offset = ref(0)
+const PAGE_SIZE = 20
 
-function formatTime(timestamp: number): string {
+function getIcon(type: NotificationItem['type']): string {
+  const map: Record<string, string> = {
+    system: 'SY',
+    price: 'PL',
+    selection: 'SC',
+    advisor: 'AI',
+    trade: 'TR',
+  }
+  return map[type] || 'NT'
+}
+
+function formatTime(createdAt: string): string {
+  const date = new Date(createdAt)
   const now = Date.now()
-  const diff = now - timestamp
+  const diff = now - date.getTime()
   const minute = 60000
   const hour = minute * 60
   const day = hour * 24
 
+  if (Number.isNaN(diff)) return ''
   if (diff < minute) return '刚刚'
   if (diff < hour) return Math.floor(diff / minute) + '分钟前'
   if (diff < day) return Math.floor(diff / hour) + '小时前'
   if (diff < day * 7) return Math.floor(diff / day) + '天前'
-  return new Date(timestamp).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+  return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
 }
 
-function getIcon(type: NotificationItem['type']): string {
-  const map = {
-    system: '📢',
-    price: '💰',
-    selection: '📈',
-    advisor: '🤖',
-    trade: '📊',
+async function loadNotifications(isLoadMore = false) {
+  try {
+    const res = await fetchNotifications({ limit: PAGE_SIZE, offset: offset.value })
+    if (isLoadMore) {
+      notifications.value.push(...res.items)
+    } else {
+      notifications.value = res.items
+    }
+    offset.value = isLoadMore ? offset.value + PAGE_SIZE : PAGE_SIZE
+    hasMore.value = res.items.length >= PAGE_SIZE
+  } catch {
+    uni.showToast({ title: '加载失败', icon: 'none' })
+  } finally {
+    initialLoading.value = false
+    loadingMore.value = false
   }
-  return map[type] || '📨'
 }
 
-function handleClick(item: NotificationItem) {
+async function handleClick(item: NotificationItem) {
   if (!item.read) {
-    item.read = true
-    // 实际场景可调用 API 标记已读
+    try {
+      await markAsRead(item.id)
+      item.read = true
+    } catch { /* 静默失败 */ }
   }
-  // 默认跳转逻辑
-  if (item.type === 'price' && item.data?.code) {
-    uni.navigateTo({ url: `/pages/detail/index?code=${item.data.code}` })
-  } else if (item.type === 'selection') {
-    uni.navigateTo({ url: '/pages/selection/index' })
-  } else if (item.type === 'advisor') {
-    uni.navigateTo({ url: '/pages/advisor/index' })
+  // 跳转逻辑
+  if (item.data?.url) {
+    uni.navigateTo({ url: item.data.url })
   }
 }
 
-function handleAction(item: NotificationItem, action: NotificationAction) {
-  if (action.callback) {
-    action.callback()
-  } else if (action.url) {
-    uni.navigateTo({ url: action.url })
+async function handleMarkAllRead() {
+  try {
+    await markAllAsRead()
+    notifications.value.forEach(item => { item.read = true })
+    uni.showToast({ title: '全部标记为已读', icon: 'success' })
+  } catch {
+    uni.showToast({ title: '操作失败', icon: 'none' })
   }
-  if (!item.read) item.read = true
 }
 
-function markAllAsRead() {
-  notifications.value.forEach(item => { item.read = true })
-  uni.showToast({ title: '全部标记为已读', icon: 'success' })
-}
-
-function clearAll() {
+async function handleClearAll() {
   uni.showModal({
     title: '清空消息',
     content: '确定清空所有消息？',
-    success: (res: { confirm: boolean }) => {
+    success: async (res: { confirm: boolean }) => {
       if (res.confirm) {
-        notifications.value = []
-        uni.showToast({ title: '已清空', icon: 'success' })
+        try {
+          await clearAllNotifications()
+          notifications.value = []
+          uni.showToast({ title: '已清空', icon: 'success' })
+        } catch {
+          uni.showToast({ title: '操作失败', icon: 'none' })
+        }
       }
     },
   })
 }
 
-function loadMore() {
-  if (loading.value || !hasMore.value) return
-  // 模拟加载更多
-  loading.value = true
-  setTimeout(() => {
-    const newItems: NotificationItem[] = [
-      {
-        id: '5',
-        type: 'trade',
-        title: '交易提醒',
-        content: '您的限价单 600036 招商银行 已成交，成交价 32.15 元。',
-        time: Date.now() - 86400000 * 2,
-        read: true,
-      },
-      {
-        id: '6',
-        type: 'system',
-        title: '系统维护',
-        content: '本周六凌晨 2:00-4:00 进行系统维护，期间可能无法访问。',
-        time: Date.now() - 86400000 * 3,
-        read: true,
-      },
-    ]
-    notifications.value.push(...newItems)
-    hasMore.value = false
-    loading.value = false
-  }, 800)
+async function loadMore() {
+  if (loadingMore.value || !hasMore.value) return
+  loadingMore.value = true
+  await loadNotifications(true)
 }
 
 onMounted(() => {
-  // 可在此处从 API 拉取真实通知
+  loadNotifications()
 })
 </script>
 
@@ -276,21 +217,14 @@ onMounted(() => {
   color: $color-primary;
 }
 
-.empty-state {
+.state-view {
   padding: 120rpx 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
 }
 
-.empty-icon {
-  font-size: 80rpx;
-  margin-bottom: 24rpx;
-  opacity: 0.4;
-}
-
-.empty-text {
+.state-text {
   font-size: $font-size-base;
   color: $text-hint;
 }
@@ -329,15 +263,17 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
 
-  &.system { background: rgba(74, 144, 226, 0.1); }
-  &.price { background: rgba(82, 196, 26, 0.1); }
-  &.selection { background: rgba(250, 173, 20, 0.1); }
-  &.advisor { background: rgba(255, 77, 79, 0.1); }
-  &.trade { background: rgba(153, 153, 153, 0.1); }
+  &.system { background: rgba(74, 144, 226, 0.15); }
+  &.price { background: rgba(82, 196, 26, 0.15); }
+  &.selection { background: rgba(250, 173, 20, 0.15); }
+  &.advisor { background: rgba(255, 77, 79, 0.15); }
+  &.trade { background: rgba(153, 153, 153, 0.15); }
 }
 
 .icon-text {
-  font-size: 32rpx;
+  font-size: 22rpx;
+  font-weight: 700;
+  color: $text-primary;
 }
 
 .item-main {
@@ -377,24 +313,6 @@ onMounted(() => {
   word-break: break-all;
 }
 
-.item-actions {
-  margin-top: 16rpx;
-  display: flex;
-  gap: 12rpx;
-}
-
-.action-btn-small {
-  padding: 8rpx 20rpx;
-  font-size: $font-size-xs;
-  color: $color-primary;
-  background: rgba(74, 144, 226, 0.1);
-  border-radius: 6rpx;
-  border: none;
-  line-height: 1;
-
-  &::after { border: none; }
-}
-
 .unread-dot {
   position: absolute;
   top: 28rpx;
@@ -410,5 +328,10 @@ onMounted(() => {
   text-align: center;
   font-size: $font-size-sm;
   color: $text-hint;
+}
+
+.no-more {
+  color: $text-hint;
+  opacity: 0.5;
 }
 </style>
