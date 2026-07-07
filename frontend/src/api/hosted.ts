@@ -38,28 +38,28 @@ export interface HostedTrigger {
 
 /** 获取AI托管状态 */
 export function getHostedStatus(): Promise<HostedStatus> {
-  return request({ url: '/hosted/status', method: 'GET' })
+  return request('/hosted/status', { method: 'GET' })
 }
 
 /** 切换AI托管开关 */
 export function switchHosted(enabled: boolean): Promise<HostedStatus> {
-  return request({ url: '/hosted/switch', method: 'POST', data: { enabled } })
+  return request('/hosted/switch', { method: 'POST', data: { enabled } })
 }
 
 /** 修改风控参数 */
 export function updateHostedConfig(config: HostedConfig): Promise<HostedStatus> {
-  return request({ url: '/hosted/config', method: 'PATCH', data: config })
+  return request('/hosted/config', { method: 'PATCH', data: config })
 }
 
 /** 获取执行日志 */
 export function getHostedLogs(params?: { limit?: number; offset?: number }): Promise<{
   logs: HostedLog[]
-  total: number
+  total: number;
 }> {
-  return request({ url: '/hosted/logs', method: 'GET', data: params })
+  return request('/hosted/logs', { method: 'GET', params })
 }
 
 /** 手动触发信号（调试用） */
 export function triggerHosted(symbol: string): Promise<HostedTrigger> {
-  return request({ url: '/hosted/trigger', method: 'POST', data: { symbol } })
+  return request('/hosted/trigger', { method: 'POST', data: { symbol } })
 }
