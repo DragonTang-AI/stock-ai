@@ -5,40 +5,40 @@
       <view class="status-header">
         <view class="status-left">
           <text class="status-title">AI托管</text>
-          <view class="status-badge" :class="{ active: status.enabled }">
-            <text>{{ status.enabled ? '运行中' : '已关闭' }}</text>
+          <view class="status-badge" :class="{ active: status.is_active }">
+            <text>{{ status.is_active ? '运行中' : '已关闭' }}</text>
           </view>
         </view>
         <switch
-          :checked="status.enabled"
+          :checked="status.is_active"
           @change="handleToggle"
           color="#4A90E2"
         />
       </view>
-      <view class="status-body" v-if="status.enabled">
+      <view class="status-body" v-if="status.is_active">
         <view class="status-row">
           <text class="s-label">当前模式</text>
           <text class="s-value">{{ status.mode || '-' }}</text>
         </view>
         <view class="status-row">
           <text class="s-label">今日成交</text>
-          <text class="s-value">{{ status.today_trades }} 笔</text>
+          <text class="s-value">{{ status.total_trades }} 笔</text>
         </view>
         <view class="status-row">
           <text class="s-label">今日盈亏</text>
-          <text class="s-value" :class="status.today_pnl >= 0 ? 'up' : 'down'">
-            {{ status.today_pnl >= 0 ? '+' : '' }}{{ status.today_pnl.toFixed(2) }}
+          <text class="s-value" :class="(status.daily_loss_pct ?? 0) >= 0 ? 'up' : 'down'">
+            {{ (status.daily_loss_pct ?? 0) >= 0 ? '+' : '' }}{{ ((status.daily_loss_pct ?? 0) * 100).toFixed(2) }}%
           </text>
         </view>
         <view class="status-row">
           <text class="s-label">最后更新</text>
-          <text class="s-value muted">{{ formatTime(status.updated_at) }}</text>
+          <text class="s-value muted">{{ formatTime(status.is_active ? status.enabled_at : status.disabled_at) }}</text>
         </view>
       </view>
     </view>
 
     <!-- 风控参数 -->
-    <view class="section" v-if="status && status.enabled">
+    <view class="section" v-if="status && status.is_active">
       <view class="section-header">
         <text class="section-title">风控参数</text>
         <text class="section-action" @click="showConfig = !showConfig">
@@ -49,11 +49,11 @@
       <view class="config-readonly" v-if="!showConfig">
         <view class="cfg-row">
           <text class="cfg-label">最低置信度</text>
-          <text class="cfg-value">{{ status.confidence_threshold }}%</text>
+          <text class="cfg-value">{{ status.min_confidence != null ? status.min_confidence + '%' : '-' }}</text>
         </view>
         <view class="cfg-row">
           <text class="cfg-label">最大仓位比例</text>
-          <text class="cfg-value">{{ status.max_position_ratio }}%</text>
+          <text class="cfg-value">{{ status.max_position_ratio != null ? (status.max_position_ratio * 100).toFixed(0) + '%' : '-' }}</text>
         </view>
       </view>
 
@@ -61,7 +61,7 @@
         <view class="cfg-edit-row">
           <text class="cfg-label">最低置信度 (%)</text>
           <view class="cfg-input-wrap">
-            <input class="cfg-input" v-model="configForm.confidence_threshold" type="number" placeholder="60-100" />
+            <input class="cfg-input" v-model="configForm.min_confidence" type="number" placeholder="60-100" />
             <text class="cfg-unit">%</text>
           </view>
         </view>
@@ -83,7 +83,7 @@
     </view>
 
     <!-- 执行日志 -->
-    <view class="section" v-if="status && status.enabled && logs.length">
+    <view class="section" v-if="status && status.is_active && logs.length">
       <view class="section-header">
         <text class="section-title">执行日志</text>
         <text class="section-action" @click="loadLogs">刷新</text>
@@ -92,18 +92,18 @@
       <view class="log-list">
         <view class="log-item" v-for="log in logs" :key="log.id">
           <view class="log-header">
-            <text class="log-action" :class="log.action === 'buy' ? 'up' : 'down'">
-              {{ log.action === 'buy' ? '买入' : log.action === 'sell' ? '卖出' : log.action }}
+            <text class="log-action" :class="log.action === 'BUY' ? 'up' : 'down'">
+              {{ log.action === 'BUY' ? '买入' : log.action === 'SELL' ? '卖出' : log.action }}
             </text>
             <text class="log-symbol">{{ log.symbol }}</text>
-            <text class="log-confidence">置信度 {{ log.confidence }}%</text>
+            <text class="log-confidence" v-if="log.signal_id">置信度 {{ log.signal_id.slice(0, 8) }}</text>
           </view>
           <view class="log-body">
-            <text class="log-msg">{{ log.message }}</text>
+            <text class="log-msg">{{ log.reason || '-' }}</text>
           </view>
           <view class="log-footer">
-            <text class="log-result" :class="log.result === 'success' ? 'up' : 'down'">
-              {{ log.result === 'success' ? '成功' : '失败' }}
+            <text class="log-result" :class="log.status === 'TRIGGERED' ? 'up' : 'down'">
+              {{ log.status === 'TRIGGERED' ? '触发' : log.status === 'BLOCKED' ? '阻止' : log.status === 'SKIPPED' ? '跳过' : log.status }}
             </text>
             <text class="log-time">{{ formatTime(log.created_at) }}</text>
           </view>
@@ -133,7 +133,7 @@ import { ref, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import {
   getHostedStatus, switchHosted, updateHostedConfig, getHostedLogs,
-  type HostedStatus, type HostedLog,
+  type HostedStatus, type HostedLog, type HostedMode,
 } from '@/api/hosted'
 
 const isLoading = ref(false)
@@ -143,7 +143,7 @@ const logs = ref<HostedLog[]>([])
 const logTotal = ref(0)
 const logOffset = ref(0)
 const showConfig = ref(false)
-const configForm = ref({ confidence_threshold: '', max_position_ratio: '' })
+const configForm = ref({ min_confidence: '', max_position_ratio: '' })
 
 function formatTime(iso: string): string {
   if (!iso) return '-'
@@ -156,10 +156,10 @@ async function loadStatus() {
   try {
     status.value = await getHostedStatus()
     configForm.value = {
-      confidence_threshold: String(status.value.confidence_threshold || ''),
-      max_position_ratio: String(status.value.max_position_ratio || ''),
+      min_confidence: status.value.min_confidence != null ? String(status.value.min_confidence) : '',
+      max_position_ratio: status.value.max_position_ratio != null ? String((status.value.max_position_ratio * 100).toFixed(0)) : '',
     }
-    if (status.value.enabled) await loadLogs()
+    if (status.value.is_active) await loadLogs()
   } catch {
     status.value = null
   } finally {
@@ -168,15 +168,16 @@ async function loadStatus() {
 }
 
 async function handleToggle(e: { detail: { value: boolean } }) {
-  const enabled = e.detail.value
+  const wantActive = e.detail.value
+  const targetMode: HostedMode = wantActive ? 'AI_HOSTED' : 'MANUAL'
   try {
     uni.showLoading({ title: '切换中...' })
-    status.value = await switchHosted(enabled)
+    status.value = await switchHosted(targetMode)
     configForm.value = {
-      confidence_threshold: String(status.value.confidence_threshold || ''),
-      max_position_ratio: String(status.value.max_position_ratio || ''),
+      min_confidence: status.value.min_confidence != null ? String(status.value.min_confidence) : '',
+      max_position_ratio: status.value.max_position_ratio != null ? String((status.value.max_position_ratio * 100).toFixed(0)) : '',
     }
-    if (enabled) await loadLogs()
+    if (wantActive) await loadLogs()
   } catch (err: any) {
     uni.showToast({ title: err?.message || '操作失败', icon: 'none' })
   } finally {
@@ -185,17 +186,17 @@ async function handleToggle(e: { detail: { value: boolean } }) {
 }
 
 async function handleSaveConfig() {
-  const ct = parseFloat(configForm.value.confidence_threshold)
-  const mr = parseFloat(configForm.value.max_position_ratio)
-  if (isNaN(ct) || isNaN(mr)) {
+  const minConf = parseFloat(configForm.value.min_confidence)
+  const maxPos = parseFloat(configForm.value.max_position_ratio)
+  if (isNaN(minConf) || isNaN(maxPos)) {
     uni.showToast({ title: '请输入有效数值', icon: 'none' })
     return
   }
   savingConfig.value = true
   try {
     status.value = await updateHostedConfig({
-      confidence_threshold: ct,
-      max_position_ratio: mr,
+      min_confidence: minConf,
+      max_position_ratio: maxPos / 100,  // % 转 0-1
     })
     showConfig.value = false
     uni.showToast({ title: '已保存', icon: 'success' })
