@@ -87,6 +87,12 @@
       "style": {
         "navigationBarTitleText": "设置"
       }
+    },
+    {
+      "path": "pages/hosted/index",
+      "style": {
+        "navigationBarTitleText": "AI托管"
+      }
     }
   ],
   "globalStyle": {

@@ -49,9 +49,14 @@
     <!-- 看板 -->
     <view class="section">
       <view class="menu-list">
-        <view class="menu-item" @click="showToast('看板功能开发中')">
+        <view class="menu-item" @click="navigateTo('/pages/hosted/index')">
+          <text class="menu-icon">🤖</text>
+          <text class="menu-label">AI托管</text>
+          <text class="menu-arrow">›</text>
+        </view>
+        <view class="menu-item" @click="navigateTo('/pages/portfolio/analytics')">
           <text class="menu-icon">📊</text>
-          <text class="menu-label">收益看板</text>
+          <text class="menu-label">持仓分析</text>
           <text class="menu-arrow">›</text>
         </view>
         <view class="menu-item" @click="navigateTo('/pages/mine/settings')">
