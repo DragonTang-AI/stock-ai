@@ -147,7 +147,7 @@ import { ref, computed, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import {
   fetchEquityCurve, fetchAttribution, fetchDashboardSummary, fetchStatistics,
-  type DashboardSummary
+  type DashboardSummary, type AttributionItem,
 } from '@/api/analysis'
 
 const periods = [
