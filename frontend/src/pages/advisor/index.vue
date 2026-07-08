@@ -70,6 +70,7 @@
 
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
+import { getChatContext } from '@/api/advisor'
 import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
 import Disclaimer from '@/components/compliance/Disclaimer.vue'
 
@@ -103,12 +104,9 @@ async function sendMessage(text: string) {
   scrollToId.value = `msg-${messages.value.length - 1}`
 
   try {
-    // TODO: 对接 AI 对话 API
-    await new Promise(r => setTimeout(r, 800))
-    messages.value.push({
-      role: 'ai',
-      content: '您好！我是 AI-Stock 智能投资助手。AI 对话功能正在开发中，敬请期待！在此期间，您可以浏览行情、选股和持仓分析等板块。',
-    })
+    const res = await getChatContext(content)
+    const reply = extractReply(res)
+    messages.value.push({ role: 'ai', content: reply })
   } catch {
     messages.value.push({
       role: 'ai',
@@ -119,6 +117,15 @@ async function sendMessage(text: string) {
     await nextTick()
     scrollToId.value = `msg-${messages.value.length - 1}`
   }
+}
+
+function extractReply(data: any): string {
+  if (typeof data === 'string') return data
+  if (data?.reply) return data.reply
+  if (data?.content) return data.content
+  if (data?.data?.reply) return data.data.reply
+  if (data?.data?.content) return data.data.content
+  return JSON.stringify(data)
 }
 </script>
 

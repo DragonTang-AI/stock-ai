@@ -112,22 +112,50 @@ export async function getTrades(): Promise<{ data: TradeItem[]; total: number }>
   return { data: (res as any).data || [], total: (res as any).total || 0 }
 }
 
-// ---- 持仓分析 ----
+// T-M011 持仓分析
+
 export interface PositionAnalytics {
+  position_count: number
+  total_market_value: number
   total_profit: number
   total_profit_pct: number
   daily_profit: number
   daily_profit_pct: number
-  total_market_value: number
-  position_count: number
   win_rate: number
+  best_position: {
+    symbol: string
+    name: string
+    profit: number
+    profit_pct: number
+    market_value: number
+    weight: number
+  } | null
+  worst_position: {
+    symbol: string
+    name: string
+    profit: number
+    profit_pct: number
+    market_value: number
+    weight: number
+  } | null
   top_holdings_concentration: number
-  best_position: { symbol: string; name: string; profit_pct: number } | null
-  worst_position: { symbol: string; name: string; profit_pct: number } | null
-  holdings_distribution: Array<{ sector: string; ratio: number }>
+  top_holdings: Array<{
+    symbol: string
+    name: string
+    market_value: number
+    weight: number
+    profit: number
+  }>
+  holdings_distribution: Array<{
+    sector: string
+    market_value: number
+    weight: number
+    profit: number
+    count: number
+  }>
 }
 
 export async function getPortfolioAnalytics(): Promise<PositionAnalytics> {
   const res = await request<{ success: boolean; data: PositionAnalytics }>('/portfolio/analytics', { method: 'GET' })
-  return (res as any).data
+  return (res as any).data || {}
 }
