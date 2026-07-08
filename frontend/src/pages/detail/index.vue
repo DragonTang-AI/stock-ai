@@ -103,9 +103,47 @@
 
     <!-- 操作按钮 -->
     <view v-if="quote && !isFullscreen" class="action-bar">
-      <button class="btn-primary" @click="handleAddWatchlist">
+      <button class="btn-secondary" @click="handleAddWatchlist">
         <text>{{ isInWatchlist ? '已加入自选' : '加入自选' }}</text>
       </button>
+      <button class="btn-primary" @click="showTradeModal = true">
+        <text>快速买入</text>
+      </button>
+    </view>
+
+    <!-- 快速买入弹窗 -->
+    <view v-if="showTradeModal" class="modal-overlay" @click="showTradeModal = false">
+      <view class="trade-modal" @click.stop>
+        <view class="modal-header">
+          <text class="modal-title">快速下单 - {{ quote?.name }}</text>
+          <text class="modal-close" @click="showTradeModal = false">✕</text>
+        </view>
+        <view class="modal-body">
+          <view class="trade-row">
+            <text class="trade-label">当前价</text>
+            <text class="trade-value">{{ formatPrice(quote?.price) }}</text>
+          </view>
+          <view class="trade-row">
+            <text class="trade-label">方向</text>
+            <view class="side-tabs">
+              <view class="side-tab" :class="{ active: tradeSide === 'BUY' }" @click="tradeSide = 'BUY'">买入</view>
+              <view class="side-tab" :class="{ active: tradeSide === 'SELL' }" @click="tradeSide = 'SELL'">卖出</view>
+            </view>
+          </view>
+          <view class="trade-row">
+            <text class="trade-label">价格</text>
+            <input v-model="tradePrice" class="trade-input" type="digit" placeholder="限价" />
+          </view>
+          <view class="trade-row">
+            <text class="trade-label">数量(股)</text>
+            <input v-model="tradeQty" class="trade-input" type="number" placeholder="100" />
+          </view>
+          <view v-if="tradeError" class="trade-error">{{ tradeError }}</view>
+          <button class="btn-confirm" :disabled="tradeSubmitting" @click="handlePlaceOrder">
+            {{ tradeSubmitting ? '提交中...' : '确认下单' }}
+          </button>
+        </view>
+      </view>
     </view>
 
     <!-- 错误状态 -->
@@ -123,6 +161,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import KlineChart from '@/components/market/KlineChart.vue'
 import { fetchQuote, fetchKline, type QuoteSnapshot, type KlinePoint } from '@/api/market'
+import { placeOrder, type OrderSide } from '@/api/trading'
 import { trackPageView } from '@/utils/tracker'
 
 const code = ref('')
@@ -133,6 +172,14 @@ const loading = ref(true)
 const klineLoading = ref(false)
 const error = ref('')
 const isInWatchlist = ref(false)
+
+// 快速交易弹窗
+const showTradeModal = ref(false)
+const tradeSide = ref<OrderSide>('BUY')
+const tradePrice = ref('')
+const tradeQty = ref('')
+const tradeError = ref('')
+const tradeSubmitting = ref(false)
 
 // 横屏全屏模式
 const isFullscreen = ref(false)
@@ -228,7 +275,7 @@ async function loadData() {
 async function loadKline() {
   klineLoading.value = true
   try {
-    const data = await fetchKline({ code: code.value, period: period.value, count: 200 })
+    const data = await fetchKline({ symbol: code.value, period: period.value, count: 200 })
     klinePoints.value = data.points
   } catch {
     uni.showToast({ title: 'K线加载失败', icon: 'none' })
@@ -248,6 +295,24 @@ function handleAddWatchlist() {
     title: isInWatchlist.value ? '已加入自选' : '已取消自选',
     icon: 'success',
   })
+}
+
+async function handlePlaceOrder() {
+  tradeError.value = ''
+  const qty = parseInt(tradeQty.value)
+  const price = parseFloat(tradePrice.value)
+  if (!qty || qty < 100) { tradeError.value = '数量不能少于100股'; return }
+  if (!price || price <= 0) { tradeError.value = '请输入有效价格'; return }
+  tradeSubmitting.value = true
+  try {
+    await placeOrder({ symbol: code.value, side: tradeSide.value, order_type: 'LIMIT', qty, price })
+    showTradeModal.value = false
+    uni.showToast({ title: '下单成功', icon: 'success' })
+  } catch (e: any) {
+    tradeError.value = e?.message || '下单失败，请重试'
+  } finally {
+    tradeSubmitting.value = false
+  }
 }
 
 // ---- 格式化 ----
@@ -548,9 +613,24 @@ onShow(() => {
 // ---- 操作栏 ----
 .action-bar {
   padding: 24rpx 32rpx;
+  display: flex;
+  gap: 16rpx;
+
+  .btn-secondary {
+    flex: 1;
+    padding: 24rpx;
+    font-size: $font-size-base;
+    color: $color-primary;
+    background: var(--bg-card, #fff);
+    border: 2rpx solid $color-primary;
+    border-radius: 12rpx;
+    text-align: center;
+
+    &::after { border: none; }
+  }
 
   .btn-primary {
-    width: 100%;
+    flex: 1;
     padding: 24rpx;
     font-size: $font-size-base;
     color: #fff;
@@ -561,6 +641,123 @@ onShow(() => {
 
     &::after { border: none; }
   }
+}
+
+// ---- 交易弹窗 ----
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.trade-modal {
+  width: 100%;
+  max-width: 500px;
+  background: var(--bg-card, #fff);
+  border-radius: 24rpx 24rpx 0 0;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 32rpx 32rpx 16rpx;
+  border-bottom: 1rpx solid var(--border-color, #eee);
+}
+
+.modal-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--text-primary, #333);
+}
+
+.modal-close {
+  font-size: 40rpx;
+  color: var(--text-hint, #999);
+  padding: 8rpx;
+}
+
+.modal-body {
+  padding: 32rpx;
+}
+
+.trade-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24rpx;
+}
+
+.trade-label {
+  font-size: 28rpx;
+  color: var(--text-secondary, #666);
+  width: 140rpx;
+}
+
+.trade-value {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: $color-primary;
+}
+
+.side-tabs {
+  display: flex;
+  gap: 16rpx;
+}
+
+.side-tab {
+  padding: 12rpx 32rpx;
+  font-size: 28rpx;
+  border-radius: 12rpx;
+  border: 2rpx solid var(--border-color, #ddd);
+  color: var(--text-secondary, #666);
+  cursor: pointer;
+
+  &.active {
+    background: $color-primary;
+    color: #fff;
+    border-color: $color-primary;
+  }
+}
+
+.trade-input {
+  flex: 1;
+  text-align: right;
+  font-size: 28rpx;
+  padding: 12rpx 16rpx;
+  border: 2rpx solid var(--border-color, #ddd);
+  border-radius: 12rpx;
+  background: var(--bg-page, #f5f5f7);
+}
+
+.trade-error {
+  color: $color-danger;
+  font-size: 24rpx;
+  margin-bottom: 16rpx;
+  text-align: center;
+}
+
+.btn-confirm {
+  width: 100%;
+  padding: 24rpx;
+  font-size: 32rpx;
+  color: #fff;
+  background: $color-primary;
+  border-radius: 12rpx;
+  border: none;
+  text-align: center;
+  margin-top: 16rpx;
+
+  &[disabled] {
+    opacity: 0.5;
+  }
+
+  &::after { border: none; }
 }
 
 /* 免责声明 */
