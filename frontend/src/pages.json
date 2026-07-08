@@ -67,7 +67,7 @@
       }
     },
     {
-      "path": "pages/portfolio/history",
+      "path": "pages/portfolio/history/index",
       "style": {
         "navigationBarTitleText": "交易记录",
         "animationType": "slide-in-right",

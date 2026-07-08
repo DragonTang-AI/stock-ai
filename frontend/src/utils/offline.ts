@@ -263,3 +263,4 @@ function trimOldest(count: number): void {
     removeOfflineData(key)
   }
 }
+export { isOnline, onNetworkChange } from './network';

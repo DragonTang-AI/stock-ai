@@ -185,7 +185,7 @@
     <!-- 持仓 Tab -->
     <scroll-view v-if="activeTab === 'positions'" class="content" scroll-y>
       <!-- 空持仓 -->
-      <view v-else-if="positions.length === 0" class="empty-state">
+      <view v-if="positions.length === 0" class="empty-state">
         <text class="empty-icon">&#x1F4ED;</text>
         <text class="empty-text">暂无持仓</text>
         <text class="empty-sub">使用下方模拟下单功能开始交易</text>
