@@ -75,6 +75,7 @@ import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
 import ErrorPage from '@/components/common/ErrorPage.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import Disclaimer from '@/components/compliance/Disclaimer.vue'
+import { fetchQuotes } from '@/api/market'
 
 interface StockItem {
   code: string
@@ -92,14 +93,21 @@ async function fetchMarketData() {
   loading.value = true
   error.value = ''
   try {
-    // TODO: 对接行情 API
-    // 使用占位数据
+    // 大盘指数：sina 接口无 /indices 端点，用 quotes 的特定 symbol 拉
+    // 后端暂无指数 API，先保持占位
     indices.value = [
       { code: '000001', name: '上证指数', price: '--', change: 0 },
       { code: '399001', name: '深证成指', price: '--', change: 0 },
       { code: '399006', name: '创业板指', price: '--', change: 0 },
     ]
-    hotStocks.value = []
+    // 热门股票：调用真实 API
+    const quotes = await fetchQuotes()  // 不传 symbols 即拉默认热门 A 股
+    hotStocks.value = quotes.slice(0, 20).map((q) => ({
+      code: q.symbol,
+      name: q.name,
+      price: typeof q.price === 'number' ? q.price.toFixed(2) : '--',
+      change: q.change_pct,  // 注意：前端页面用百分数
+    }))
   } catch (e: any) {
     error.value = e?.message || '加载失败'
   } finally {
