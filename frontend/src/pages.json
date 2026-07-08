@@ -15,6 +15,20 @@
       }
     },
     {
+      "path": "pages/login/register",
+      "style": {
+        "navigationBarTitleText": "注册",
+        "animationType": "fade-in",
+        "animationDuration": 200
+        // #ifdef H5
+        ,"navigationStyle": "custom"
+        // #endif
+        // #ifdef MP-WEIXIN
+        ,"navigationStyle": "default"
+        // #endif
+      }
+    },
+    {
       "path": "pages/market/index",
       "style": {
         "navigationBarTitleText": "行情",

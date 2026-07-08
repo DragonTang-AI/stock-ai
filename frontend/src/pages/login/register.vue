@@ -1,12 +1,12 @@
 <template>
-  <view class="login-page">
-    <view class="login-card">
-      <view class="login-header">
+  <view class="register-page">
+    <view class="register-card">
+      <view class="register-header">
         <text class="app-name">AI-Stock</text>
-        <text class="app-desc">智能选股助手</text>
+        <text class="app-desc">创建您的账号</text>
       </view>
 
-      <view class="login-form">
+      <view class="register-form">
         <view class="input-group">
           <text class="input-label">用户名</text>
           <input
@@ -17,27 +17,35 @@
           />
         </view>
         <view class="input-group">
+          <text class="input-label">邮箱</text>
+          <input
+            v-model="email"
+            class="input-field"
+            placeholder="请输入邮箱"
+            placeholder-style="color:#bbb"
+          />
+        </view>
+        <view class="input-group">
           <text class="input-label">密码</text>
           <input
             v-model="password"
             class="input-field"
             type="password"
-            placeholder="请输入密码"
+            placeholder="请输入密码（至少6位）"
             placeholder-style="color:#bbb"
           />
         </view>
 
         <button
-          class="btn-login"
+          class="btn-register"
           :disabled="loading"
-          @click="handleLogin"
+          @click="handleRegister"
         >
-          {{ loading ? '登录中...' : '登录' }}
+          {{ loading ? '注册中...' : '注册' }}
         </button>
 
-        <view class="login-extra">
-          <text class="extra-link" @click="goRegister">注册账号</text>
-          <text class="extra-link" @click="goForgot">忘记密码</text>
+        <view class="register-extra">
+          <text class="extra-link" @click="goLogin">已有账号？去登录</text>
         </view>
       </view>
     </view>
@@ -51,20 +59,29 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { login } from '@/api/auth'
+import { register } from '@/api/auth'
 import Disclaimer from '@/components/compliance/Disclaimer.vue'
 
 const authStore = useAuthStore()
 const username = ref('')
+const email = ref('')
 const password = ref('')
 const loading = ref(false)
 const errorMsg = ref('')
 
-async function handleLogin() {
+async function handleRegister() {
   errorMsg.value = ''
 
   if (!username.value.trim()) {
     errorMsg.value = '请输入用户名'
+    return
+  }
+  if (!email.value.trim()) {
+    errorMsg.value = '请输入邮箱'
+    return
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) {
+    errorMsg.value = '邮箱格式不正确'
     return
   }
   if (!password.value) {
@@ -79,8 +96,9 @@ async function handleLogin() {
   loading.value = true
 
   try {
-    const res = await login({
+    const res = await register({
       username: username.value.trim(),
+      email: email.value.trim(),
       password: password.value,
     })
 
@@ -89,35 +107,31 @@ async function handleLogin() {
       authStore.setUserInfo(res.user)
     }
 
-    uni.showToast({ title: '登录成功', icon: 'success', duration: 1500 })
+    uni.showToast({ title: '注册成功', icon: 'success', duration: 1500 })
     setTimeout(() => {
       uni.switchTab({ url: '/pages/market/index' })
     }, 800)
   } catch (e: any) {
     const detail = e?.detail || e?.message || ''
-    if (detail.includes('用户名或密码')) {
-      errorMsg.value = '用户名或密码错误'
+    if (detail.includes('已被注册') || detail.includes('already')) {
+      errorMsg.value = '用户名或邮箱已被注册'
     } else if (e?.statusCode === 422) {
-      errorMsg.value = '输入格式不正确，请检查用户名和密码'
+      errorMsg.value = '输入格式不正确，请检查后重试'
     } else {
-      errorMsg.value = detail || '登录失败，请检查网络连接'
+      errorMsg.value = detail || '注册失败，请检查网络连接'
     }
   } finally {
     loading.value = false
   }
 }
 
-function goRegister() {
-  uni.navigateTo({ url: '/pages/login/register' })
-}
-
-function goForgot() {
-  uni.showToast({ title: '请联系管理员重置密码', icon: 'none', duration: 2000 })
+function goLogin() {
+  uni.navigateBack()
 }
 </script>
 
 <style scoped lang="scss">
-.login-page {
+.register-page {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -127,7 +141,7 @@ function goForgot() {
   background: linear-gradient(135deg, #1A1A2E 0%, #16213E 100%);
 }
 
-.login-card {
+.register-card {
   width: 100%;
   max-width: 600rpx;
   background: #fff;
@@ -135,7 +149,7 @@ function goForgot() {
   padding: 64rpx 48rpx 48rpx;
 }
 
-.login-header {
+.register-header {
   text-align: center;
   margin-bottom: 64rpx;
 }
@@ -155,7 +169,7 @@ function goForgot() {
   margin-top: 12rpx;
 }
 
-.login-form {
+.register-form {
   display: flex;
   flex-direction: column;
   gap: 32rpx;
@@ -188,7 +202,7 @@ function goForgot() {
   }
 }
 
-.btn-login {
+.btn-register {
   width: 100%;
   height: 88rpx;
   line-height: 88rpx;
@@ -205,9 +219,9 @@ function goForgot() {
   }
 }
 
-.login-extra {
+.register-extra {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   padding: 0 8rpx;
 }
 
