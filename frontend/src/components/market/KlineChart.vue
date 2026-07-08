@@ -1,6 +1,6 @@
 <template>
-  <view class="kline-chart">
-    <view ref="chartContainer" class="chart-canvas"></view>
+  <view ref="chartWrapper" class="kline-chart">
+    <canvas ref="chartCanvas" class="chart-canvas"></canvas>
     <view v-if="loading" class="chart-loading-overlay">
       <text class="chart-loading-text">加载中...</text>
     </view>
@@ -36,7 +36,8 @@ const props = defineProps<{
   period?: string
 }>()
 
-const chartContainer = ref<HTMLElement | null>(null)
+const chartCanvas = ref<HTMLCanvasElement | null>(null)
+const chartWrapper = ref<HTMLElement | null>(null)
 const isDark = ref(getThemeState().isDark)
 let chartInstance: any = null
 let resizeObserver: any = null
@@ -81,13 +82,13 @@ function downsampleIfNeeded(points: KlinePoint[]): { sampled: KlinePoint[]; isSa
 }
 
 function renderChart() {
-  if (!chartContainer.value || !props.points?.length) return
+  if (!chartCanvas.value || !props.points?.length) return
   // #ifdef H5
   const colors = getChartColors(isDark.value)
   const { sampled } = downsampleIfNeeded(props.points)
 
   if (!chartInstance) {
-    chartInstance = echarts.init(chartContainer.value as any, undefined, { renderer: 'canvas' })
+    chartInstance = echarts.init(chartCanvas.value, undefined, { renderer: 'canvas' })
   }
 
   const dates = toDates(sampled)
@@ -186,9 +187,7 @@ onMounted(() => {
   nextTick(() => {
     renderChart()
     // #ifdef H5
-    const el = chartContainer.value
-    // 兼容 uni-app webview：ref 可能指向 UniElement proxy；
-    // 用 nodeType === 1 (ELEMENT_NODE) 做通用检测，比 instanceof Element 更安全
+    const el = chartWrapper.value
     if (el && (el as any).nodeType === 1 && typeof ResizeObserver !== 'undefined') {
       resizeObserver = new ResizeObserver(handleResize)
       resizeObserver.observe(el as Element)

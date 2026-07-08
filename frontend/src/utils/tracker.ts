@@ -2,7 +2,7 @@
  * 统一埋点模块
  * 支持页面访问 PV、功能事件埋点、API 异常上报、JS 错误捕获
  *
- * 上报端点：POST /api/v1/analytics/events
+ * 上报端点：POST /api/v1/events
  * 策略：本地队列 → 批量上报（100ms 节流）→ 失败重试（最多 3 次）
  */
 
@@ -26,7 +26,7 @@ interface BatchPayload {
 
 // ─── 配置 ───
 
-const REPORT_URL = '/api/v1/analytics/events'
+const REPORT_URL = '/api/v1/events'
 const BATCH_INTERVAL = 100 // ms，节流上报间隔
 const MAX_BATCH_SIZE = 20 // 单批最多事件数
 const MAX_RETRIES = 3

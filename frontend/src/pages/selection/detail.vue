@@ -304,7 +304,7 @@ async function handlePlaceOrder() {
   tradeSubmitting.value = true
   try {
     // action: 小写 'buy'|'sell'，order_type: 大写，quantity 整数
-    await placeOrder({ symbol: detail.value!.symbol, action: tradeSide.value, order_type: 'LIMIT', quantity, price })
+    await placeOrder({ symbol: detail.value!.symbol, side: tradeSide.value, order_type: 'LIMIT', qty: quantity, price })
     showTradeModal.value = false
     uni.showToast({ title: '下单成功', icon: 'success' })
   } catch (e: any) {

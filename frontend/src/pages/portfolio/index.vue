@@ -398,7 +398,7 @@ function switchTab(key: string) {
 }
 
 function goDetail(symbol: string) {
-  uni.navigateTo({ url: '/pages/detail/index?symbol=' + symbol })
+  uni.navigateTo({ url: '/pages/detail/index?code=' + symbol })
 }
 
 function goAnalytics() {
@@ -467,7 +467,7 @@ async function confirmSubmitOrder() {
   submitting.value = true
   try {
     // action: 小写 'buy'|'sell'，order_type: 大写
-    await placeOrder({ symbol, action: side, quantity, order_type: 'MARKET' })
+    await placeOrder({ symbol, side, quantity, order_type: 'MARKET' })
     uni.showToast({ title: '下单成功', icon: 'success' })
     orderForm.value = { symbol: '', side: 'buy', quantity: '' }
     await Promise.all([loadAccount(), loadPositions()])
