@@ -249,7 +249,7 @@ export function estimateFee(params: FeeEstimateRequest): Promise<FeeEstimateResp
 export function placeOrder(params: PlaceOrderRequest): Promise<Order> {
   const payload = {
     symbol: params.symbol,
-    action: params.action,
+    side: params.action, // 后端 OrderRequest 用 side 字段（buy/sell），非 action
     quantity: params.quantity,
     price: params.price ?? null,
   }
