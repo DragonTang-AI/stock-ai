@@ -106,7 +106,7 @@ async function fetchMarketData() {
       code: q.symbol,
       name: q.name,
       price: typeof q.price === 'number' ? q.price.toFixed(2) : '--',
-      change: q.change_pct,  // 注意：前端页面用百分数
+      change: Number(q.change_pct.toFixed(2)),  // 保留两位小数
     }))
   } catch (e: any) {
     error.value = e?.message || '加载失败'

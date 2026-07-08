@@ -98,8 +98,8 @@ export function fetchCommitteeResults(): Promise<CommitteeResult[]> {
     'selection:committee',
     () => request<any>('/selection/recommend', { method: 'GET' })
       .then(res => {
-        // 后端返回 { success, data: [...] } 或直接数组
-        const raw = res?.data || res || []
+        // 后端返回 { success, picks: [...] } 或 { data: [...] } 或直接数组
+        const raw = res?.data || res?.picks || res || []
         const list = Array.isArray(raw) ? raw : raw.items || raw.results || []
         return list.map(normalizeCommitteeResult)
       })
@@ -112,7 +112,7 @@ export function fetchDailyPicks(): Promise<CommitteeResult[]> {
     'selection:dailyPicks',
     () => request<any>('/selection/daily-picks', { method: 'GET' })
       .then(res => {
-        const raw = res?.data || res || []
+        const raw = res?.data || res?.picks || res || []
         const list = Array.isArray(raw) ? raw : raw.items || raw.results || []
         return list.map(normalizeCommitteeResult)
       })
@@ -161,7 +161,7 @@ export function fetchCandidates(params: {
       page_size: params.page_size ?? 20,
     },
   }).then(res => {
-    const raw = res?.data || res || []
+    const raw = res?.data || res?.picks || res || []
     const list = Array.isArray(raw) ? raw : raw.items || raw.results || []
     const mapped: CandidateStock[] = list.map((item: any, idx: number) => ({
       rank: item.rank || idx + 1,
@@ -188,7 +188,7 @@ export function fetchCandidates(params: {
 export function fetchIndustries(): Promise<string[]> {
   return request<any>('/selection/recommend', { method: 'GET' })
     .then(res => {
-      const raw = res?.data || res || []
+      const raw = res?.data || res?.picks || res || []
       const list = Array.isArray(raw) ? raw : raw.items || raw.results || []
       const industries = new Set<string>()
       list.forEach((item: any) => {
@@ -208,18 +208,22 @@ export function clearSelectionCache(): void {
 // ── 数据标准化函数 ──
 
 function normalizeCommitteeResult(raw: any): CommitteeResult {
+  // 后端返回: { symbol, name, score, factors: [{name, value, score, weight}] }
+  const score = raw.score ?? raw.final_confidence ?? raw.confidence ?? 0
+  const factors = Array.isArray(raw.factors) ? raw.factors : []
   return {
     symbol: raw.symbol || '',
     name: raw.name || raw.symbol || '',
-    final_action: raw.action || raw.final_action || raw.recommendation || 'HOLD',
-    final_confidence: raw.confidence ?? raw.final_confidence ?? 0,
-    signals: Array.isArray(raw.signals) ? raw.signals.map((s: any) => ({
-      agent: s.agent || s.source || '',
-      action: s.action || 'HOLD',
-      confidence: s.confidence ?? 0,
-      reasoning: s.reasoning || s.reason || '',
-      score: s.score ?? 0,
-    })) : [],
+    final_action: raw.action || raw.final_action || raw.recommendation
+      || (score >= 60 ? 'BUY' : score >= 40 ? 'HOLD' : 'SELL'),
+    final_confidence: score,
+    signals: factors.map((f: any) => ({
+      agent: f.name || f.agent || f.source || '',
+      action: f.action || (f.score >= 60 ? 'BUY' : f.score >= 40 ? 'HOLD' : 'SELL'),
+      confidence: f.score ?? f.confidence ?? 0,
+      reasoning: f.reasoning || f.reason || `因子分值: ${f.score ?? 0}`,
+      score: f.score ?? 0,
+    })),
     summary: raw.summary || raw.reasoning || raw.reason || '',
     generated_at: raw.generated_at || raw.timestamp || new Date().toISOString(),
   }
