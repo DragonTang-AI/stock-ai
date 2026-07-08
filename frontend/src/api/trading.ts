@@ -247,13 +247,13 @@ export function estimateFee(params: FeeEstimateRequest): Promise<FeeEstimateResp
  *   - price: 数字
  */
 export function placeOrder(params: PlaceOrderRequest): Promise<Order> {
-  const payload = {
-    symbol: params.symbol,
-    side: params.action, // 后端 OrderRequest 用 side 字段（buy/sell），非 action
-    quantity: params.quantity,
-    price: params.price ?? null,
-  }
-  return request<any>('/simulation/orders', { method: 'POST', data: payload })
+  // 后端 /simulation/orders 用 query 参数（非 JSON body）：symbol, side(buy/sell), qty(100整数倍), price(可选)
+  const q = new URLSearchParams()
+  q.set('symbol', params.symbol)
+  q.set('side', params.action)
+  q.set('qty', String(params.quantity))
+  if (params.price != null) q.set('price', String(params.price))
+  return request<any>(`/simulation/orders?${q.toString()}`, { method: 'POST' })
     .then(res => res?.data || res || {})
 }
 
