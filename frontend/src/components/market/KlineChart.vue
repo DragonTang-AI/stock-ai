@@ -187,9 +187,11 @@ onMounted(() => {
     renderChart()
     // #ifdef H5
     const el = chartContainer.value
-    if (el && el instanceof Element && typeof ResizeObserver !== 'undefined') {
+    // 兼容 uni-app webview：ref 可能指向 UniElement proxy；
+    // 用 nodeType === 1 (ELEMENT_NODE) 做通用检测，比 instanceof Element 更安全
+    if (el && (el as any).nodeType === 1 && typeof ResizeObserver !== 'undefined') {
       resizeObserver = new ResizeObserver(handleResize)
-      resizeObserver.observe(el)
+      resizeObserver.observe(el as Element)
     }
     // #endif
   })

@@ -299,13 +299,15 @@ function handleAddWatchlist() {
 
 async function handlePlaceOrder() {
   tradeError.value = ''
-  const qty = parseInt(tradeQty.value)
+  const quantity = parseInt(tradeQty.value)
   const price = parseFloat(tradePrice.value)
-  if (!qty || qty < 100) { tradeError.value = '数量不能少于100股'; return }
+  if (!quantity || quantity < 100) { tradeError.value = '数量不能少于100股'; return }
+  if (quantity % 100 !== 0) { tradeError.value = '数量必须是100的整数倍'; return }
   if (!price || price <= 0) { tradeError.value = '请输入有效价格'; return }
   tradeSubmitting.value = true
   try {
-    await placeOrder({ symbol: code.value, side: tradeSide.value, order_type: 'LIMIT', qty, price })
+    // action: 小写 'buy'|'sell'，order_type: 大写
+    await placeOrder({ symbol: code.value, action: tradeSide.value, order_type: 'LIMIT', quantity, price })
     showTradeModal.value = false
     uni.showToast({ title: '下单成功', icon: 'success' })
   } catch (e: any) {

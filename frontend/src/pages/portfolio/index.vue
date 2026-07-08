@@ -466,7 +466,8 @@ async function confirmSubmitOrder() {
   showOrderConfirm.value = false
   submitting.value = true
   try {
-    await placeOrder({ symbol, side, quantity, order_type: 'market' })
+    // action: 小写 'buy'|'sell'，order_type: 大写
+    await placeOrder({ symbol, action: side, quantity, order_type: 'MARKET' })
     uni.showToast({ title: '下单成功', icon: 'success' })
     orderForm.value = { symbol: '', side: 'buy', quantity: '' }
     await Promise.all([loadAccount(), loadPositions()])

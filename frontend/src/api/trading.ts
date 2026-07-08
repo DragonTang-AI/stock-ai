@@ -102,12 +102,16 @@ export interface TradingStockInfo {
 }
 
 // ─── 下单请求 ───
+// 字段名与后端 /simulation/orders 接口对齐:
+//   action  小写 'buy'|'sell'
+//   quantity 整数，100 的整数倍
+//   order_type  大写 'MARKET'|'LIMIT'
 
 export interface PlaceOrderRequest {
   symbol: string
-  side: OrderSide
-  order_type: OrderType
-  qty: number
+  action: 'buy' | 'sell'
+  order_type: 'MARKET' | 'LIMIT'
+  quantity: number
   price?: number
 }
 
@@ -235,9 +239,21 @@ export function estimateFee(params: FeeEstimateRequest): Promise<FeeEstimateResp
   })
 }
 
-/** 下单 → /simulation/orders */
+/** 下单 → /simulation/orders
+ * @description 将前端 PlaceOrderRequest 映射为后端期望的请求体:
+ *   - action: 小写 'buy'|'sell'
+ *   - quantity: 整数（100 的整数倍，由调用方保证）
+ *   - order_type: 大写 'MARKET'|'LIMIT'
+ *   - price: 数字
+ */
 export function placeOrder(params: PlaceOrderRequest): Promise<Order> {
-  return request<any>('/simulation/orders', { method: 'POST', data: params })
+  const payload = {
+    symbol: params.symbol,
+    action: params.action,
+    quantity: params.quantity,
+    price: params.price ?? null,
+  }
+  return request<any>('/simulation/orders', { method: 'POST', data: payload })
     .then(res => res?.data || res || {})
 }
 
