@@ -251,6 +251,24 @@ export async function fetchKline(params: {
   }
 }
 
+/** 大盘指数 → /market/indices */
+export interface IndexItem {
+  symbol: string
+  name: string
+  price: number
+  change_pct: number
+}
+
+export function fetchIndices(): Promise<IndexItem[]> {
+  return request<any>('/market/indices', { method: 'GET' })
+    .then(res => {
+      const data = res?.data || res || []
+      if (Array.isArray(data)) return data
+      return []
+    })
+    .catch(() => [])
+}
+
 export const marketApi = {
   getDetail: (symbol: string) => request<any>(`/market/detail/${symbol}`),
 }

@@ -150,8 +150,8 @@
             <view class="trade-row">
               <text class="trade-label">方向</text>
               <view class="side-tabs">
-                <view class="side-tab" :class="{ active: tradeSide === 'BUY' }" @click="tradeSide = 'BUY'">买入</view>
-                <view class="side-tab" :class="{ active: tradeSide === 'SELL' }" @click="tradeSide = 'SELL'">卖出</view>
+                <view class="side-tab" :class="{ active: tradeSide === 'buy' }" @click="tradeSide = 'buy'">买入</view>
+                <view class="side-tab" :class="{ active: tradeSide === 'sell' }" @click="tradeSide = 'sell'">卖出</view>
               </view>
             </view>
             <view class="trade-row">

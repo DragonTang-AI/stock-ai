@@ -127,7 +127,7 @@ export function getHostedSignals(params?: { limit?: number; offset?: number }): 
   total: number; signals: HostedSignal[];
 }> {
   return request<{ total: number; signals: HostedSignal[] }>(
-    '/hosted/signals', { method: 'GET', params }
+    '/signals', { method: 'GET', params }
   )
 }
 

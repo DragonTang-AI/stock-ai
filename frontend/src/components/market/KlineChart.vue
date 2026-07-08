@@ -186,9 +186,10 @@ onMounted(() => {
   nextTick(() => {
     renderChart()
     // #ifdef H5
-    if (chartContainer.value && typeof ResizeObserver !== 'undefined') {
+    const el = chartContainer.value
+    if (el && el instanceof Element && typeof ResizeObserver !== 'undefined') {
       resizeObserver = new ResizeObserver(handleResize)
-      resizeObserver.observe(chartContainer.value)
+      resizeObserver.observe(el)
     }
     // #endif
   })

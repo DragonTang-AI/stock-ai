@@ -126,8 +126,8 @@
           <view class="trade-row">
             <text class="trade-label">方向</text>
             <view class="side-tabs">
-              <view class="side-tab" :class="{ active: tradeSide === 'BUY' }" @click="tradeSide = 'BUY'">买入</view>
-              <view class="side-tab" :class="{ active: tradeSide === 'SELL' }" @click="tradeSide = 'SELL'">卖出</view>
+              <view class="side-tab" :class="{ active: tradeSide === 'buy' }" @click="tradeSide = 'buy'">买入</view>
+              <view class="side-tab" :class="{ active: tradeSide === 'sell' }" @click="tradeSide = 'sell'">卖出</view>
             </view>
           </view>
           <view class="trade-row">
@@ -175,7 +175,7 @@ const isInWatchlist = ref(false)
 
 // 快速交易弹窗
 const showTradeModal = ref(false)
-const tradeSide = ref<OrderSide>('BUY')
+const tradeSide = ref<OrderSide>('buy')
 const tradePrice = ref('')
 const tradeQty = ref('')
 const tradeError = ref('')
