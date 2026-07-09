@@ -1,7 +1,7 @@
 <template>
   <view class="pie-chart-wrapper">
     <!-- #ifdef H5 -->
-    <view ref="chartRef" class="chart-canvas" :style="{ height: height }"></view>
+    <view id="chart-container" class="chart-canvas" :style="{ height: height }"></view>
     <!-- #endif -->
     <!-- #ifndef H5 -->
     <view class="chart-fallback" :style="{ height: height }">
@@ -27,8 +27,8 @@ import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import * as echarts from 'echarts/core'
 import { PieChart } from 'echarts/charts'
 import { TooltipComponent, LegendComponent } from 'echarts/components'
-import { CanvasRenderer } from 'echarts/renderers'
-echarts.use([PieChart, TooltipComponent, LegendComponent, CanvasRenderer])
+import { SVGRenderer } from 'echarts/renderers'
+echarts.use([PieChart, TooltipComponent, LegendComponent, SVGRenderer])
 // #endif
 
 import { getThemeState, onThemeChange } from '@/utils/theme'
@@ -54,7 +54,6 @@ const colorPalette = [
   '#EC4899', '#06B6D4', '#F97316', '#84CC16', '#6366F1',
 ]
 
-const chartRef = ref<HTMLElement | null>(null)
 const isDark = ref(getThemeState().isDark)
 let chartInstance: any = null
 let unsubscribeTheme: (() => void) | null = null
@@ -106,9 +105,9 @@ function buildOption() {
 
 function initChart() {
   // #ifdef H5
-  if (!chartRef.value || !props.data.length) return
+  if (!document.getElementById("chart-container") || !props.data.length) return
   if (chartInstance) chartInstance.dispose()
-  chartInstance = echarts.init(chartRef.value)
+  chartInstance = echarts.init(document.getElementById("chart-container"))
   chartInstance.setOption(buildOption())
   const handleResize = () => chartInstance?.resize()
   window.addEventListener('resize', handleResize)

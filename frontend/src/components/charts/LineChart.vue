@@ -13,7 +13,7 @@
     </view>
 
     <!-- #ifdef H5 -->
-    <view ref="chartRef" class="chart-canvas" :style="{ height: height }"></view>
+    <view id="chart-container" class="chart-canvas" :style="{ height: height }"></view>
     <!-- #endif -->
 
     <!-- #ifndef H5 -->
@@ -46,8 +46,8 @@ import { LineChart } from 'echarts/charts'
 import {
   TitleComponent, TooltipComponent, GridComponent, LegendComponent,
 } from 'echarts/components'
-import { CanvasRenderer } from 'echarts/renderers'
-echarts.use([LineChart, TitleComponent, TooltipComponent, GridComponent, LegendComponent, CanvasRenderer])
+import { SVGRenderer } from 'echarts/renderers'
+echarts.use([LineChart, TitleComponent, TooltipComponent, GridComponent, LegendComponent, SVGRenderer])
 // #endif
 
 import { getThemeState, onThemeChange } from '@/utils/theme'
@@ -73,7 +73,6 @@ defineEmits<{
   'update:modelValue': [value: string]
 }>()
 
-const chartRef = ref<HTMLElement | null>(null)
 const isDark = ref(getThemeState().isDark)
 let chartInstance: any = null
 let unsubscribeTheme: (() => void) | null = null
@@ -140,9 +139,9 @@ function buildOption() {
 
 function initChart() {
   // #ifdef H5
-  if (!chartRef.value) return
+  if (!document.getElementById("chart-container")) return
   if (chartInstance) chartInstance.dispose()
-  chartInstance = echarts.init(chartRef.value)
+  chartInstance = echarts.init(document.getElementById("chart-container"))
   chartInstance.setOption(buildOption())
   const handleResize = () => chartInstance?.resize()
   window.addEventListener('resize', handleResize)
