@@ -37,7 +37,7 @@ from app.services.stock import (
     batch_add_watchlist,
 )
 
-router = APIRouter(prefix="/watchlist", tags=["自选股"])
+router = APIRouter(tags=["自选股"])
 
 
 @router.get("", response_model=WatchlistResponse)
