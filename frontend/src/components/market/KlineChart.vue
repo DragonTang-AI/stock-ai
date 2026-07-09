@@ -1,6 +1,5 @@
 <template>
   <view ref="chartWrapper" class="kline-chart">
-    <canvas ref="chartCanvas" class="chart-canvas"></canvas>
     <view v-if="loading" class="chart-loading-overlay">
       <text class="chart-loading-text">加载中...</text>
     </view>
@@ -36,7 +35,6 @@ const props = defineProps<{
   period?: string
 }>()
 
-const chartCanvas = ref<HTMLCanvasElement | null>(null)
 const chartWrapper = ref<HTMLElement | null>(null)
 const isDark = ref(getThemeState().isDark)
 let chartInstance: any = null
@@ -82,13 +80,13 @@ function downsampleIfNeeded(points: KlinePoint[]): { sampled: KlinePoint[]; isSa
 }
 
 function renderChart() {
-  if (!chartCanvas.value || !props.points?.length) return
+  if (!chartWrapper.value || !props.points?.length) return
   // #ifdef H5
   const colors = getChartColors(isDark.value)
   const { sampled } = downsampleIfNeeded(props.points)
 
   if (!chartInstance) {
-    chartInstance = echarts.init(chartCanvas.value, undefined, { renderer: 'svg' })
+    chartInstance = echarts.init(chartWrapper.value, undefined, { renderer: 'svg' })
   }
 
   const dates = toDates(sampled)
