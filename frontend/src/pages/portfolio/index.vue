@@ -258,6 +258,52 @@
       </view>
     </scroll-view>
 
+    <!-- AI托管 Tab -->
+    <scroll-view v-if="activeTab === 'hosted'" class="content" scroll-y>
+      <!-- 加载中 -->
+      <view class="loading-state" v-if="hostedLoading">
+        <text>加载中...</text>
+      </view>
+      <!-- AI托管内容 -->
+      <template v-else-if="hostedStatus">
+        <view class="hosted-section">
+          <view class="hosted-mode-row">
+            <text class="hosted-label">AI 托管模式</text>
+            <view class="hosted-toggle" :class="{ active: hostedStatus.is_active }">
+              {{ hostedStatus.is_active ? '已开启' : '已关闭' }}
+            </view>
+          </view>
+          <view class="hosted-stats-grid">
+            <view class="hosted-stat-item">
+              <text class="hosted-stat-num">{{ hostedStatus.total_trades }}</text>
+              <text class="hosted-stat-label">总信号</text>
+            </view>
+            <view class="hosted-stat-item">
+              <text class="hosted-stat-num">{{ hostedStatus.total_triggered }}</text>
+              <text class="hosted-stat-label">执行成功</text>
+            </view>
+            <view class="hosted-stat-item">
+              <text class="hosted-stat-num">{{ hostedStatus.total_blocked }}</text>
+              <text class="hosted-stat-label">拦截数</text>
+            </view>
+            <view class="hosted-stat-item">
+              <text class="hosted-stat-num">{{ hostedStatus.active_signals_today }}</text>
+              <text class="hosted-stat-label">今日信号</text>
+            </view>
+          </view>
+          <view class="hosted-link" @click="goHostedDetail">
+            <text>查看托管详情</text>
+            <text class="hosted-arrow">&gt;</text>
+          </view>
+        </view>
+      </template>
+      <!-- 空状态 -->
+      <view class="empty-state" v-else-if="!hostedLoading">
+        <text class="empty-text">AI托管服务未就绪</text>
+        <button class="btn-retry" @click="loadHostedStatus">重试</button>
+      </view>
+    </scroll-view>
+
     <!-- 订单 Tab -->
     <scroll-view v-if="activeTab === 'orders'" class="content" scroll-y>
       <view v-if="orders.length === 0" class="empty-state">
@@ -324,9 +370,11 @@ import {
   getAccount, getPositions, getOrders, placeOrder, getTrades, getPortfolioAnalytics,
   type AccountInfo, type PositionItem, type OrderItem, type TradeItem, type PositionAnalytics,
 } from '@/api/portfolio'
+import { getHostedStatus, type HostedStatus } from '@/api/hosted'
 
 const tabs = [
   { key: 'positions', label: '持仓' },
+  { key: 'hosted', label: 'AI托管' },
   { key: 'orders', label: '订单' },
   { key: 'trades', label: '成交' },
 ]
@@ -354,6 +402,10 @@ let unsubNetwork: (() => void) | null = null
 // T-M011 持仓分析
 const analytics = ref<PositionAnalytics | null>(null)
 const sectorColors = ['#3B82F6', '#F59E0B', '#10B981', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#F97316']
+
+// T-M052 AI托管状态
+const hostedStatus = ref<HostedStatus | null>(null)
+const hostedLoading = ref(false)
 
 // ─── 二次确认 ───
 const showOrderConfirm = ref(false)
@@ -395,6 +447,7 @@ function switchTab(key: string) {
   activeTab.value = key
   if (key === 'orders') loadOrders()
   else if (key === 'trades') loadTrades()
+  else if (key === 'hosted') loadHostedStatus()
 }
 
 function goDetail(symbol: string) {
@@ -403,6 +456,10 @@ function goDetail(symbol: string) {
 
 function goAnalytics() {
   uni.navigateTo({ url: '/pages/portfolio/analytics' })
+}
+
+function goHostedDetail() {
+  uni.navigateTo({ url: '/pages/hosted/index' })
 }
 
 async function loadAccount() {
@@ -434,9 +491,15 @@ async function loadAnalytics() {
   try { analytics.value = await getPortfolioAnalytics() } catch { /* ignore */ }
 }
 
+async function loadHostedStatus() {
+  hostedLoading.value = true
+  try { hostedStatus.value = await getHostedStatus() } catch { /* ignore */ }
+  finally { hostedLoading.value = false }
+}
+
 async function refreshAll() {
   isLoading.value = true
-  await Promise.all([loadAccount(), loadPositions(), loadAnalytics()])
+  await Promise.all([loadAccount(), loadPositions(), loadAnalytics(), loadHostedStatus()])
   isLoading.value = false
 }
 
@@ -514,6 +577,7 @@ onUnmounted(() => {
 
 onShow(() => {
   loadAnalytics()
+  if (activeTab.value === 'hosted') loadHostedStatus()
   // 回前台时刷新离线状态
   offline.value = isOfflineMode()
   trackPageView('portfolio')
@@ -743,4 +807,100 @@ onShow(() => {
 .sector-weight { font-size: $font-size-sm; font-weight: 600; color: $text-primary; width: 80rpx; text-align: right; }
 .sector-bar-wrap { height: 12rpx; background: $bg-page; border-radius: 6rpx; overflow: hidden; }
 .sector-bar { height: 100%; border-radius: 6rpx; min-width: 4rpx; transition: width 0.5s ease; }
+
+/* ─── AI托管 Tab ─── */
+.hosted-section {
+  background: $bg-card;
+  margin: 16rpx 24rpx;
+  border-radius: $border-radius-lg;
+  padding: 28rpx;
+}
+
+.hosted-mode-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24rpx;
+}
+
+.hosted-label {
+  font-size: $font-size-base;
+  font-weight: 600;
+  color: $text-primary;
+}
+
+.hosted-toggle {
+  font-size: $font-size-xs;
+  padding: 6rpx 20rpx;
+  border-radius: 20rpx;
+  background: #f0f0f0;
+  color: $text-hint;
+
+  &.active {
+    background: rgba(74, 144, 226, 0.12);
+    color: #4A90E2;
+  }
+}
+
+.hosted-stats-grid {
+  display: flex;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+
+.hosted-stat-item {
+  flex: 1;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  padding: 16rpx 0;
+  background: $bg-page;
+  border-radius: $border-radius;
+}
+
+.hosted-stat-num {
+  font-size: $font-size-xl;
+  font-weight: 700;
+  color: $text-primary;
+}
+
+.hosted-stat-label {
+  font-size: $font-size-xs;
+  color: $text-hint;
+}
+
+.hosted-link {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #4A90E2;
+  font-size: $font-size-sm;
+  font-weight: 500;
+  padding: 12rpx 0 0;
+  border-top: 1rpx solid $border-color;
+}
+
+.hosted-arrow {
+  font-size: $font-size-sm;
+}
+
+/* Loading state */
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 0;
+  font-size: 28rpx;
+  color: $text-hint;
+}
+
+.btn-retry {
+  margin-top: 24rpx;
+  background: $color-primary;
+  color: #fff;
+  border-radius: 12rpx;
+  font-size: 26rpx;
+  padding: 12rpx 48rpx;
+}
 </style>

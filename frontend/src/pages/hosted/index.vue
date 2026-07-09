@@ -5,10 +5,10 @@
 
     <!-- 审核模式提示 -->
     <view class="audit-banner" v-if="status?.is_audit_mode">
-      <view class="audit-icon">⚠</view>
+      <view class="audit-icon">&#x26A0;</view>
       <view class="audit-content">
         <text class="audit-title">审核模式</text>
-        <text class="audit-desc">AI托管存在风险，请密切关注。审核模式下交易功能暂停。</text>
+        <text class="audit-desc">系统目前处于审核模式，信号仅记录不下单。如需正式运行，请联系管理员。</text>
       </view>
     </view>
 
@@ -61,6 +61,26 @@
           <text class="grid-label">开启时间</text>
           <text class="grid-value muted">{{ formatDate(status.enabled_at) }}</text>
         </view>
+      </view>
+    </view>
+
+    <!-- 统计卡片（4格横排） -->
+    <view class="stats-row" v-if="status?.is_active">
+      <view class="stat-card stat-total">
+        <text class="stat-num">{{ status.total_trades }}</text>
+        <text class="stat-label">总信号</text>
+      </view>
+      <view class="stat-card stat-triggered">
+        <text class="stat-num">{{ status.total_triggered }}</text>
+        <text class="stat-label">执行成功</text>
+      </view>
+      <view class="stat-card stat-blocked">
+        <text class="stat-num">{{ status.total_blocked }}</text>
+        <text class="stat-label">风控拦截</text>
+      </view>
+      <view class="stat-card stat-today">
+        <text class="stat-num">{{ status.active_signals_today }}</text>
+        <text class="stat-label">今日信号</text>
       </view>
     </view>
 
@@ -167,50 +187,43 @@
       </button>
     </view>
 
-    <!-- 信号日志 -->
+    <!-- 交易日志 -->
     <view class="section" v-if="status?.is_active">
       <view class="section-header">
-        <text class="section-title">信号日志</text>
-        <text class="section-action" @click="loadSignals">刷新</text>
+        <text class="section-title">交易日志</text>
+        <text class="section-action" @click="loadLogs">刷新</text>
       </view>
 
-      <view class="signal-list">
+      <view class="log-list">
         <view
-          class="signal-item"
-          v-for="sig in signals"
-          :key="sig.id"
+          class="log-item"
+          v-for="log in logs"
+          :key="log.id"
+          @click="goDetail(log.symbol)"
         >
-          <view class="signal-row top">
-            <view class="signal-action" :class="actionClass(sig.action)">
-              <text>{{ actionIcon(sig.action) }}</text>
-              <text>{{ actionLabel(sig.action) }}</text>
-            </view>
-            <text class="signal-symbol">{{ sig.symbol }}</text>
-            <text class="signal-status" :class="'status-' + sig.status">
-              {{ statusLabel(sig.status) }}
-            </text>
+          <view class="log-row top">
+            <text class="log-time">{{ formatLogTime(log.created_at) }}</text>
           </view>
-          <view class="signal-row mid">
-            <text class="signal-price" v-if="sig.price">
-              价格 {{ formatPrice(sig.price) }}
-            </text>
-            <text class="signal-confidence">
-              置信度 {{ sig.confidence }}%
-            </text>
+          <view class="log-row stock">
+            <text class="log-name">{{ log.symbol_name || log.symbol }}</text>
+            <text class="log-symbol" v-if="log.symbol_name">{{ log.symbol }}</text>
           </view>
-          <view class="signal-row bottom">
-            <text class="signal-reason" v-if="sig.reason">{{ sig.reason }}</text>
-            <text class="signal-time">{{ formatTime(sig.created_at) }}</text>
+          <view class="log-row tags">
+            <text class="log-action" :class="actionTagClass(log.action)">{{ actionLabel(log.action) }}</text>
+            <text class="log-status" :class="statusTagClass(log.status)">{{ statusLabel(log.status) }}</text>
+          </view>
+          <view class="log-row reason" v-if="log.reason">
+            <text class="log-reason-text">{{ log.reason }}</text>
           </view>
         </view>
       </view>
 
-      <view class="list-more" v-if="signalTotal > signals.length" @click="loadMoreSignals">
-        <text>加载更多 ({{ signalTotal - signals.length }} 条)</text>
+      <view class="list-more" v-if="logTotal > logs.length" @click="loadMoreLogs">
+        <text>加载更多 ({{ logTotal - logs.length }} 条)</text>
       </view>
 
-      <view class="signal-empty" v-if="!signals.length && !loadingSignals">
-        <text>暂无信号日志</text>
+      <view class="signal-empty" v-if="!logs.length && !loadingLogs">
+        <text>暂无交易日志</text>
       </view>
     </view>
 
@@ -241,9 +254,9 @@ import {
   getHostedStatus,
   switchHosted,
   updateHostedConfig,
-  getHostedSignals,
+  getHostedTradeLogs,
   type HostedStatus,
-  type HostedSignal,
+  type HostedTradeLog,
   type HostedMode,
   type RiskLevel,
   type HostedConfigRequest,
@@ -259,12 +272,12 @@ const riskLevels = [
 const isLoading = ref(false)
 const savingConfig = ref(false)
 const isSwitching = ref(false)
-const loadingSignals = ref(false)
+const loadingLogs = ref(false)
 const status = ref<HostedStatus | null>(null)
 
-const signals = ref<HostedSignal[]>([])
-const signalTotal = ref(0)
-const signalOffset = ref(0)
+const logs = ref<HostedTradeLog[]>([])
+const logTotal = ref(0)
+const logOffset = ref(0)
 
 const configForm = reactive<HostedConfigRequest & { single_trade_limit: string; daily_trade_limit: string; industry_concentration: string }>({
   risk_level: 'balanced',
@@ -278,58 +291,45 @@ function riskLabel(level: RiskLevel): string {
   return RiskLevelLabel[level] || level
 }
 
-function actionIcon(action: string): string {
-  switch (action) {
-    case 'BUY':
-    case 'ADD':
-      return '🟢'
-    case 'HOLD':
-      return '🟡'
-    case 'SELL':
-    case 'REDUCE':
-      return '🔴'
-    default:
-      return ''
-  }
-}
-
 function actionLabel(action: string): string {
   switch (action) {
-    case 'BUY':
-      return '买入'
-    case 'ADD':
-      return '加仓'
-    case 'HOLD':
-      return '持仓'
-    case 'SELL':
-      return '卖出'
-    case 'REDUCE':
-      return '减仓'
-    default:
-      return action
+    case 'BUY': return '买入'
+    case 'ADD': return '加仓'
+    case 'HOLD': return '持仓'
+    case 'SELL': return '卖出'
+    case 'REDUCE': return '减仓'
+    default: return action
   }
 }
 
-function actionClass(action: string): string {
-  if (action === 'BUY' || action === 'ADD') return 'up'
-  if (action === 'SELL' || action === 'REDUCE') return 'down'
-  return 'neutral'
+function actionTagClass(action: string): string {
+  switch (action) {
+    case 'BUY': return 'act-buy'
+    case 'ADD': return 'act-add'
+    case 'SELL': return 'act-sell'
+    case 'REDUCE': return 'act-reduce'
+    case 'HOLD': return 'act-hold'
+    default: return ''
+  }
 }
 
 function statusLabel(status: string): string {
   switch (status) {
-    case 'PENDING':
-      return '待执行'
-    case 'EXECUTED':
-      return '已执行'
-    case 'REJECTED':
-      return '已拒绝'
-    case 'CANCELLED':
-      return '已取消'
-    case 'EXPIRED':
-      return '已过期'
-    default:
-      return status
+    case 'TRIGGERED': return '已触发'
+    case 'BLOCKED': return '已拦截'
+    case 'SKIPPED': return '已跳过'
+    case 'ERROR': return '异常'
+    default: return status
+  }
+}
+
+function statusTagClass(status: string): string {
+  switch (status) {
+    case 'TRIGGERED': return 'sts-triggered'
+    case 'BLOCKED': return 'sts-blocked'
+    case 'SKIPPED': return 'sts-skipped'
+    case 'ERROR': return 'sts-error'
+    default: return ''
   }
 }
 
@@ -341,18 +341,20 @@ function formatDate(iso: string | null): string {
   return `${m}-${day}`
 }
 
-function formatTime(iso: string): string {
+function formatLogTime(iso: string): string {
   if (!iso) return '-'
   const d = new Date(iso)
   const m = (d.getMonth() + 1).toString().padStart(2, '0')
   const day = d.getDate().toString().padStart(2, '0')
   const h = d.getHours().toString().padStart(2, '0')
   const min = d.getMinutes().toString().padStart(2, '0')
-  return `${m}-${day} ${h}:${min}`
+  const s = d.getSeconds().toString().padStart(2, '0')
+  return `${m}-${day} ${h}:${min}:${s}`
 }
 
-function formatPrice(price: number): string {
-  return price.toFixed(2)
+function goDetail(symbol: string) {
+  if (!symbol) return
+  uni.navigateTo({ url: '/pages/detail/index?symbol=' + symbol })
 }
 
 /* ---- 数据加载 ---- */
@@ -362,7 +364,7 @@ async function loadStatus() {
     status.value = await getHostedStatus()
     fillConfigForm(status.value)
     if (status.value.is_active) {
-      await loadSignals()
+      await loadLogs()
     }
   } catch {
     status.value = null
@@ -388,10 +390,10 @@ async function handleToggle(e: { detail: { value: boolean } }) {
     status.value = await switchHosted(wantActive ? 'AI_HOSTED' : 'MANUAL')
     fillConfigForm(status.value)
     if (wantActive) {
-      await loadSignals()
+      await loadLogs()
     } else {
-      signals.value = []
-      signalTotal.value = 0
+      logs.value = []
+      logTotal.value = 0
     }
     uni.showToast({ title: wantActive ? '已开启AI托管' : '已关闭AI托管', icon: 'success' })
     trackAction(wantActive ? 'hosted_enable' : 'hosted_disable', { mode: wantActive ? 'AI_HOSTED' : 'MANUAL' })
@@ -429,27 +431,27 @@ async function handleSaveConfig() {
   }
 }
 
-/* ---- 信号日志 ---- */
-async function loadSignals() {
-  loadingSignals.value = true
+/* ---- 交易日志 ---- */
+async function loadLogs() {
+  loadingLogs.value = true
   try {
-    const res = await getHostedSignals({ limit: 15, offset: 0 })
-    signals.value = res.signals || []
-    signalTotal.value = res.total || 0
-    signalOffset.value = signals.value.length
+    const res = await getHostedTradeLogs(50, 0)
+    logs.value = res.logs || []
+    logTotal.value = res.total || 0
+    logOffset.value = logs.value.length
   } catch {
     /* ignore */
   } finally {
-    loadingSignals.value = false
+    loadingLogs.value = false
   }
 }
 
-async function loadMoreSignals() {
+async function loadMoreLogs() {
   try {
-    const res = await getHostedSignals({ limit: 15, offset: signalOffset.value })
-    signals.value.push(...(res.signals || []))
-    signalTotal.value = res.total || 0
-    signalOffset.value = signals.value.length
+    const res = await getHostedTradeLogs(50, logOffset.value)
+    logs.value.push(...(res.logs || []))
+    logTotal.value = res.total || 0
+    logOffset.value = logs.value.length
   } catch {
     /* ignore */
   }
@@ -575,15 +577,59 @@ onShow(() => {
 .risk-tag {
   display: inline;
 
-  &.risk-conservative { color: var(--color-down, #34C759);
-  }
+  &.risk-conservative { color: var(--color-down, #34C759); }
+  &.risk-balanced { color: #FFC107; }
+  &.risk-aggressive { color: var(--color-up, #E25C5C); }
+}
 
-  &.risk-balanced {
-    color: #FFC107;
-  }
+/* ---- 统计卡片 4 格 ---- */
+.stats-row {
+  display: flex;
+  margin: 16rpx 24rpx;
+  gap: 12rpx;
+}
 
-  &.risk-aggressive { color: var(--color-up, #E25C5C);
-  }
+.stat-card {
+  flex: 1;
+  border-radius: 12rpx;
+  padding: 20rpx 12rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.stat-num {
+  font-size: 36rpx;
+  font-weight: 700;
+}
+
+.stat-label {
+  font-size: 22rpx;
+}
+
+.stat-total {
+  background: #E8F0FE;
+  .stat-num { color: #4A90E2; }
+  .stat-label { color: #4A90E2; }
+}
+
+.stat-triggered {
+  background: #E6F9ED;
+  .stat-num { color: #34C759; }
+  .stat-label { color: #34C759; }
+}
+
+.stat-blocked {
+  background: #FFF3E0;
+  .stat-num { color: #F59E0B; }
+  .stat-label { color: #F59E0B; }
+}
+
+.stat-today {
+  background: #EDE9FE;
+  .stat-num { color: #8B5CF6; }
+  .stat-label { color: #8B5CF6; }
 }
 
 /* ---- Section ---- */
@@ -676,17 +722,9 @@ onShow(() => {
   height: 16rpx;
   border-radius: 50%;
 
-  &.risk-conservative {
-    background: #34C759;
-  }
-
-  &.risk-balanced {
-    background: #FFC107;
-  }
-
-  &.risk-aggressive {
-    background: #E25C5C;
-  }
+  &.risk-conservative { background: #34C759; }
+  &.risk-balanced { background: #FFC107; }
+  &.risk-aggressive { background: #E25C5C; }
 }
 
 .risk-name {
@@ -731,106 +769,119 @@ onShow(() => {
   }
 }
 
-/* ---- 信号日志 ---- */
-.signal-list {
+/* ---- 交易日志 ---- */
+.log-list {
   display: flex;
   flex-direction: column;
   gap: 12rpx;
 }
 
-.signal-item {
+.log-item {
   padding: 20rpx;
   background: var(--bg-input, #f8f9fc);
   border-radius: 12rpx;
 }
 
-.signal-row {
+.log-row {
   display: flex;
   align-items: center;
 
   &.top {
-    margin-bottom: 10rpx;
-  }
-
-  &.mid {
     margin-bottom: 6rpx;
   }
 
-  &.bottom {
-    justify-content: space-between;
+  &.stock {
+    margin-bottom: 8rpx;
+  }
+
+  &.tags {
+    margin-bottom: 6rpx;
+    gap: 10rpx;
+  }
+
+  &.reason {
+    /* reason 单独行 */
   }
 }
 
-.signal-action {
-  display: flex;
-  align-items: center;
-  gap: 4rpx;
-  font-size: 26rpx;
-  font-weight: 600;
+.log-time {
+  font-size: 22rpx;
+  color: var(--text-hint, #ccc);
 }
 
-.signal-symbol {
-  font-size: 26rpx;
+.log-name {
+  font-size: 28rpx;
   font-weight: 600;
   color: var(--text-primary, #1a1a2e);
-  margin-left: 12rpx;
-  flex: 1;
 }
 
-.signal-status {
+.log-symbol {
+  font-size: 22rpx;
+  color: var(--text-hint, #999);
+  margin-left: 8rpx;
+}
+
+/* 操作标签 */
+.log-action {
   font-size: 22rpx;
   padding: 2rpx 12rpx;
   border-radius: 20rpx;
-  background: var(--bg-input, #e8e8e8);
-  color: var(--text-secondary, #666);
+  font-weight: 600;
 
-  &.status-EXECUTED {
-    background: #D4EDDA;
-    color: #155724;
-  }
-
-  &.status-REJECTED {
-    background: #F8D7DA;
-    color: #721C24;
-  }
-
-  &.status-PENDING {
+  &.act-buy {
     background: #D1ECF1;
     color: #0C5460;
   }
-
-  &.status-CANCELLED,
-  &.status-EXPIRED {
-    background: var(--bg-input, #e8e8e8);
-    color: var(--text-hint, #999);
+  &.act-add {
+    background: #D4EDDA;
+    color: #155724;
+  }
+  &.act-sell {
+    background: #F8D7DA;
+    color: #721C24;
+  }
+  &.act-reduce {
+    background: #FFF3E0;
+    color: #856404;
+  }
+  &.act-hold {
+    background: #E8E8E8;
+    color: #666;
   }
 }
 
-.signal-price {
-  font-size: 24rpx;
-  color: var(--text-secondary, #666);
-  margin-right: 24rpx;
+/* 状态标签 */
+.log-status {
+  font-size: 22rpx;
+  padding: 2rpx 12rpx;
+  border-radius: 20rpx;
+
+  &.sts-triggered {
+    background: #D4EDDA;
+    color: #155724;
+  }
+  &.sts-blocked {
+    background: #FFF3E0;
+    color: #856404;
+  }
+  &.sts-skipped {
+    background: #E8E8E8;
+    color: #999;
+  }
+  &.sts-error {
+    background: #F8D7DA;
+    color: #721C24;
+  }
 }
 
-.signal-confidence {
-  font-size: 24rpx;
-  color: var(--color-primary, #4A90E2);
-}
-
-.signal-reason {
+.log-reason-text {
   font-size: 22rpx;
   color: var(--text-hint, #999);
-  flex: 1;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  margin-right: 16rpx;
-}
-
-.signal-time {
-  font-size: 22rpx;
-  color: var(--text-hint, #ccc);
-  flex-shrink: 0;
 }
 
 .signal-empty {
@@ -859,15 +910,9 @@ onShow(() => {
 }
 
 /* ---- 颜色 ---- */
-.up { color: var(--color-up, #E25C5C);
-}
-
-.down { color: var(--color-down, #34C759);
-}
-
-.neutral {
-  color: #FFC107;
-}
+.up { color: var(--color-up, #E25C5C); }
+.down { color: var(--color-down, #34C759); }
+.neutral { color: #FFC107; }
 
 /* ---- 状态页 ---- */
 .loading-state,

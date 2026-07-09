@@ -30,6 +30,10 @@ export interface HostedStatus {
   industry_concentration: number | null
   auto_stop_loss: boolean
   total_trades: number
+  total_triggered: number  // 执行成功
+  total_blocked: number    // 风控拦截
+  total_skipped: number    // 重复跳过
+  total_error: number      // 执行异常
   active_signals_today: number
   daily_loss_pct: number | null
   is_audit_mode: boolean
@@ -81,6 +85,22 @@ export interface HostedSignal {
   reason: string | null
 }
 
+/** 交易日志项（对齐 HostedTradeLog，比 HostedLog 多 symbol_name 字段） */
+export interface HostedTradeLog {
+  id: string
+  signal_id: string | null
+  order_id: string | null
+  action: string       // BUY | ADD | SELL | REDUCE | HOLD
+  symbol: string
+  symbol_name: string  // 股票中文名，如"兆易创新"
+  target_price: number | null
+  qty: number | null
+  reason: string | null  // 自然语言理由
+  status: string         // TRIGGERED | BLOCKED | SKIPPED | ERROR
+  error: string | null
+  created_at: string
+}
+
 /** 信号→订单请求（对齐 SignalToOrderRequest） */
 export interface SignalToOrderRequest {
   symbol: string
@@ -129,6 +149,12 @@ export function getHostedSignals(params?: { limit?: number; offset?: number }): 
   return request<{ total: number; signals: HostedSignal[] }>(
     '/signals', { method: 'GET', params }
   )
+}
+
+/** 获取交易日志列表（对齐 GET /hosted/logs） */
+export async function getHostedTradeLogs(limit: number = 50, offset: number = 0): Promise<{ total: number; logs: HostedTradeLog[] }> {
+  const res = await request('/hosted/logs', { method: 'GET', data: { limit, offset } })
+  return res as any
 }
 
 /** 手动触发信号（用于调试） */
