@@ -144,7 +144,7 @@ function showToast(msg: string) {
 }
 
 async function handleLogout() {
-  await authStore.handleLogout()
+  await authStore.logout()
   uni.reLaunch({ url: '/pages/login/index' })
 }
 </script>

@@ -109,10 +109,14 @@ async function flush() {
   }
 
   try {
+    const token = uni.getStorageSync('accessToken')
     await uni.request({
       url: REPORT_URL,
       method: 'POST',
-      header: { 'Content-Type': 'application/json' },
+      header: { 
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       data: batch,
       timeout: 5000,
     })
