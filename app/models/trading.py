@@ -86,6 +86,10 @@ class Order(Base):
         comment="pending / filled / partial / canceled / rejected"
     )
     reject_reason: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    signal_id: Mapped[str | None] = mapped_column(
+        String(36), default=None, nullable=True, index=True,
+        comment="关联 AI 信号 ID（AI托管下单溯源）"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )

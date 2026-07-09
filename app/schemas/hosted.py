@@ -24,6 +24,10 @@ class HostedStatusResponse(BaseModel):
 
     # 实时统计
     total_trades: int = 0
+    total_triggered: int = 0    # 执行成功
+    total_blocked: int = 0      # 风控拦截
+    total_skipped: int = 0      # 重复跳过
+    total_error: int = 0        # 执行异常
     active_signals_today: int = 0
     daily_loss_pct: Optional[float] = None
 
@@ -48,6 +52,7 @@ class HostedLogItem(BaseModel):
     order_id: Optional[int]
     action: str
     symbol: str
+    symbol_name: Optional[str] = None  # 股票名称（从行情服务获取）
     target_price: Optional[float]
     qty: Optional[int]
     reason: Optional[str]

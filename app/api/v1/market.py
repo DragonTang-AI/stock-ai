@@ -3,6 +3,7 @@ app/api/v1/market.py — 行情路由（真实 AkShare 实现）
 公开行情数据，无需登录即可访问
 """
 from fastapi import APIRouter, Depends, Query
+from app.integrations.market_data import get_market_data_adapter
 from typing import List, Optional
 from app.models.user import User
 from app.api.v1.auth import get_current_user_optional
@@ -122,3 +123,55 @@ async def get_stock_detail(
         raise
     except Exception as e:
         raise AppException(code="DETAIL_FAILED", message=f"获取详情失败: {e}", status_code=500)
+
+
+# 大盘指数
+import httpx
+INDEX_NAME_MAP = {"sh000001": "上证指数", "sz399001": "深证成指", "sz399006": "创业板指"}
+INDEX_CODE_MAP = {"sh000001": "000001", "sz399001": "399001", "sz399006": "399006"}
+
+
+@router.get("/indices")
+async def get_market_indices():
+    """获取三大指数实时行情（新浪源）"""
+    url = "http://hq.sinajs.cn/list=sh000001,sz399001,sz399006"
+    headers = {"Referer": "https://finance.sina.com.cn"}
+    try:
+        async with httpx.AsyncClient(headers=headers, timeout=10) as client:
+            resp = await client.get(url)
+            text = resp.content.decode("gbk")
+    except Exception:
+        return {"success": True, "data": []}
+
+    indices = []
+    for line in text.strip().split("\n"):
+        if "=" not in line or "\"\"" in line:
+            continue
+        try:
+            left, right = line.split("=", 1)
+            sina_code = left.split("_str_")[1].strip()
+            fields_str = right.strip().strip(";").strip().strip('"')
+            fields = fields_str.split(",")
+            if len(fields) < 33:
+                continue
+            name = fields[0]
+            open_p = float(fields[1])
+            prev_close = float(fields[2])
+            price = float(fields[3])
+            high = float(fields[4])
+            low = float(fields[5])
+            change = price - prev_close
+            change_pct = (change / prev_close * 100) if prev_close else 0
+            indices.append({
+                "symbol": sina_code,
+                "name": name or INDEX_NAME_MAP.get(sina_code, sina_code),
+                "code": INDEX_CODE_MAP.get(sina_code, sina_code),
+                "price": price,
+                "change": round(change, 2),
+                "change_pct": round(change_pct, 2),
+                "open": open_p, "high": high, "low": low,
+                "prev_close": prev_close, "volume": int(fields[8]) if fields[8].isdigit() else 0,
+            })
+        except Exception:
+            continue
+    return {"success": True, "data": indices}

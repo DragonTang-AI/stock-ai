@@ -3,7 +3,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 from sqlalchemy import text
-from app.core.database import async_session_maker
+from app.core.database import get_session_factory
 from app.core.exceptions import AppException
 
 logger = logging.getLogger(__name__)
@@ -39,14 +39,20 @@ async def run_hosted_signal_processor():
     """
     logger.info("[托管调度] 开始处理托管信号...")
     
-    async with async_session_maker() as db:
+    async with get_session_factory()() as db:
         try:
             from app.services.committee_service import run_committee_analysis
             from app.services import hosted as hosted_svc
-            
-            # 运行选股
-            signals = await run_committee_analysis(market="A", limit=20)
-            buy_signals = [s for s in signals if s.action == "BUY"]
+            from datetime import date
+
+            # 运行选股（4-Agent 委员会）
+            committee_result = await run_committee_analysis(
+                market="A", trade_date=date.today()
+            )
+            buy_signals = [
+                s for s in committee_result.signals
+                if str(s.action.value) == "BUY"
+            ]
             logger.info(f"[托管调度] BUY 信号: {len(buy_signals)} 个")
             
             if not buy_signals:
@@ -74,17 +80,17 @@ async def run_hosted_signal_processor():
                             db=db,
                             user=_User(user_id),
                             symbol=signal.symbol,
-                            signal_id=signal.id or "scheduled",
-                            action=signal.action,
+                            signal_id=signal.signal_id,
+                            action=signal.action.value,
                             confidence=signal.confidence,
                             target_price=signal.target_price or 0.0,
-                            reasoning=f"[定时调度] {signal.reason_codes[:2] if signal.reason_codes else []}",
+                            reasoning=signal.reasoning or f"[定时调度] {[str(c.value) for c in signal.reason_codes[:2]] if signal.reason_codes else []}",
                         )
                         executed += 1
                         logger.info(f"[托管调度] ✅ 用户{user_id} 执行 {signal.symbol}")
                     except AppException as e:
                         blocked += 1
-                        logger.debug(f"[托管调度] 拦截 {signal.symbol}: {e.detail}")
+                        logger.debug(f"[托管调度] 拦截 {signal.symbol}: {e.details}")
                     except Exception as e:
                         logger.warning(f"[托管调度] 异常 {signal.symbol}: {e}")
             

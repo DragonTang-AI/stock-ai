@@ -70,3 +70,4 @@ junit.xml
 reports/
 
 .git.claude_cursor.bak/
+.env

@@ -188,6 +188,20 @@ async def get_hosted_status(db: AsyncSession, user: User) -> HostedStatusRespons
         {"uid": uid},
     )
     total_trades = r2.scalar() or 0
+
+    # 细分统计
+    stats_r = await db.execute(
+        _text(
+            "SELECT status, COUNT(*) FROM public.hosted_logs WHERE user_id = :uid GROUP BY status"
+        ),
+        {"uid": uid},
+    )
+    stat_rows = stats_r.fetchall()
+    stat_map = {row[0]: row[1] for row in stat_rows}
+    total_triggered = stat_map.get("TRIGGERED", 0)
+    total_blocked = stat_map.get("BLOCKED", 0)
+    total_skipped = stat_map.get("SKIPPED", 0)
+    total_error = stat_map.get("ERROR", 0)
     
     daily_loss_pct = await _calc_daily_loss_pct(db, uid)
     disclaimer = cs.disclaimer_text if cs.disclaimer_enabled else None
@@ -201,6 +215,10 @@ async def get_hosted_status(db: AsyncSession, user: User) -> HostedStatusRespons
         max_single_trade_ratio=settings["max_single_trade_ratio"] if settings else None,
         min_confidence=settings["min_confidence"] if settings else None,
         total_trades=total_trades,
+        total_triggered=total_triggered,
+        total_blocked=total_blocked,
+        total_skipped=total_skipped,
+        total_error=total_error,
         active_signals_today=active_signals_today,
         daily_loss_pct=daily_loss_pct,
         is_audit_mode=cs.is_audit_mode,
@@ -531,6 +549,19 @@ async def get_hosted_logs(
     )
     rows = rows_r.fetchall()
     
+    # 提取所有股票代码，获取股票名称
+    symbols = list({r[4] for r in rows if r[4]})
+    symbol_names: dict[str, str] = {}
+    if symbols:
+        from app.integrations.market_data import get_market_data_adapter
+        adapter = get_market_data_adapter()
+        for sym in symbols:
+            try:
+                q: Any = await adapter.get_quote(sym)  # type: ignore
+                symbol_names[sym] = q.name
+            except Exception:
+                symbol_names[sym] = sym  # 回退为代码
+
     logs = [
         HostedLogItem(
             id=str(r[0]),
@@ -538,6 +569,7 @@ async def get_hosted_logs(
             order_id=r[2] if r[2] else None,
             action=r[3],
             symbol=r[4],
+            symbol_name=symbol_names.get(r[4]),
             target_price=float(r[5]) if r[5] is not None else None,
             qty=r[6],
             reason=r[7],
