@@ -7,6 +7,7 @@ app.api.v1.analysis.py — 智能投资助手路由
 - POST /chat/context      构建问答上下文（供 LLM 使用）
 - GET  /market/temperature 大盘温度计
 """
+import json
 import logging
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -148,3 +149,51 @@ async def get_market_temperature(
     """
     temp = await _get_market_temperature()
     return {"success": True, "data": temp}
+
+
+# ============== SSE 流式对话（新增） ==============
+
+@router.post("/chat/stream")
+async def chat_stream(
+    req: ChatRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    SSE 流式 AI 投资助手对话
+
+    前端通过 EventSource 消费 /analysis/chat/stream，
+    后端流式返回 LLM 生成内容。
+
+    Event: data: {"token": "xxx"}\n\n
+    结束:   data: [DONE]\n\n
+    错误:   data: {"error": "xxx"}\n\n
+    """
+    from fastapi.responses import StreamingResponse
+    from app.core.database import get_db_context
+    from app.services.advisor import build_chat_context
+    from app.services.llm import generate_streaming_response
+
+    async def event_stream():
+        try:
+            async with get_db_context() as db:
+                ctx = await build_chat_context(db, current_user, req.question)
+                async for sse_chunk in generate_streaming_response(
+                    question=req.question,
+                    portfolio_context=ctx.get("user_portfolio", {}),
+                    market_temperature=ctx.get("market_temperature", {}),
+                    model=req.model,
+                ):
+                    yield sse_chunk
+        except Exception as e:
+            logger.error(f"SSE 流式对话失败: {e}", exc_info=True)
+            yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

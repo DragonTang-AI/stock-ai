@@ -21,4 +21,5 @@ class ChatContextResponse(BaseModel):
 class ChatRequest(BaseModel):
     """投资问答请求"""
     question: str = Field(..., min_length=1, max_length=500, description="用户问题")
+    model: Optional[str] = Field("deepseek-v4-flash", description="模型名")
     context: Optional[dict] = Field(None, description="前端附加上下文（如当前页面）")
