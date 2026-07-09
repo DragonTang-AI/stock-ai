@@ -1,5 +1,5 @@
 <template>
-  <view ref="chartWrapper" class="kline-chart">
+  <view id="kline-chart-container" class="kline-chart">
     <view v-if="loading" class="chart-loading-overlay">
       <text class="chart-loading-text">加载中...</text>
     </view>
@@ -35,7 +35,6 @@ const props = defineProps<{
   period?: string
 }>()
 
-const chartWrapper = ref<HTMLElement | null>(null)
 const isDark = ref(getThemeState().isDark)
 let chartInstance: any = null
 let resizeObserver: any = null
@@ -80,13 +79,14 @@ function downsampleIfNeeded(points: KlinePoint[]): { sampled: KlinePoint[]; isSa
 }
 
 function renderChart() {
-  if (!chartWrapper.value || !props.points?.length) return
+  const nativeEl = document.getElementById("kline-chart-container")
+  if (!nativeEl || !props.points?.length) return
   // #ifdef H5
   const colors = getChartColors(isDark.value)
   const { sampled } = downsampleIfNeeded(props.points)
 
   if (!chartInstance) {
-    chartInstance = echarts.init(chartWrapper.value, undefined, { renderer: 'svg' })
+    chartInstance = echarts.init(nativeEl, undefined, { renderer: 'svg' })
   }
 
   const dates = toDates(sampled)
@@ -185,7 +185,7 @@ onMounted(() => {
   nextTick(() => {
     renderChart()
     // #ifdef H5
-    const el = chartWrapper.value
+    const el = document.getElementById("kline-chart-container")
     if (el && (el as any).nodeType === 1 && typeof ResizeObserver !== 'undefined') {
       resizeObserver = new ResizeObserver(handleResize)
       resizeObserver.observe(el as Element)
