@@ -16,12 +16,12 @@ import {
   TitleComponent, TooltipComponent, GridComponent,
   DataZoomComponent, MarkLineComponent, LegendComponent,
 } from 'echarts/components'
-import { CanvasRenderer } from 'echarts/renderers'
+import { SVGRenderer } from 'echarts/renderers'
 echarts.use([
   CandlestickChart, BarChart, LineChart,
   TitleComponent, TooltipComponent, GridComponent,
   DataZoomComponent, MarkLineComponent, LegendComponent,
-  CanvasRenderer,
+  SVGRenderer,
 ])
 // #endif
 
@@ -88,7 +88,7 @@ function renderChart() {
   const { sampled } = downsampleIfNeeded(props.points)
 
   if (!chartInstance) {
-    chartInstance = echarts.init(chartCanvas.value, undefined, { renderer: 'canvas' })
+    chartInstance = echarts.init(chartCanvas.value, undefined, { renderer: 'svg' })
   }
 
   const dates = toDates(sampled)

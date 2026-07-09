@@ -213,11 +213,19 @@ function flushMetrics(): void {
   }
 
   // 异步上报，不阻塞主线程
+  // 尝试注入 token 避免 401（未登录时跳过）
+  let token: string | undefined
+  try {
+    token = uni.getStorageSync('accessToken') as string | undefined
+  } catch { /* empty */ }
+  const header: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) header['Authorization'] = `Bearer ${token}`
+
   uni.request({
     url: reportEndpoint,
     method: 'POST',
     data: { metrics: batch },
-    header: { 'Content-Type': 'application/json' },
+    header,
     fail: () => { /* 上报失败不影响业务 */ },
   })
 }
