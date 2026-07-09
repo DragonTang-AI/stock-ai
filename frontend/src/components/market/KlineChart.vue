@@ -211,7 +211,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="scss" scoped>
-.kline-chart { width: 100%; position: relative; }
+.kline-chart { width: 100%; height: 600rpx; position: relative; }
 .chart-canvas { width: 100%; height: 600rpx; }
 .chart-loading-overlay {
   position: absolute; top: 0; left: 0; right: 0; bottom: 0;
