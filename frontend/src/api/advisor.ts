@@ -115,10 +115,7 @@ export function chatStream(
 
   fetch(`${SSE_BASE}/analysis/chat/stream`, {
     method: 'POST',
-    headers: { 
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      'Content-Type': 'application/json',
-    },
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'Content-Type': 'application/json' },
     body: JSON.stringify({ question, model }),
     signal: ctrl.signal,
   }).then(async res => {
