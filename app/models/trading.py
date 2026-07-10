@@ -45,6 +45,7 @@ class Account(Base):
     )
     balance: Mapped[float] = mapped_column(Numeric(18, 2), default=100000.0, nullable=False)
     frozen: Mapped[float] = mapped_column(Numeric(18, 2), default=0.0, nullable=False, comment="冻结资金（下单未成交）")
+    initial_cash: Mapped[float] = mapped_column(Numeric(18, 2), default=100000.0, nullable=False, comment="初始资金+累计充值")
     market: Mapped[str] = mapped_column(String(10), default="A", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
