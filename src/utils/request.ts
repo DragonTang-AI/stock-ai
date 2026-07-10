@@ -63,11 +63,12 @@ export class HttpError extends Error {
     public statusCode: number,
     public payload: any
   ) {
-    const msg = typeof payload === 'string' ? payload : (payload?.detail || '请求失败')
+    const data = typeof payload === 'string' ? null : payload
+    const msg = typeof payload === 'string' ? payload : (data?.message || data?.detail || '请求失败')
     super(msg)
     this.name = 'HttpError'
-    this.errorCode = typeof payload === 'object' ? payload?.error_code : undefined
-    this.detail = typeof payload === 'object' ? payload?.detail : undefined
+    this.errorCode = data?.code || data?.error_code || undefined
+    this.detail = data?.detail || data?.message || undefined
   }
 }
 

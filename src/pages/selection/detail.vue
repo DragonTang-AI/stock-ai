@@ -420,7 +420,7 @@ async function handlePlaceOrder() {
     showTradeModal.value = false
     uni.showToast({ title: '下单成功', icon: 'success' })
   } catch (e: any) {
-    tradeError.value = e?.message || '下单失败，请重试'
+    tradeError.value = getTradeErrorMessage(e)
   } finally {
     tradeSubmitting.value = false
   }

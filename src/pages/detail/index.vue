@@ -194,6 +194,7 @@ import { onShow } from '@dcloudio/uni-app'
 import KlineChart from '@/components/market/KlineChart.vue'
 import { fetchQuote, fetchKline, type QuoteSnapshot, type KlinePoint } from '@/api/market'
 import { placeOrder, fetchAccount, type OrderSide } from '@/api/trading'
+import { getTradeErrorMessage } from '@/utils/trade-errors'
 import { trackPageView } from '@/utils/tracker'
 
 const code = ref('')
@@ -410,7 +411,7 @@ async function handlePlaceOrder() {
     showTradeModal.value = false
     uni.showToast({ title: '下单成功', icon: 'success' })
   } catch (e: any) {
-    tradeError.value = e?.message || '下单失败，请重试'
+    tradeError.value = getTradeErrorMessage(e)
   } finally {
     tradeSubmitting.value = false
   }
