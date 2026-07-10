@@ -14,6 +14,7 @@
       <view class="account-header">
         <text class="account-type">模拟账户</text>
         <button class="btn-refresh" @click="refreshAll">刷新</button>
+        <button class="btn-topup" @click="showTopupModal = true">充值</button>
       </view>
       <view class="account-main">
         <text class="total-label">总资产</text>
@@ -367,7 +368,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import { isOfflineMode, onNetworkChange } from '@/utils/offline'
 import type { NetworkInfo } from '@/utils/network'
 import {
-  getAccount, getPositions, getOrders, placeOrder, getTrades, getPortfolioAnalytics,
+  getAccount, getPositions, getOrders, placeOrder, getTrades, getPortfolioAnalytics, topupAccount,
   type AccountInfo, type PositionItem, type OrderItem, type TradeItem, type PositionAnalytics,
 } from '@/api/portfolio'
 import { getHostedStatus, type HostedStatus } from '@/api/hosted'
@@ -410,6 +411,11 @@ const hostedLoading = ref(false)
 // ─── 二次确认 ───
 const showOrderConfirm = ref(false)
 const pendingOrderData = ref<{ symbol: string; side: 'buy' | 'sell'; quantity: number } | null>(null)
+
+// 充值
+const showTopupModal = ref(false)
+const topupAmount = ref(100000)
+const topupSubmitting = ref(false)
 
 /** 确认弹窗信息 */
 const confirmOrderMessage = computed(() => {
@@ -559,6 +565,22 @@ function cancelSubmitOrder() {
   pendingOrderData.value = null
 }
 
+async function handleTopup() {
+  if (!topupAmount.value) return
+  topupSubmitting.value = true
+  try {
+    const res = await topupAccount(topupAmount.value)
+    uni.showToast({ title: res.message || '充值成功', icon: 'success', duration: 2000 })
+    showTopupModal.value = false
+    await loadAccount()
+    await loadAnalytics()
+  } catch (e: any) {
+    uni.showToast({ title: e?.message || '充值失败', icon: 'none' })
+  } finally {
+    topupSubmitting.value = false
+  }
+}
+
 onMounted(() => {
   refreshAll()
   // 注册网络状态监听
@@ -620,6 +642,58 @@ onShow(() => {
   font-size: $font-size-xs; color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.15);
   border: none; padding: 8rpx 20rpx; border-radius: 20rpx;
   &::after { border: none; }
+}
+
+.btn-topup {
+  font-size: $font-size-xs; color: #fff; background: linear-gradient(135deg, #F59E0B, #F97316);
+  border: none; padding: 8rpx 20rpx; border-radius: 20rpx; font-weight: 600;
+  &::after { border: none; }
+}
+
+/* Topup Modal */
+.topup-modal-mask {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5); z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+}
+.topup-modal {
+  width: 600rpx; background: #fff; border-radius: 24rpx; padding: 40rpx 36rpx;
+}
+.topup-modal-title {
+  font-size: 36rpx; font-weight: 700; color: #1a1a1a; text-align: center; display: block; margin-bottom: 12rpx;
+}
+.topup-modal-sub {
+  font-size: 24rpx; color: #999; text-align: center; display: block; margin-bottom: 36rpx;
+}
+.topup-options {
+  display: flex; gap: 20rpx; margin-bottom: 36rpx;
+}
+.topup-option {
+  flex: 1; padding: 28rpx 0; border-radius: 16rpx; border: 2rpx solid #e5e5e5;
+  text-align: center; transition: all 0.2s;
+  &.active { border-color: #F59E0B; background: rgba(245,158,11,0.06); }
+}
+.topup-opt-amount {
+  font-size: 32rpx; font-weight: 700; color: #1a1a1a; display: block;
+}
+.topup-opt-label {
+  font-size: 22rpx; color: #999; margin-top: 6rpx; display: block;
+}
+.topup-actions {
+  display: flex; gap: 20rpx;
+}
+.topup-btn-cancel, .topup-btn-confirm {
+  flex: 1; padding: 24rpx 0; border-radius: 16rpx; font-size: 28rpx; font-weight: 600;
+  text-align: center;
+}
+.topup-btn-cancel {
+  background: #f5f5f5; color: #666; border: none;
+  &::after { border: none; }
+}
+.topup-btn-confirm {
+  background: linear-gradient(135deg, #F59E0B, #F97316); color: #fff; border: none;
+  &::after { border: none; }
+  &[disabled] { opacity: 0.5; }
 }
 .account-main { margin-bottom: 32rpx; }
 .total-label { font-size: $font-size-sm; color: rgba(255,255,255,0.6); }

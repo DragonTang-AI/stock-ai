@@ -159,3 +159,21 @@ export async function getPortfolioAnalytics(): Promise<PositionAnalytics> {
   const res = await request<{ success: boolean; data: PositionAnalytics }>('/portfolio/analytics', { method: 'GET' })
   return (res as any).data || {}
 }
+
+
+/** 模拟充值 → /portfolio/topup */
+export interface TopupResult {
+  success: boolean
+  balance: number
+  initial_cash: number
+  topup_amount: number
+  message: string
+}
+
+export async function topupAccount(amount: number): Promise<TopupResult> {
+  const res = await request<TopupResult>(
+    `/portfolio/topup?amount=${amount}`,
+    { method: 'POST' }
+  )
+  return res as any
+}
