@@ -1,0 +1,64 @@
+/**
+ * AI-Stock 主题 SCSS 变量
+ * 所有变量基于 CSS 自定义属性，实现无需重编译的主题切换
+ */
+
+/* ========== 颜色 - 背景 ========== */
+$bg-page: var(--bg-page, #F5F5F7);
+$bg-card: var(--bg-card, #FFFFFF);
+$bg-primary: var(--bg-primary, #1A1A2E);
+$bg-secondary: var(--bg-secondary, #16213E);
+$bg-input: var(--bg-input, #F0F0F5);
+$bg-hover: var(--bg-hover, rgba(0, 0, 0, 0.04));
+$bg-mask: var(--bg-mask, rgba(0, 0, 0, 0.45));
+
+/* ========== 颜色 - 文字 ========== */
+$text-primary: var(--text-primary, #1F1F1F);
+$text-secondary: var(--text-secondary, #666666);
+$text-hint: var(--text-hint, #999999);
+$text-inverse: var(--text-inverse, #FFFFFF);
+$text-link: var(--text-link, #4A90E2);
+
+/* ========== 颜色 - 语义 ========== */
+$color-primary: var(--color-primary, #4A90E2);
+$color-success: var(--color-success, #34C759);
+$color-danger: var(--color-danger, #E25C5C);
+$color-warning: var(--color-warning, #FF9500);
+$color-info: var(--color-info, #5AC8FA);
+
+/* ========== 颜色 - 涨跌 ========== */
+$color-up: var(--color-up, #E25C5C);
+$color-down: var(--color-down, #34C759);
+
+/* ========== 图表颜色 ========== */
+$chart-line-1: var(--chart-line-1, #4A90E2);
+$chart-line-2: var(--chart-line-2, #F5A623);
+$chart-line-3: var(--chart-line-3, #34C759);
+$chart-area-fill: var(--chart-area-fill, rgba(74, 144, 226, 0.1));
+$chart-grid: var(--chart-grid, #f0f0f0);
+$chart-label: var(--chart-label, #999999);
+$chart-tooltip-bg: var(--chart-tooltip-bg, #FFFFFF);
+$chart-tooltip-text: var(--chart-tooltip-text, #333333);
+$chart-tooltip-border: var(--chart-tooltip-border, #e0e0e0);
+
+/* ========== 边框与阴影 ========== */
+$border-color: var(--border-color, #E5E5EA);
+$border-radius: var(--border-radius, 16rpx);
+$shadow-card: var(--shadow-card, 0 2rpx 16rpx rgba(0, 0, 0, 0.06));
+$shadow-elevated: var(--shadow-elevated, 0 4rpx 24rpx rgba(0, 0, 0, 0.1));
+
+/* ========== 字体大小 ========== */
+$font-size-xs: var(--font-size-xs, 20rpx);
+$font-size-sm: var(--font-size-sm, 24rpx);
+$font-size-base: var(--font-size-base, 28rpx);
+$font-size-lg: var(--font-size-lg, 32rpx);
+$font-size-xl: var(--font-size-xl, 36rpx);
+$font-size-xxl: var(--font-size-xxl, 44rpx);
+
+/* ========== 间距 ========== */
+$spacing-xs: var(--spacing-xs, 8rpx);
+$spacing-sm: var(--spacing-sm, 16rpx);
+$spacing-md: var(--spacing-md, 24rpx);
+$spacing-lg: var(--spacing-lg, 32rpx);
+$spacing-xl: var(--spacing-xl, 48rpx);
+$border-radius-lg: var(--border-radius-lg, 24rpx);

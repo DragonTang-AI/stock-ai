@@ -1,0 +1,257 @@
+{
+  "pages": [
+    {
+      "path": "pages/login/index",
+      "style": {
+        "navigationBarTitleText": "登录",
+        "animationType": "fade-in",
+        "animationDuration": 200
+        // #ifdef H5
+        ,"navigationStyle": "custom"
+        // #endif
+        // #ifdef MP-WEIXIN
+        ,"navigationStyle": "default"
+        // #endif
+      }
+    },
+    {
+      "path": "pages/login/register",
+      "style": {
+        "navigationBarTitleText": "注册",
+        "animationType": "fade-in",
+        "animationDuration": 200
+        // #ifdef H5
+        ,"navigationStyle": "custom"
+        // #endif
+        // #ifdef MP-WEIXIN
+        ,"navigationStyle": "default"
+        // #endif
+      }
+    },
+    {
+      "path": "pages/market/index",
+      "style": {
+        "navigationBarTitleText": "行情",
+        "enablePullDownRefresh": true,
+        "animationType": "slide-in-right",
+        "animationDuration": 250
+      }
+    },
+    {
+      "path": "pages/selection/index",
+      "style": {
+        "navigationBarTitleText": "选股",
+        "enablePullDownRefresh": true,
+        "animationType": "slide-in-right",
+        "animationDuration": 250
+      }
+    },
+    {
+      "path": "pages/selection/detail",
+      "style": {
+        "navigationBarTitleText": "选股分析",
+        "animationType": "slide-in-bottom",
+        "animationDuration": 300
+      }
+    },
+    {
+      "path": "pages/selection/candidates",
+      "style": {
+        "navigationBarTitleText": "候选池",
+        "enablePullDownRefresh": false,
+        "animationType": "slide-in-right",
+        "animationDuration": 250
+      }
+    },
+    {
+      "path": "pages/portfolio/index",
+      "style": {
+        "navigationBarTitleText": "持仓",
+        "enablePullDownRefresh": true,
+        "animationType": "slide-in-right",
+        "animationDuration": 250
+      }
+    },
+    {
+      "path": "pages/portfolio/analytics",
+      "style": {
+        "navigationBarTitleText": "持仓分析",
+        "animationType": "slide-in-bottom",
+        "animationDuration": 300
+      }
+    },
+    {
+      "path": "pages/portfolio/history/index",
+      "style": {
+        "navigationBarTitleText": "交易记录",
+        "animationType": "slide-in-right",
+        "animationDuration": 250
+      }
+    },
+    {
+      "path": "pages/advisor/index",
+      "style": {
+        "navigationBarTitleText": "AI 助手",
+        "enablePullDownRefresh": true,
+        "animationType": "slide-in-right",
+        "animationDuration": 250
+      }
+    },
+    {
+      "path": "pages/detail/index",
+      "style": {
+        "navigationBarTitleText": "行情详情",
+        "animationType": "slide-in-bottom",
+        "animationDuration": 300
+        // #ifdef H5
+        ,"navigationStyle": "custom"
+        // #endif
+        // #ifdef MP-WEIXIN
+        ,"navigationStyle": "default"
+        // #endif
+      }
+    },
+    {
+      "path": "pages/watchlist/index",
+      "style": {
+        "navigationBarTitleText": "自选股",
+        "animationType": "slide-in-right",
+        "animationDuration": 250
+      }
+    },
+    {
+      "path": "pages/mine/index",
+      "style": {
+        "navigationBarTitleText": "我的",
+        "animationType": "slide-in-right",
+        "animationDuration": 250
+      }
+    },
+    {
+      "path": "pages/mine/notifications",
+      "style": {
+        "navigationBarTitleText": "消息中心",
+        "animationType": "slide-in-right",
+        "animationDuration": 250
+      }
+    },
+    {
+      "path": "pages/mine/settings",
+      "style": {
+        "navigationBarTitleText": "设置",
+        "animationType": "slide-in-bottom",
+        "animationDuration": 300
+      }
+    },
+    {
+      "path": "pages/hosted/index",
+      "style": {
+        "navigationBarTitleText": "AI托管",
+        "animationType": "slide-in-right",
+        "animationDuration": 250
+      }
+    },
+    {
+      "path": "pages/dashboard/index",
+      "style": {
+        "navigationBarTitleText": "数据看板",
+        "animationType": "slide-in-bottom",
+        "animationDuration": 300
+      }
+    },
+    {
+      "path": "pages/broadcast/index",
+      "style": {
+        "navigationBarTitleText": "每日播报",
+        "animationType": "slide-in-bottom",
+        "animationDuration": 300
+      }
+    },
+    {
+      "path": "pages/feedback/index",
+      "style": {
+        "navigationBarTitleText": "用户反馈",
+        "animationType": "slide-in-bottom",
+        "animationDuration": 300
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "AI-Stock",
+    "navigationBarBackgroundColor": "#1A1A2E",
+    "backgroundColor": "#F5F5F7",
+    "animationType": "slide-in-right",
+    "animationDuration": 250,
+    "app-plus": {
+      "background": "#F5F5F7",
+      "safearea": {
+        "bottom": { "offset": "auto" },
+        "top": { "offset": "auto" },
+        "left": { "offset": "auto" },
+        "right": { "offset": "auto" }
+      },
+      "softinputMode": "adjustResize",
+      "softinputNavBar": "none",
+      "popGesture": "none",
+      "bounce": "none"
+    }
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#4A90E2",
+    "borderStyle": "black",
+    "backgroundColor": "#FFFFFF",
+    "animation": true,
+    "list": [
+      {
+        "pagePath": "pages/market/index",
+        "text": "行情",
+        "iconPath": "static/tabbar/market.png",
+        "selectedIconPath": "static/tabbar/market-active.png"
+      },
+      {
+        "pagePath": "pages/selection/index",
+        "text": "选股",
+        "iconPath": "static/tabbar/selection.png",
+        "selectedIconPath": "static/tabbar/selection-active.png"
+      },
+      {
+        "pagePath": "pages/portfolio/index",
+        "text": "持仓",
+        "iconPath": "static/tabbar/portfolio.png",
+        "selectedIconPath": "static/tabbar/portfolio-active.png"
+      },
+      {
+        "pagePath": "pages/advisor/index",
+        "text": "AI助手",
+        "iconPath": "static/tabbar/advisor.png",
+        "selectedIconPath": "static/tabbar/advisor-active.png"
+      },
+      {
+        "pagePath": "pages/mine/index",
+        "text": "我的",
+        "iconPath": "static/tabbar/mine.png",
+        "selectedIconPath": "static/tabbar/mine-active.png"
+      }
+    ]
+  },
+  "preloadRule": {
+    "pages/login/index": {
+      "network": "all",
+      "packages": ["pages/market/index", "pages/selection/index"]
+    },
+    "pages/market/index": {
+      "network": "all",
+      "packages": ["pages/selection/index", "pages/portfolio/index"]
+    },
+    "pages/selection/index": {
+      "network": "all",
+      "packages": ["pages/market/index", "pages/selection/detail"]
+    },
+    "pages/portfolio/index": {
+      "network": "wifi",
+      "packages": ["pages/portfolio/analytics"]
+    }
+  }
+}

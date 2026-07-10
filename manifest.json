@@ -1,0 +1,19 @@
+{
+  "name": "AI-Stock",
+  "appid": "__UNI__AISTOCK",
+  "description": "A股+港股 AI选股助手+模拟交易平台",
+  "versionName": "0.1.0",
+  "versionCode": "1",
+  "transformPx": false,
+  "h5": {
+    "title": "AI-Stock 智能选股",
+    "router": {
+      "mode": "hash",
+      "base": "./"
+    },
+    "devServer": {
+      "port": 5173,
+      "https": false
+    }
+  }
+}

@@ -1,0 +1,65 @@
+/**
+ * AI-Stock 浅色主题 CSS 变量（默认值，与 variables.scss 基准一致）
+ */
+
+:root,
+.light,
+[data-theme='light'] {
+  /* ========== 背景 ========== */
+  --bg-page: #F5F5F7;
+  --bg-card: #FFFFFF;
+  --bg-primary: #1A1A2E;
+  --bg-secondary: #16213E;
+  --bg-input: #F0F0F5;
+  --bg-hover: rgba(0, 0, 0, 0.04);
+  --bg-mask: rgba(0, 0, 0, 0.45);
+
+  /* ========== 文字 ========== */
+  --text-primary: #1F1F1F;
+  --text-secondary: #666666;
+  --text-hint: #999999;
+  --text-inverse: #FFFFFF;
+  --text-link: #4A90E2;
+
+  /* ========== 语义 ========== */
+  --color-primary: #4A90E2;
+  --color-success: #34C759;
+  --color-danger: #E25C5C;
+  --color-warning: #FF9500;
+  --color-info: #5AC8FA;
+
+  /* ========== 涨跌 ========== */
+  --color-up: #E25C5C;
+  --color-down: #34C759;
+
+  /* ========== 图表颜色 ========== */
+  --chart-line-1: #4A90E2;
+  --chart-line-2: #F5A623;
+  --chart-line-3: #34C759;
+  --chart-area-fill: rgba(74, 144, 226, 0.1);
+  --chart-grid: #f0f0f0;
+  --chart-label: #999999;
+  --chart-tooltip-bg: #FFFFFF;
+  --chart-tooltip-text: #333333;
+  --chart-tooltip-border: #e0e0e0;
+
+  /* ========== 边框与阴影 ========== */
+  --border-color: #E5E5EA;
+  --border-radius: 16rpx;
+  --shadow-card: 0 2rpx 16rpx rgba(0, 0, 0, 0.06);
+  --shadow-elevated: 0 4rpx 24rpx rgba(0, 0, 0, 0.1);
+
+  /* ========== 滚动条 ========== */
+  scrollbar-color: #C1C1C1 transparent;
+
+  /* ========== Tabbar ========== */
+  --tabbar-bg: #FFFFFF;
+  --tabbar-color: #999999;
+  --tabbar-active-color: #4A90E2;
+  --tabbar-border-color: #E5E5EA;
+
+  /* ========== Toast/Modal ========== */
+  --toast-bg: rgba(0, 0, 0, 0.8);
+  --modal-bg: #FFFFFF;
+  --modal-mask: rgba(0, 0, 0, 0.45);
+}
