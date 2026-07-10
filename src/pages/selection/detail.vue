@@ -143,28 +143,61 @@
             <text class="modal-close" @click="showTradeModal = false">✕</text>
           </view>
           <view class="modal-body">
-            <view class="trade-row">
-              <text class="trade-label">当前价</text>
-              <text class="trade-value">{{ formatPrice(detail?.current_price) }}</text>
-            </view>
-            <view class="trade-row">
-              <text class="trade-label">方向</text>
+            <!-- 方向切换 -->
+            <view class="trade-section">
               <view class="side-tabs">
                 <view class="side-tab" :class="{ active: tradeSide === 'buy' }" @click="tradeSide = 'buy'">买入</view>
                 <view class="side-tab" :class="{ active: tradeSide === 'sell' }" @click="tradeSide = 'sell'">卖出</view>
               </view>
             </view>
-            <view class="trade-row">
-              <text class="trade-label">价格</text>
-              <input v-model="tradePrice" class="trade-input" type="digit" placeholder="限价" />
+
+            <!-- 价格输入（带 +/- 步进） -->
+            <view class="trade-section">
+              <text class="section-label">限价</text>
+              <view class="stepper-row">
+                <view class="stepper-btn" @click="adjustPrice(-0.01)">−</view>
+                <input v-model="tradePrice" class="stepper-input" type="digit" placeholder="输入价格" />
+                <view class="stepper-btn" @click="adjustPrice(0.01)">+</view>
+              </view>
+              <view class="price-hint">
+                <text class="hint-text">涨停 {{ formatPrice((detail?.current_price || 0) * 1.1) }}</text>
+                <text class="hint-text down">跌停 {{ formatPrice((detail?.current_price || 0) * 0.9) }}</text>
+              </view>
             </view>
-            <view class="trade-row">
-              <text class="trade-label">数量(股)</text>
-              <input v-model="tradeQty" class="trade-input" type="number" placeholder="100" />
+
+            <!-- 数量输入（带 +/- 步进） -->
+            <view class="trade-section">
+              <text class="section-label">数量（股）</text>
+              <view class="stepper-row">
+                <view class="stepper-btn" @click="adjustQty(-1)">−</view>
+                <input v-model="tradeQty" class="stepper-input" type="digit" placeholder="100" />
+                <view class="stepper-btn" @click="adjustQty(1)">+</view>
+              </view>
+              <!-- 快捷数量按钮 + 可买/可用 -->
+              <view class="qty-actions">
+                <view class="qty-info">
+                  <text class="qty-info-text" v-if="maxBuyQty > 0">可买 {{ maxBuyQty }} 股</text>
+                  <text class="qty-info-text dim" v-else>可买 0 股</text>
+                  <text class="qty-info-text cash">可用 {{ accountCash.toFixed(2) }} 元</text>
+                </view>
+                <view class="qty-shortcuts">
+                  <view class="shortcut-btn" @click="fillQuarter()">1/4</view>
+                  <view class="shortcut-btn" @click="fillThird()">1/3</view>
+                  <view class="shortcut-btn" @click="fillHalf()">1/2</view>
+                  <view class="shortcut-btn primary" @click="fillFullPosition()">全仓</view>
+                </view>
+              </view>
             </view>
+
+            <!-- 预估金额 -->
+            <view class="estimate-row" v-if="estimatedAmount !== '0.00'">
+              <text class="estimate-label">预估金额</text>
+              <text class="estimate-value">{{ estimatedAmount }} 元</text>
+            </view>
+
             <view v-if="tradeError" class="trade-error">{{ tradeError }}</view>
             <button class="btn-confirm" :disabled="tradeSubmitting" @click="handlePlaceOrder">
-              {{ tradeSubmitting ? '提交中...' : '确认下单' }}
+              {{ tradeSide === 'buy' ? '买入' : '卖出' }}
             </button>
           </view>
         </view>
@@ -182,14 +215,14 @@
 
 <script setup lang="ts">
 import Disclaimer from '@/components/compliance/Disclaimer.vue'
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import {
   fetchStockDetail,
   addToWatchlist,
   removeFromWatchlist,
   type StockAnalysisDetail,
 } from '@/api/selection'
-import { placeOrder, type OrderSide } from '@/api/trading'
+import { placeOrder, fetchAccount, type OrderSide } from '@/api/trading'
 
 // ---- 状态 ----
 const detail = ref<StockAnalysisDetail | null>(null)
@@ -204,6 +237,18 @@ const tradePrice = ref('')
 const tradeQty = ref('')
 const tradeError = ref('')
 const tradeSubmitting = ref(false)
+
+// 账户可用资金
+const accountCash = ref(0)
+const loadingAccount = ref(false)
+
+// 最大可买股数（基于最新价和可用资金）
+const maxBuyQty = computed(() => {
+  const price = parseFloat(tradePrice.value)
+  if (!price || price <= 0 || accountCash.value <= 0) return 0
+  // A股100股整数倍，向下取整
+  return Math.floor(accountCash.value / price / 100) * 100
+})
 
 // ---- 计算属性 ----
 const actionLabel = computed(() => {
@@ -293,6 +338,73 @@ async function handleToggleWatch() {
     uni.showToast({ title: '操作失败', icon: 'none' })
   }
 }
+
+// ---- 弹窗打开时初始化 ----
+watch(showTradeModal, async (open) => {
+  if (!open) return
+  // 自动填充当前价格
+  if (detail.value?.current_price) {
+    tradePrice.value = detail.value.current_price.toFixed(2)
+  }
+  tradeQty.value = ''
+  tradeError.value = ''
+  // 加载账户余额
+  loadingAccount.value = true
+  try {
+    const account = await fetchAccount()
+    accountCash.value = account.cash
+  } catch {
+    accountCash.value = 0
+  } finally {
+    loadingAccount.value = false
+  }
+})
+
+// 价格 +/- 调整（步进 0.01）
+function adjustPrice(delta: number) {
+  const current = parseFloat(tradePrice.value) || 0
+  const next = Math.max(0.01, current + delta)
+  tradePrice.value = next.toFixed(2)
+}
+
+// 数量 +/- 调整（步进 100 股，A股整手）
+function adjustQty(delta: number) {
+  const current = parseInt(tradeQty.value) || 0
+  const next = Math.max(0, current + delta * 100)
+  tradeQty.value = String(next)
+}
+
+// 快捷数量：全仓
+function fillFullPosition() {
+  if (maxBuyQty.value > 0) {
+    tradeQty.value = String(maxBuyQty.value)
+  }
+}
+
+// 快捷数量：1/2 仓
+function fillHalf() {
+  const qty = Math.floor(maxBuyQty.value / 200) * 100
+  tradeQty.value = String(Math.max(100, qty))
+}
+
+// 快捷数量：1/3 仓
+function fillThird() {
+  const qty = Math.floor(maxBuyQty.value / 300) * 100
+  tradeQty.value = String(Math.max(100, qty))
+}
+
+// 快捷数量：1/4 仓
+function fillQuarter() {
+  const qty = Math.floor(maxBuyQty.value / 400) * 100
+  tradeQty.value = String(Math.max(100, qty))
+}
+
+// 预估金额计算
+const estimatedAmount = computed(() => {
+  const price = parseFloat(tradePrice.value) || 0
+  const qty = parseInt(tradeQty.value) || 0
+  return (price * qty).toFixed(2)
+})
 
 async function handlePlaceOrder() {
   tradeError.value = ''
@@ -779,7 +891,7 @@ function formatChangePct(v: number): string {
   &::after { border: none; }
 }
 
-// ====== 交易弹窗 ======
+// ====== 交易弹窗（增强版） ======
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -819,40 +931,24 @@ function formatChangePct(v: number): string {
 }
 
 .modal-body {
-  padding: 32rpx;
+  padding: 20rpx 32rpx 32rpx;
 }
 
-.trade-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 24rpx;
-}
-
-.trade-label {
-  font-size: 28rpx;
-  color: var(--text-secondary, #666);
-  width: 140rpx;
-}
-
-.trade-value {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: $color-primary;
-}
-
+// ---- 方向切换 ----
 .side-tabs {
   display: flex;
   gap: 16rpx;
+  margin-bottom: 20rpx;
 }
 
 .side-tab {
-  padding: 12rpx 32rpx;
+  padding: 14rpx 36rpx;
   font-size: 28rpx;
   border-radius: 12rpx;
   border: 2rpx solid var(--border-color, #ddd);
   color: var(--text-secondary, #666);
-  cursor: pointer;
+  text-align: center;
+  flex: 1;
 
   &.active {
     background: $color-primary;
@@ -861,16 +957,138 @@ function formatChangePct(v: number): string {
   }
 }
 
-.trade-input {
+// ---- 分段 ----
+.trade-section {
+  margin-bottom: 24rpx;
+}
+
+.section-label {
+  display: block;
+  font-size: 26rpx;
+  color: var(--text-hint, #999);
+  margin-bottom: 12rpx;
+}
+
+// ---- 步进输入行 ----
+.stepper-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.stepper-btn {
+  width: 72rpx;
+  height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40rpx;
+  font-weight: 500;
+  color: #fff;
+  background: $color-primary;
+  border-radius: 16rpx;
+  flex-shrink: 0;
+}
+
+.stepper-input {
   flex: 1;
-  text-align: right;
-  font-size: 28rpx;
-  padding: 12rpx 16rpx;
+  text-align: center;
+  font-size: 36rpx;
+  font-weight: 600;
+  padding: 16rpx 12rpx;
   border: 2rpx solid var(--border-color, #ddd);
   border-radius: 12rpx;
   background: var(--bg-page, #f5f5f7);
+  color: var(--text-primary, #333);
 }
 
+// ---- 价格提示 ----
+.price-hint {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10rpx;
+}
+
+.hint-text {
+  font-size: 22rpx;
+  color: #EF5350;
+
+  &.down {
+    color: #26A69A;
+  }
+}
+
+// ---- 数量快捷操作 ----
+.qty-actions {
+  margin-top: 12rpx;
+}
+
+.qty-info {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.qty-info-text {
+  font-size: 24rpx;
+  color: $color-primary;
+  font-weight: 500;
+
+  &.dim {
+    color: var(--text-hint, #999);
+  }
+
+  &.cash {
+    color: #EF5350;
+  }
+}
+
+.qty-shortcuts {
+  display: flex;
+  gap: 12rpx;
+}
+
+.shortcut-btn {
+  flex: 1;
+  padding: 14rpx 0;
+  text-align: center;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: $color-primary;
+  background: rgba(74, 144, 226, 0.08);
+  border: 1rpx solid rgba(74, 144, 226, 0.2);
+  border-radius: 10rpx;
+
+  &.primary {
+    color: #fff;
+    background: $color-primary;
+    border-color: $color-primary;
+  }
+}
+
+// ---- 预估金额 ----
+.estimate-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 20rpx 0;
+  border-top: 1rpx solid var(--border-color, #eee);
+  border-bottom: 1rpx solid var(--border-color, #eee);
+  margin-bottom: 24rpx;
+}
+
+.estimate-label {
+  font-size: 28rpx;
+  color: var(--text-secondary, #666);
+}
+
+.estimate-value {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: $color-primary;
+}
+
+// ---- 错误 & 按钮 ----
 .trade-error {
   color: $color-danger;
   font-size: 24rpx;
@@ -887,7 +1105,6 @@ function formatChangePct(v: number): string {
   border-radius: 12rpx;
   border: none;
   text-align: center;
-  margin-top: 16rpx;
 
   &[disabled] {
     opacity: 0.5;
