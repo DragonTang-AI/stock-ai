@@ -2,7 +2,7 @@
 app/api/v1/market.py — 行情路由（真实 AkShare 实现）
 公开行情数据，无需登录即可访问
 """
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from app.integrations.market_data import get_market_data_adapter
 from typing import List, Optional
 from app.models.user import User
@@ -175,3 +175,38 @@ async def get_market_indices():
         except Exception:
             continue
     return {"success": True, "data": indices}
+
+
+# ─── 市场规则（供交易模块使用） ───
+
+MARKET_RULES = {
+    "A": {
+        "market": "A",
+        "lot_size": 100,
+        "price_limit_pct": 10,
+        "commission_rate": 0.00025,
+        "min_commission": 5,
+        "stamp_tax_rate": 0.001,
+        "stamp_tax_side": "SELL",
+        "settlement": "T+1",
+    },
+    "HK": {
+        "market": "HK",
+        "lot_size": 100,
+        "price_limit_pct": 0,
+        "commission_rate": 0.0003,
+        "min_commission": 5,
+        "stamp_tax_rate": 0.0013,
+        "stamp_tax_side": "BOTH",
+        "settlement": "T+0",
+    },
+}
+
+@router.get("/rules/{market}")
+async def get_market_rules(market: str):
+    """获取市场交易规则（手续费率/涨跌幅限制/结算制度等）"""
+    market_upper = market.upper()
+    rule = MARKET_RULES.get(market_upper)
+    if not rule:
+        raise HTTPException(status_code=400, detail=f"不支持的市场: {market}. 支持: A, HK")
+    return {"success": True, "data": rule}

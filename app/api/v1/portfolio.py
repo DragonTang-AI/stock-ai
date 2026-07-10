@@ -14,6 +14,7 @@ app/api/v1/portfolio.py — 交易路由（v1：纸面撮合）
 - 卖出：available ≥ 数量（T+1）
 - 数量：100 的整数倍
 """
+from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +33,7 @@ from app.schemas.trading import (
     PortfolioAnalyticsResponse,
 )
 from app.services.trading import (
+    get_or_create_account,
     get_account_info,
     get_positions_summary,
     get_orders,
@@ -153,6 +155,35 @@ async def get_analytics(
     analytics = await get_portfolio_analytics(db, current_user)
     return {"success": True, "data": analytics}
 
+
+
+@router.post("/topup")
+async def topup_account(
+    amount: int = Query(..., description="Recharge amount"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Simulated top-up - increase account balance and initial cash.
+    Supported amounts: 100000 (100K) / 1000000 (1M).
+    """
+    if amount < 1000:
+        raise AppException(code="INVALID_AMOUNT", message="充值金额不能少于 1000 元", status_code=400)
+    if amount > 100000000:
+        raise AppException(code="INVALID_AMOUNT", message="充值金额不能超过 1 亿元", status_code=400)
+    
+    account = await get_or_create_account(db, current_user)
+    account.balance = account.balance + Decimal(str(amount))
+    account.initial_cash = account.initial_cash + Decimal(str(amount))
+    await db.commit()
+    
+    return {
+        "success": True,
+        "balance": float(account.balance),
+        "initial_cash": float(account.initial_cash),
+        "topup_amount": amount,
+        "message": f"成功充值 {amount:,} 元",
+    }
 
 @router.get("/trades", response_model=TradeListResponse)
 async def get_trades_endpoint(

@@ -9,6 +9,7 @@ from app.api.v1.auth import get_current_user
 from app.schemas.trading import OrderRequest
 from app.services.trading import place_order
 from app.core.database import get_db
+from app.core.exceptions import AppException
 
 router = APIRouter()
 
@@ -80,9 +81,17 @@ async def simulate_place_order(
             "status": order_item.status,
             "created_at": str(order_item.created_at),
         }
+    except AppException as e:
+        return {
+            "success": False,
+            "code": e.code,
+            "message": e.message,
+            "order_id": None,
+        }
     except Exception as e:
         return {
             "success": False,
+            "code": "UNKNOWN_ERROR",
             "message": str(e),
             "order_id": None,
         }

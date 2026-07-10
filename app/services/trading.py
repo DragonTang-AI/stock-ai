@@ -59,6 +59,7 @@ async def get_or_create_account(db: AsyncSession, user: User) -> Account:
             balance=Decimal(str(INITIAL_BALANCE)),
             frozen=Decimal("0"),
             market="A",
+            initial_cash=Decimal(str(INITIAL_BALANCE)),
         )
         db.add(account)
         await db.commit()
@@ -74,8 +75,9 @@ async def get_account_info(db: AsyncSession, user: User) -> AccountInfo:
     positions = await get_positions(db, user)
     market_value = sum(p.market_value for p in positions)
     total_equity = float(account.balance) + float(account.frozen) + market_value
-    profit = total_equity - INITIAL_BALANCE
-    profit_pct = (profit / INITIAL_BALANCE) * 100 if INITIAL_BALANCE > 0 else 0.0
+    init_cash = float(account.initial_cash) if float(account.initial_cash) > 0 else INITIAL_BALANCE
+    profit = total_equity - init_cash
+    profit_pct = (profit / init_cash) * 100 if init_cash > 0 else 0.0
 
     return AccountInfo(
         account_id=account.id,
@@ -474,8 +476,8 @@ async def get_portfolio_analytics(
         return {
             "position_count": 0,
             "total_market_value": 0,
-            "total_profit": round(float(account.balance) - INITIAL_BALANCE, 2),
-            "total_profit_pct": round((float(account.balance) - INITIAL_BALANCE) / INITIAL_BALANCE * 100, 4) if INITIAL_BALANCE > 0 else 0,
+            "total_profit": round(float(account.balance) - (float(account.initial_cash) if float(account.initial_cash) > 0 else INITIAL_BALANCE), 2),
+            "total_profit_pct": round((float(account.balance) - (float(account.initial_cash) if float(account.initial_cash) > 0 else INITIAL_BALANCE)) / (float(account.initial_cash) if float(account.initial_cash) > 0 else INITIAL_BALANCE) * 100, 4) if (float(account.initial_cash) if float(account.initial_cash) > 0 else INITIAL_BALANCE) > 0 else 0,
             "win_rate": 0,
             "best_position": None,
             "worst_position": None,
@@ -489,8 +491,9 @@ async def get_portfolio_analytics(
 
     # 总盈亏（持仓盈亏 + 现金变动）
     total_equity = float(account.balance) + total_market_value
-    total_profit = round(total_equity - INITIAL_BALANCE, 2)
-    total_profit_pct = round((total_profit / INITIAL_BALANCE) * 100, 4) if INITIAL_BALANCE > 0 else 0
+    init_cash2 = float(account.initial_cash) if float(account.initial_cash) > 0 else INITIAL_BALANCE
+    total_profit = round(total_equity - init_cash2, 2)
+    total_profit_pct = round((total_profit / init_cash2) * 100, 4) if init_cash2 > 0 else 0
 
     # 胜率
     winning = [p for p in positions if p.profit > 0]

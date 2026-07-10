@@ -14,7 +14,7 @@ from app.core.config import settings
 from app.core.database import init_db, close_db
 from app.core.exceptions import AppException
 
-from app.api.v1 import auth, market, portfolio, analysis, selection, simulation, watchlist, trading, hosted, extra
+from app.api.v1 import auth, market, portfolio, analysis, selection, simulation, watchlist, trading, hosted, extra, broadcast
 
 
 @asynccontextmanager
@@ -85,9 +85,10 @@ app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["分析"])
 app.include_router(selection.router, prefix="/api/v1/selection", tags=["选股"])
 app.include_router(simulation.router, prefix="/api/v1/simulation", tags=["模拟"])
 app.include_router(watchlist.router, prefix="/api/v1/watchlist", tags=["自选股"])
-app.include_router(trading.router, prefix="/api/v1/trading", tags=["交易"])
+# [P1 dedup] app.include_router(trading.router, prefix="/api/v1/trading", tags=["交易"])
 app.include_router(hosted.router, prefix="/api/v1/hosted", tags=["AI托管"])
 app.include_router(extra.router, prefix="/api/v1", tags=["扩展"])
+app.include_router(broadcast.router, prefix="/api/v1/broadcast", tags=["每日播报"])
 
 
 @app.get("/health")

@@ -53,7 +53,14 @@ class Settings(BaseSettings):
     llm_backup_api_key: str = ""
     llm_backup_model: str = "deepseek-chat"
 
-    # ── 数据源 ───────────────────────────────────────────
+    llm_timeout_seconds: int = 120
+    llm_max_retries: int = 3
+    llm_enabled: bool = True
+    llm_provider: str = ""
+    llm_api_base: str = ""
+    llm_backup_provider: str = ""
+    llm_backup_api_base: str = ""
+    llm_max_output_tokens: int = 4096
     akshare_cache_ttl: int = 300  # 秒
 
     # ── 风控（V1 模拟盘）─────────────────────────────────

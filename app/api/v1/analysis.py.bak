@@ -1,4 +1,3 @@
-from typing import Optional
 """
 app.api.v1.analysis.py — 智能投资助手路由
 
@@ -15,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.user import User
-from app.api.v1.auth import get_current_user, get_current_user_optional
+from app.api.v1.auth import get_current_user
 from app.schemas.advisor import PortfolioDiagnosisResponse, ChatContextResponse, ChatRequest
 from app.services.advisor import diagnose_portfolio, build_chat_context, _get_market_temperature
 from app.services.market import fetch_stock_detail
@@ -51,7 +50,7 @@ async def get_portfolio_diagnosis(
 @router.get("/diagnose/{symbol}", response_model=PortfolioDiagnosisResponse)
 async def diagnose_single_stock(
     symbol: str,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -86,70 +85,7 @@ async def diagnose_single_stock(
             cost_amount=Decimal(str(detail.get("price", 0) * 100)),
         )
 
-        diag = await _diagnose_single_position(fake_pos, fake_pos.market_value)
-
-        # 生成推荐理由文本
-        signals_list = diag.get("signals", [])
-        reason_codes = []
-        reasoning_parts = []
-        for s in signals_list:
-            st = s.get("type", "")
-            name = s.get("name", "")
-            desc = s.get("desc", "")
-            if st == "bullish":
-                reason_codes.append("TECH_TREND_UP")
-            elif st == "bearish":
-                reason_codes.append("TECH_TREND_DOWN")
-            elif st == "warning":
-                reason_codes.append("RISK_POSITION_LIMIT")
-            reasoning_parts.append(desc)
-
-        reasoning = "；".join(reasoning_parts) if reasoning_parts else "技术面信号中性，暂无明显趋势方向"
-
-        # action 对象转大写字符串
-        action_obj = diag.get("action", {})
-        action_map = {
-            "buy": "BUY", "add": "ADD", "hold": "HOLD",
-            "reduce": "REDUCE", "sell": "SELL", "partial_sell": "REDUCE",
-        }
-        action_str = action_map.get(action_obj.get("action", ""), "HOLD")
-
-        # 构建分 Agent 评分（技术面/基本面/舆情面/风控）
-        rating_score = diag.get("confidence", 50)
-        agents_scores = [
-            {
-                "agent": "Technical",
-                "score": rating_score + 5,
-                "confidence": rating_score,
-                "reasoning": "技术指标综合评分：" + "、".join(
-                    s.get("name", "") for s in signals_list if s.get("type") in ("bullish", "bearish")
-                ) or "暂无明确技术信号",
-                "reason_codes": [c for c in reason_codes if c.startswith("TECH_")],
-            },
-            {
-                "agent": "Fundamental",
-                "score": 50,
-                "confidence": 30,
-                "reasoning": "基本面数据未完全加载（PE/市值数据暂无），基于中性评分",
-                "reason_codes": [],
-            },
-            {
-                "agent": "Sentiment",
-                "score": 55 if rating_score >= 50 else 45,
-                "confidence": 40,
-                "reasoning": "舆情数据基于技术面趋势推断，暂无独立舆情源",
-                "reason_codes": [],
-            },
-            {
-                "agent": "Risk",
-                "score": max(30, 100 - rating_score) if any(s.get("type") == "warning" for s in signals_list) else 70,
-                "confidence": 60,
-                "reasoning": "仓位评估与风险控制：" + "、".join(
-                    s.get("name", "") for s in signals_list if s.get("type") == "warning"
-                ) or "风险指标正常",
-                "reason_codes": [c for c in reason_codes if c.startswith("RISK_")],
-            },
-        ]
+        diag = await _diagnose_single_position(fake_pos, detail.get("price", 0) * 100)
 
         return {
             "success": True,
@@ -158,23 +94,16 @@ async def diagnose_single_stock(
                     "symbol": symbol,
                     "name": detail.get("name"),
                     "price": detail.get("price"),
-                    "change": detail.get("change", 0),
-                    "change_pct": detail.get("change_pct", 0),
+                    "change_pct": detail.get("change_pct"),
                     "pe_ratio": detail.get("pe_ratio"),
                     "market_cap": detail.get("market_cap"),
-                    "market": "A",
-                    "currency": "CNY",
                 },
                 "indicators": diag.get("indicators"),
-                "reason_codes": reason_codes,
-                "reasoning": reasoning,
+                "signals": diag.get("signals"),
                 "rating": diag.get("rating"),
                 "rating_text": diag.get("rating_text"),
                 "confidence": diag.get("confidence"),
-                "action": action_str,
-                "action_detail": action_obj,
-                "agents": agents_scores,
-                "generated_at": diag.get("generated_at") or __import__("datetime").datetime.now().isoformat(),
+                "action": diag.get("action"),
             },
         }
     except Exception as e:

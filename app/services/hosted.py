@@ -268,6 +268,7 @@ async def trigger_signal_order(
     confidence: int,
     target_price: float,
     reasoning: Optional[str] = None,
+    quantity: Optional[int] = None,
 ) -> dict:
     """
     将 AI 信号转换为纸面订单
@@ -308,42 +309,64 @@ async def trigger_signal_order(
     if not account:
         raise AppException("账户不存在", status_code=404)
     
-    # 4. 仓位风控检查
-    pos_ok, pos_reason = await _check_position_limit(db, account, target_price, settings)
-    if not pos_ok:
-        await _log_hosted(db, uid, signal_id, None, action, symbol,
-                          target_price, None, "BLOCKED", pos_reason)
-        raise AppException(f"风控拦截: {pos_reason}", status_code=403)
-    
-    # 5. 计算买入数量
-    max_trade_ratio = (
-        settings["max_single_trade_ratio"]
-        if settings["max_single_trade_ratio"] is not None
-        else cs.max_single_trade_ratio
-    )
-    total_assets = float(account.balance)
-    # 加上持仓市值
-    pos_result = await db.execute(
-        _text("SELECT COALESCE(SUM(market_value), 0) FROM public.positions WHERE account_id = :aid"),
-        {"aid": account.id},
-    )
-    pos_value = float(pos_result.scalar() or 0)
-    total_assets += pos_value
-    
-    max_amount = total_assets * max_trade_ratio
-    qty = (int(max_amount / target_price / LOT_SIZE)) * LOT_SIZE
-    
-    if qty < LOT_SIZE:
-        await _log_hosted(db, uid, signal_id, None, action, symbol,
-                          target_price, None, "BLOCKED",
-                          f"余额/仓位不足，最小需买入 {LOT_SIZE} 股")
-        raise AppException("可用资金不足最小买入量 {LOT_SIZE} 股（最大可买 {qty} 股）", status_code=400)
-    
-    # 6. 审核模式：仅记录，不实际执行
+    is_sell = action.upper() == "SELL"
+
+    if is_sell:
+        # 卖出：检查持仓 + 使用传入数量
+        from sqlalchemy import and_
+        pos_check = await db.execute(
+            select(Position).where(
+                and_(Position.account_id == account.id, Position.symbol == symbol)
+            )
+        )
+        existing = pos_check.scalar_one_or_none()
+        if not existing or existing.available <= 0:
+            await _log_hosted(db, uid, signal_id, None, action, symbol,
+                              target_price, None, "BLOCKED", "无持仓可卖")
+            raise AppException("无持仓可卖", status_code=400)
+
+        qty = min(quantity or existing.available, existing.available)
+        if qty < LOT_SIZE:
+            await _log_hosted(db, uid, signal_id, None, action, symbol,
+                              target_price, None, "BLOCKED",
+                              f"最小卖出 {LOT_SIZE} 股，当前可用 {existing.available} 股")
+            raise AppException(f"可卖数量不足最小单位 {LOT_SIZE} 股", status_code=400)
+    else:
+        # 买入：风控 + 计算数量
+        pos_ok, pos_reason = await _check_position_limit(db, account, target_price, settings)
+        if not pos_ok:
+            await _log_hosted(db, uid, signal_id, None, action, symbol,
+                              target_price, None, "BLOCKED", pos_reason)
+            raise AppException(f"风控拦截: {pos_reason}", status_code=403)
+
+        max_trade_ratio = (
+            settings["max_single_trade_ratio"]
+            if settings["max_single_trade_ratio"] is not None
+            else cs.max_single_trade_ratio
+        )
+        total_assets = float(account.balance)
+        pos_result = await db.execute(
+            _text("SELECT COALESCE(SUM(market_value), 0) FROM public.positions WHERE account_id = :aid"),
+            {"aid": account.id},
+        )
+        pos_value = float(pos_result.scalar() or 0)
+        total_assets += pos_value
+
+        max_amount = total_assets * max_trade_ratio
+        qty = quantity if quantity else (int(max_amount / target_price / LOT_SIZE)) * LOT_SIZE
+
+        if qty < LOT_SIZE:
+            await _log_hosted(db, uid, signal_id, None, action, symbol,
+                              target_price, None, "BLOCKED",
+                              f"余额不足，最小需买入 {LOT_SIZE} 股")
+            raise AppException(f"可用资金不足最小买入量 {LOT_SIZE} 股", status_code=400)
+
+    # 审核模式
     if cs.is_audit_mode:
+        action_cn = "卖出" if is_sell else "买入"
         await _log_hosted(db, uid, signal_id, None, action, symbol,
                           target_price, qty, "BLOCKED",
-                          f"审核模式(IS_AUDIT_MODE=True)，模拟执行买入 {qty} 股")
+                          f"审核模式(IS_AUDIT_MODE=True)，模拟{action_cn} {qty} 股")
         raise AppException("审核模式：信号已记录，暂不实际执行交易", status_code=403)
     
     # 7. 实际执行纸面撮合

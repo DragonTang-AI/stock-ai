@@ -58,8 +58,14 @@ async def get_prescreen_candidates(
     try:
         raw = await fetch_realtime_quotes(pool)
     except Exception as e:
-        logger.warning(f"Prescreen fetch_quotes failed: {e}, falling back to empty")
-        raw = []
+        logger.warning(f"Prescreen fetch_quotes failed (attempt 1): {e}, retrying...")
+        import asyncio
+        await asyncio.sleep(2)
+        try:
+            raw = await fetch_realtime_quotes(pool)
+        except Exception as e2:
+            logger.warning(f"Prescreen fetch_quotes failed (attempt 2): {e2}, falling back to empty")
+            raw = []
 
     # QuoteItem → dict（兼容 Pydantic 模型）
     stocks = []
