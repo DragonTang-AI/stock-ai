@@ -122,11 +122,11 @@ export function fetchAssetOverview(): Promise<AssetOverview> {
       .then(res => {
         const d = res?.data || res || {}
         return {
-          totalAssets: d.total_assets ?? d.totalAssets ?? 0,
+          totalAssets: d.total_equity ?? d.total_assets ?? d.totalAssets ?? 0,
           todayPnl: d.today_pnl ?? d.todayPnl ?? 0,
-          positionPnl: d.unrealized_pnl ?? d.positionPnl ?? 0,
+          positionPnl: d.profit ?? d.unrealized_pnl ?? d.positionPnl ?? 0,
           positionValue: d.market_value ?? d.positionValue ?? 0,
-          availableCash: d.available_cash ?? d.availableCash ?? 0,
+          availableCash: d.balance ?? d.available_cash ?? d.availableCash ?? 0,
         }
       }),
     undefined,

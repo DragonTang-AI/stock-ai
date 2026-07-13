@@ -82,10 +82,11 @@ export interface PlaceOrderRequest {
   order_type: string
 }
 
-export async function placeOrder(order: PlaceOrderRequest): Promise<OrderItem> {
+export async function placeOrder(order: PlaceOrderRequest, silent = false): Promise<OrderItem> {
   const res = await request<{ success: boolean; data: OrderItem }>('/portfolio/orders', {
     method: 'POST',
     data: order,
+    silent,
   })
   return (res as any).data
 }

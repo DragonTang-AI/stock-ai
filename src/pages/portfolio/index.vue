@@ -354,6 +354,38 @@
       @confirm="confirmSubmitOrder"
       @cancel="cancelSubmitOrder"
     />
+
+    <!-- 充值弹窗 -->
+    <view class="topup-modal-mask" v-if="showTopupModal" @click="showTopupModal = false">
+      <view class="topup-modal" @click.stop>
+        <text class="topup-modal-title">模拟充值</text>
+        <text class="topup-modal-sub">选择充值金额（模拟资金）</text>
+        <view class="topup-options">
+          <view
+            class="topup-option"
+            :class="{ active: topupAmount === 100000 }"
+            @click="topupAmount = 100000"
+          >
+            <text class="topup-opt-amount">10 万</text>
+            <text class="topup-opt-label">￥100,000</text>
+          </view>
+          <view
+            class="topup-option"
+            :class="{ active: topupAmount === 1000000 }"
+            @click="topupAmount = 1000000"
+          >
+            <text class="topup-opt-amount">100 万</text>
+            <text class="topup-opt-label">￥1,000,000</text>
+          </view>
+        </view>
+        <view class="topup-actions">
+          <button class="topup-btn-cancel" @click="showTopupModal = false">取消</button>
+          <button class="topup-btn-confirm" :disabled="topupSubmitting" @click="handleTopup">
+            {{ topupSubmitting ? "充值中..." : "确认充值" }}
+          </button>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -536,7 +568,7 @@ async function confirmSubmitOrder() {
   submitting.value = true
   try {
     // action: 小写 'buy'|'sell'，order_type: 大写
-    await placeOrder({ symbol, side, quantity, order_type: 'MARKET' })
+    await placeOrder({ symbol, side, quantity, order_type: 'MARKET' }, true)
     uni.showToast({ title: '下单成功', icon: 'success' })
     orderForm.value = { symbol: '', side: 'buy', quantity: '' }
     await Promise.all([loadAccount(), loadPositions()])

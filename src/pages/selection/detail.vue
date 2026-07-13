@@ -223,6 +223,7 @@ import {
   type StockAnalysisDetail,
 } from '@/api/selection'
 import { placeOrder, fetchAccount, type OrderSide } from '@/api/trading'
+import { getTradeErrorMessage } from '@/utils/trade-errors'
 
 // ---- 状态 ----
 const detail = ref<StockAnalysisDetail | null>(null)
@@ -420,7 +421,9 @@ async function handlePlaceOrder() {
     showTradeModal.value = false
     uni.showToast({ title: '下单成功', icon: 'success' })
   } catch (e: any) {
-    tradeError.value = getTradeErrorMessage(e)
+    const msg = getTradeErrorMessage(e)
+    tradeError.value = msg
+    uni.showToast({ title: msg, icon: 'none', duration: 3500 })
   } finally {
     tradeSubmitting.value = false
   }

@@ -247,14 +247,22 @@ export function estimateFee(params: FeeEstimateRequest): Promise<FeeEstimateResp
  *   - price: 数字
  */
 export function placeOrder(params: PlaceOrderRequest): Promise<Order> {
-  // 后端 /simulation/orders 用 query 参数（非 JSON body）：symbol, side(buy/sell), qty(100整数倍), price(可选)
   const q = new URLSearchParams()
   q.set('symbol', params.symbol)
   q.set('side', params.action)
   q.set('qty', String(params.quantity))
   if (params.price != null) q.set('price', String(params.price))
-  return request<any>(`/simulation/orders?${q.toString()}`, { method: 'POST' })
-    .then(res => res?.data || res || {})
+  return request<any>(`/simulation/orders?${q.toString()}`, { method: 'POST', silent: true })
+    .then(res => {
+      const data = res?.data || res
+      if (!data || data.success === false) {
+        const err: any = new Error(data?.message || 'Place order failed')
+        err.errorCode = data?.code || 'ORDER_FAILED'
+        err.detail = data?.message
+        throw err
+      }
+      return data
+    })
 }
 
 /** 获取市场规则 → /market/rules/{market} */

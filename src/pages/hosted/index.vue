@@ -110,6 +110,44 @@
         </view>
       </view>
 
+      <!-- 单票仓位上限 -->
+      <view class="setting-item">
+        <view class="setting-label">
+          <text class="s-name">单票仓位上限</text>
+          <text class="s-desc">{{ configForm.max_position_ratio }}%</text>
+        </view>
+        <slider
+          :value="Number(configForm.max_position_ratio)"
+          @change="configForm.max_position_ratio = String($event.detail.value)"
+          min="5"
+          max="100"
+          step="5"
+          show-value
+          activeColor="#4A90E2"
+          backgroundColor="#E5E5EA"
+          block-size="20"
+        />
+      </view>
+
+      <!-- 单笔交易上限 -->
+      <view class="setting-item">
+        <view class="setting-label">
+          <text class="s-name">单笔交易上限</text>
+          <text class="s-desc">{{ configForm.max_single_trade_ratio }}%</text>
+        </view>
+        <slider
+          :value="Number(configForm.max_single_trade_ratio)"
+          @change="configForm.max_single_trade_ratio = String($event.detail.value)"
+          min="1"
+          max="100"
+          step="1"
+          show-value
+          activeColor="#4A90E2"
+          backgroundColor="#E5E5EA"
+          block-size="20"
+        />
+      </view>
+
       <!-- 单笔限额 -->
       <view class="setting-item">
         <view class="setting-label">
@@ -183,7 +221,7 @@
         :disabled="savingConfig"
         @click="handleSaveConfig"
       >
-        {{ savingConfig ? '保存中...' : '保存设置' }}
+        {{ savingConfig ? '启动中...' : (status?.is_active ? '更新托管' : '开始托管') }}
       </button>
     </view>
 
@@ -279,8 +317,10 @@ const logs = ref<HostedTradeLog[]>([])
 const logTotal = ref(0)
 const logOffset = ref(0)
 
-const configForm = reactive<HostedConfigRequest & { single_trade_limit: string; daily_trade_limit: string; industry_concentration: string }>({
+const configForm = reactive<HostedConfigRequest & { single_trade_limit: string; daily_trade_limit: string; industry_concentration: string; max_position_ratio: string; max_single_trade_ratio: string }>({
   risk_level: 'balanced',
+  max_position_ratio: '15',
+  max_single_trade_ratio: '15',
   single_trade_limit: '',
   daily_trade_limit: '',
   industry_concentration: '',
@@ -375,6 +415,8 @@ async function loadStatus() {
 
 function fillConfigForm(s: HostedStatus) {
   configForm.risk_level = s.risk_level || 'balanced'
+  configForm.max_position_ratio = s.max_position_ratio != null ? String(Math.round(s.max_position_ratio * 100)) : '15'
+  configForm.max_single_trade_ratio = s.max_single_trade_ratio != null ? String(Math.round(s.max_single_trade_ratio * 100)) : '15'
   configForm.single_trade_limit = s.single_trade_limit != null ? String(s.single_trade_limit) : ''
   configForm.daily_trade_limit = s.daily_trade_limit != null ? String(s.daily_trade_limit) : ''
   configForm.industry_concentration = s.industry_concentration != null ? String((s.industry_concentration * 100).toFixed(0)) : ''
@@ -410,6 +452,8 @@ async function handleSaveConfig() {
   savingConfig.value = true
   try {
     const body: HostedConfigRequest = { risk_level: configForm.risk_level }
+    body.max_position_ratio = parseFloat(configForm.max_position_ratio) / 100
+    body.max_single_trade_ratio = parseFloat(configForm.max_single_trade_ratio) / 100
     if (configForm.single_trade_limit) {
       body.single_trade_limit = parseFloat(configForm.single_trade_limit)
     }
@@ -421,13 +465,23 @@ async function handleSaveConfig() {
     }
     body.auto_stop_loss = configForm.auto_stop_loss
 
+    // If not yet active, switch to AI_HOSTED first
+    if (!status.value?.is_active) {
+      uni.showLoading({ title: '启动托管...' })
+      status.value = await switchHosted('AI_HOSTED')
+    }
+    
     status.value = await updateHostedConfig(body)
     fillConfigForm(status.value)
-    uni.showToast({ title: '设置已保存', icon: 'success' })
+    uni.showToast({ title: status.value?.is_active ? '托管已更新' : '托管已启动', icon: 'success' })
+    if (status.value?.is_active) {
+      await loadLogs()
+    }
   } catch (err: any) {
-    uni.showToast({ title: err?.message || '保存失败', icon: 'none' })
+    uni.showToast({ title: err?.message || '操作失败', icon: 'none' })
   } finally {
     savingConfig.value = false
+    uni.hideLoading()
   }
 }
 
