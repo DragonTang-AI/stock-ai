@@ -52,6 +52,12 @@ async def get_recommend(
     return await recommend_stocks(req)
 
 
+
+@router.get("/daily")
+async def get_daily():
+    """前端兼容端点：/selection/daily → /selection/daily-picks"""
+    return await get_daily_picks()
+
 @router.get("/daily-picks")
 async def get_daily_picks(
     current_user: Optional[User] = Depends(get_current_user_optional),

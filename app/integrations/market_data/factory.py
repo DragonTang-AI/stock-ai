@@ -17,6 +17,13 @@ import os
 from functools import lru_cache
 from typing import Optional
 
+# Load .env so MARKET_DATA_SOURCE is available without pydantic-settings
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from app.integrations.market_data.base import MarketDataAdapter
 from app.integrations.market_data.sina import SinaAdapter
 from app.integrations.market_data.akshare import AkshareAdapter, is_akshare_available

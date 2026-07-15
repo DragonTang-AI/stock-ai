@@ -111,7 +111,7 @@ async def _diagnose_single_position(p: Position, total_market_value: float) -> d
     except Exception as e:
         logger.warning(f"获取 {p.symbol} 详情失败: {e}")
 
-    weight = round(p.market_value / total_market_value * 100, 2) if total_market_value > 0 else 0
+    weight = round(float(p.market_value) / total_market_value * 100, 2) if total_market_value > 0 else 0
     profit_pct = round(p.profit_pct, 2)
 
     # 技术信号

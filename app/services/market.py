@@ -310,26 +310,55 @@ async def fetch_kline(
     items.reverse()  # Sina 返回最新在前，转为最早在前
     return items
 
+# ── 大盘指数 ──────────────────────────────────────────
 
 async def fetch_indices():
-    获取大盘指数
-    adapter = get_market_data_adapter()
-    index_codes = {
-        sh000001: 上证指数,
-        sz399001: 深证成指,
-        sz399006: 创业板指,
-        sh000688: 科创50,
+    """获取大盘指数（上证/深证/创业板/科创50），复用 SinaAdapter"""
+    from app.integrations.market_data.sina import SinaAdapter
+
+    index_map = {
+        "sh000001": "上证指数",
+        "sz399001": "深证成指",
+        "sz399006": "创业板指",
+        "sh000688": "科创50",
     }
-    results = []
-    for code, name in index_codes.items():
-        try:
-            quote = await adapter.get_quote(code)
-            results.append({
-                symbol: quote.symbol,
-                name: name,
-                price: quote.price,
-                change_pct: quote.change_pct,
-            })
-        except Exception:
-            continue
-    return results
+
+    try:
+        adapter = SinaAdapter()
+        client = await adapter._get_client()
+        url = "http://hq.sinajs.cn/list=" + ",".join(index_map.keys())
+        resp = await client.get(url)
+        resp.raise_for_status()
+        text = resp.content.decode("gbk", errors="replace")
+
+        indices = []
+        for line in text.strip().split("\n"):
+            if "=" not in line or '""' in line:
+                continue
+            try:
+                left, right = line.split("=", 1)
+                sina_code = left.split("_str_")[1].strip()
+                fields_str = right.strip().strip(";").strip('"')
+                fields = fields_str.split(",")
+                if len(fields) < 6:
+                    continue
+                name = index_map.get(sina_code, fields[0])
+                prev_close = float(fields[2])
+                price = float(fields[3])
+                change = price - prev_close
+                change_pct = (change / prev_close * 100) if prev_close else 0
+                indices.append({
+                    "code": sina_code,
+                    "name": name,
+                    "price": round(price, 2),
+                    "prev_close": round(prev_close, 2),
+                    "change": round(change, 2),
+                    "change_pct": round(change_pct, 2),
+                    "high": round(float(fields[4]), 2),
+                    "low": round(float(fields[5]), 2),
+                })
+            except Exception:
+                continue
+        return indices
+    except Exception:
+        return []

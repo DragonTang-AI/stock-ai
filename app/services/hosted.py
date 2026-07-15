@@ -552,6 +552,7 @@ async def get_hosted_logs(
     db: AsyncSession,
     user: User,
     limit: int = 50,
+    offset: int = 0,
 ) -> Tuple[int, list]:
     """获取托管执行日志"""
     uid = user.id

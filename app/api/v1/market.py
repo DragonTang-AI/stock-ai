@@ -123,7 +123,6 @@ async def get_stock_detail(
     except Exception as e:
         raise AppException(code="DETAIL_FAILED", message=f"获取详情失败: {e}", status_code=500)
 
-# ── 大盘指数 ──────────────────────────────────────────
 
 @router.get("/indices")
 async def get_indices():
