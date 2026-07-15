@@ -309,3 +309,27 @@ async def fetch_kline(
     items = [_kline_to_item(k) for k in klines]
     items.reverse()  # Sina 返回最新在前，转为最早在前
     return items
+
+
+async def fetch_indices():
+    获取大盘指数
+    adapter = get_market_data_adapter()
+    index_codes = {
+        sh000001: 上证指数,
+        sz399001: 深证成指,
+        sz399006: 创业板指,
+        sh000688: 科创50,
+    }
+    results = []
+    for code, name in index_codes.items():
+        try:
+            quote = await adapter.get_quote(code)
+            results.append({
+                symbol: quote.symbol,
+                name: name,
+                price: quote.price,
+                change_pct: quote.change_pct,
+            })
+        except Exception:
+            continue
+    return results

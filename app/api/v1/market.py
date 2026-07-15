@@ -122,3 +122,16 @@ async def get_stock_detail(
         raise
     except Exception as e:
         raise AppException(code="DETAIL_FAILED", message=f"获取详情失败: {e}", status_code=500)
+
+# ── 大盘指数 ──────────────────────────────────────────
+
+@router.get("/indices")
+async def get_indices():
+    """获取大盘指数（上证/深证/创业板/科创50）"""
+    try:
+        indices = await market_service.fetch_indices()
+        return {"success": True, "data": indices}
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "data": [], "message": "获取指数失败"}
