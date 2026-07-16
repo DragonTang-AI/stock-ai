@@ -104,6 +104,13 @@ async def diagnose_portfolio(db: AsyncSession, user: User) -> dict:
 
 async def _diagnose_single_position(p: Position, total_market_value: float) -> dict:
     """诊断单只持仓"""
+    # 将Decimal转float避免类型不匹配
+    mkt_val = float(p.market_value)
+    mkt_price = float(p.market_price)
+    cost_price = float(p.cost_price)
+    profit = float(p.profit)
+    profit_pct = float(p.profit_pct)
+    quantity = int(p.quantity)
     # 取技术指标
     detail = None
     try:
@@ -111,8 +118,7 @@ async def _diagnose_single_position(p: Position, total_market_value: float) -> d
     except Exception as e:
         logger.warning(f"获取 {p.symbol} 详情失败: {e}")
 
-    weight = round(p.market_value / total_market_value * 100, 2) if total_market_value > 0 else 0
-    profit_pct = round(p.profit_pct, 2)
+    weight = round(mkt_val / total_market_value * 100, 2) if total_market_value > 0 else 0
 
     # 技术信号
     signals = []
@@ -144,11 +150,11 @@ async def _diagnose_single_position(p: Position, total_market_value: float) -> d
         boll_lower = detail.get("boll_lower")
         boll_mid = detail.get("boll_mid")
         if boll_upper and boll_lower and boll_mid:
-            if p.market_price >= boll_upper:
-                signals.append({"type": "bearish", "name": "触及布林上轨", "value": p.market_price, "desc": f"股价{p.market_price}触及布林上轨{boll_upper}，短期可能回调"})
+            if mkt_price >= boll_upper:
+                signals.append({"type": "bearish", "name": "触及布林上轨", "value": mkt_price, "desc": f"股价{mkt_price}触及布林上轨{boll_upper}，短期可能回调"})
                 confidence -= 5
-            elif p.market_price <= boll_lower:
-                signals.append({"type": "bullish", "name": "触及布林下轨", "value": p.market_price, "desc": f"股价{p.market_price}触及布林下轨{boll_lower}，可能存在支撑"})
+            elif mkt_price <= boll_lower:
+                signals.append({"type": "bullish", "name": "触及布林下轨", "value": mkt_price, "desc": f"股价{mkt_price}触及布林下轨{boll_lower}，可能存在支撑"})
                 confidence += 5
 
         # 均线趋势
@@ -194,21 +200,56 @@ async def _diagnose_single_position(p: Position, total_market_value: float) -> d
     if action is None:
         pass  # already set
 
+    # 计算 target_price / stop_loss / take_profit
+    target_price = None
+    stop_loss = None
+    take_profit = None
+    if detail:
+        bmid = detail.get("boll_mid")
+        bupper = detail.get("boll_upper")
+        blower = detail.get("boll_lower")
+        if bmid and bmid > 0:
+            target_price = round(bmid, 2)
+        if blower and blower > 0:
+            stop_loss = round(mkt_price * 0.93, 2)  # 7%止损
+            if blower < stop_loss:
+                stop_loss = round(blower, 2)
+        if bupper and bupper > 0 and cost_price > 0:
+            take_profit = round(max(bupper, cost_price * 1.10), 2)
+
+    # 提取 change / market 等行情字段
+    change = detail.get("change") if detail else None
+    change_pct = detail.get("change_pct") if detail else None
+    market = detail.get("market", "A") if detail else "A"
+
+    # 生成 reason_codes / reasoning
+    reason_codes = [s["name"] for s in signals] if signals else []
+    reasoning = action.get("reason", "") if action else ""
+
     return {
         "symbol": p.symbol,
         "name": p.name,
-        "quantity": p.quantity,
-        "cost_price": round(p.cost_price, 2),
-        "market_price": round(p.market_price, 2),
-        "market_value": round(p.market_value, 2),
-        "profit": round(p.profit, 2),
+        "market": market,
+        "quantity": quantity,
+        "cost_price": round(cost_price, 2),
+        "market_price": round(mkt_price, 2),
+        "market_value": round(mkt_val, 2),
+        "profit": round(profit, 2),
         "profit_pct": profit_pct,
         "weight": weight,
+        "change": change,
+        "change_pct": change_pct,
+        "target_price": target_price,
+        "stop_loss": stop_loss,
+        "take_profit": take_profit,
         "rating": rating,
         "rating_text": rating_text,
         "confidence": confidence,
         "signals": signals,
         "action": action,
+        "reason_codes": reason_codes,
+        "reasoning": reasoning,
+        "generated_at": datetime.now().isoformat(),
         "indicators": {
             "rsi_14": detail.get("rsi_14") if detail else None,
             "macd_hist": detail.get("macd_hist") if detail else None,

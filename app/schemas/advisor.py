@@ -1,6 +1,5 @@
-"""
-app.schemas.advisor — 智能投资助手 API 数据模型
-"""
+
+"""app.schemas.advisor — 智能投资助手 API 数据模型"""
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, Field
@@ -10,6 +9,7 @@ class PortfolioDiagnosisResponse(BaseModel):
     """持仓诊断响应"""
     success: bool
     data: Optional[dict] = None
+    error: Optional[str] = None
 
 
 class ChatContextResponse(BaseModel):
