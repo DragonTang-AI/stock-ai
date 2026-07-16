@@ -74,8 +74,9 @@ async def get_account_info(db: AsyncSession, user: User) -> AccountInfo:
     positions = await get_positions(db, user)
     market_value = sum(p.market_value for p in positions)
     total_equity = float(account.balance) + float(account.frozen) + market_value
-    profit = total_equity - INITIAL_BALANCE
-    profit_pct = (profit / INITIAL_BALANCE) * 100 if INITIAL_BALANCE > 0 else 0.0
+    deposited = float(account.total_deposited) if account.total_deposited else INITIAL_BALANCE
+    profit = total_equity - deposited
+    profit_pct = (profit / deposited) * 100 if deposited > 0 else 0.0
 
     return AccountInfo(
         account_id=account.id,
@@ -474,8 +475,8 @@ async def get_portfolio_analytics(
         return {
             "position_count": 0,
             "total_market_value": 0,
-            "total_profit": round(float(account.balance) - INITIAL_BALANCE, 2),
-            "total_profit_pct": round((float(account.balance) - INITIAL_BALANCE) / INITIAL_BALANCE * 100, 4) if INITIAL_BALANCE > 0 else 0,
+            "total_profit": round(float(account.balance) - float(account.total_deposited or INITIAL_BALANCE), 2),
+            "total_profit_pct": round((float(account.balance) - float(account.total_deposited or INITIAL_BALANCE)) / float(account.total_deposited or INITIAL_BALANCE) * 100, 4) if (account.total_deposited or INITIAL_BALANCE) > 0 else 0,
             "win_rate": 0,
             "best_position": None,
             "worst_position": None,
@@ -489,8 +490,9 @@ async def get_portfolio_analytics(
 
     # 总盈亏（持仓盈亏 + 现金变动）
     total_equity = float(account.balance) + total_market_value
-    total_profit = round(total_equity - INITIAL_BALANCE, 2)
-    total_profit_pct = round((total_profit / INITIAL_BALANCE) * 100, 4) if INITIAL_BALANCE > 0 else 0
+    total_deposited = float(account.total_deposited) if account.total_deposited else INITIAL_BALANCE
+    total_profit = round(total_equity - total_deposited, 2)
+    total_profit_pct = round((total_profit / total_deposited) * 100, 4) if total_deposited > 0 else 0
 
     # 胜率
     winning = [p for p in positions if p.profit > 0]

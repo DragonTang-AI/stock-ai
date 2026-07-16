@@ -314,6 +314,7 @@ async def topup_account(
     if not account:
         raise AppException(code="NO_ACCOUNT", message="账户不存在", status_code=404)
     account.balance += Decimal(str(amount))
+    account.total_deposited += Decimal(str(amount))
     await db.commit()
     return {
         "success": True,
