@@ -23,24 +23,9 @@
           <view class="menu-badge" v-if="unreadCount > 0">{{ unreadCount > 99 ? '99+' : unreadCount }}</view>
           <text class="menu-arrow">›</text>
         </view>
-        <view class="menu-item" @click="navigateTo('/pages/portfolio/index')">
-          <text class="menu-icon">💼</text>
-          <text class="menu-label">我的持仓</text>
-          <text class="menu-arrow">›</text>
-        </view>
         <view class="menu-item" @click="navigateTo('/pages/watchlist/index')">
           <text class="menu-icon">⭐</text>
           <text class="menu-label">自选股</text>
-          <text class="menu-arrow">›</text>
-        </view>
-        <view class="menu-item" @click="navigateTo('/pages/selection/index')">
-          <text class="menu-icon">📋</text>
-          <text class="menu-label">我的选股</text>
-          <text class="menu-arrow">›</text>
-        </view>
-        <view class="menu-item" @click="showToast('交易记录开发中')">
-          <text class="menu-icon">📜</text>
-          <text class="menu-label">交易记录</text>
           <text class="menu-arrow">›</text>
         </view>
       </view>

@@ -61,8 +61,16 @@ const stocks = ref<WatchStock[]>([])
 async function fetchWatchlist() {
   loading.value = true
   try {
-    // TODO: 对接自选股 API
-    stocks.value = []
+    const { watchlistApi } = await import('@/api/watchlist')
+    const res = await watchlistApi.list()
+    if (res.success && res.data) {
+      stocks.value = res.data.map((item: any) => ({
+        code: item.symbol,
+        name: item.name || item.symbol,
+        price: item.price != null ? item.price.toFixed(2) : '-',
+        change: item.change_pct != null ? parseFloat(item.change_pct.toFixed(2)) : 0,
+      }))
+    }
   } catch {
     // 忽略错误
   } finally {
