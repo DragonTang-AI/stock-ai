@@ -37,6 +37,12 @@ async def create_order(
     current_user: User = Depends(get_current_user)
 ):
     """创建订单"""
+    # AI托管开启时禁止手动下单
+    from app.services.hosted_engine import engine as hosted_engine
+    if hosted_engine.is_active(current_user.id):
+        from app.core.exceptions import AppException
+        raise AppException(code="HOSTED_ACTIVE", message="AI托管已开启，手动交易已禁用。请先关闭AI托管再操作。", status_code=403)
+    
     try:
         order_item = await trading_service.place_order(db, current_user, order)
         return {
