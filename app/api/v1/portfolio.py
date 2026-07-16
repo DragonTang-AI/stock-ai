@@ -107,6 +107,12 @@ async def create_order(
     - 买入：余额 ≥ 金额 + 佣金（万 2.5，最低 5 元）
     - 卖出：可卖数量 ≥ 数量（T+1：今日买入的股票下一交易日才能卖）
     """
+    # AI托管开启时禁止手动下单
+    from app.services.hosted_engine import engine as hosted_engine
+    if hosted_engine.is_active(current_user.id):
+        from app.core.exceptions import AppException
+        raise AppException(code="HOSTED_ACTIVE", message="AI托管已开启，手动交易已禁用。请先关闭AI托管再操作。", status_code=403)
+    
     try:
         order = await place_order(db, current_user, req)
         return {"success": True, "data": order, "message": "下单成功"}
