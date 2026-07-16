@@ -35,6 +35,7 @@ from app.schemas.trading import (
     DashboardSummaryResponse,
     StatisticsResponse,
 )
+from decimal import Decimal
 from datetime import datetime
 from app.services.trading import (
     get_account_info,
@@ -296,4 +297,27 @@ async def get_statistics(
             "sharpeRatio": 0,
             "maxDrawdown": max_drawdown,
         },
+    }
+
+
+@router.post("/topup")
+async def topup_account(
+    amount: float = Query(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """模拟充值 — 增加账户余额"""
+    from sqlalchemy import select
+    from app.models.trading import Account
+    result = await db.execute(select(Account).where(Account.user_id == current_user.id))
+    account = result.scalar_one_or_none()
+    if not account:
+        raise AppException(code="NO_ACCOUNT", message="账户不存在", status_code=404)
+    account.balance += Decimal(str(amount))
+    await db.commit()
+    return {
+        "success": True,
+        "balance": account.balance,
+        "topup_amount": amount,
+        "message": f"成功充值 {amount} 元",
     }

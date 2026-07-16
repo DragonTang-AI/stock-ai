@@ -122,3 +122,27 @@ async def get_stock_detail(
         raise
     except Exception as e:
         raise AppException(code="DETAIL_FAILED", message=f"获取详情失败: {e}", status_code=500)
+
+
+@router.get("/indices")
+async def get_indices():
+    """大盘指数（占位桩）"""
+    return {"success": True, "data": [
+        {"symbol": "000001.SH", "name": "上证指数", "price": 3350.53, "change_pct": 0.51},
+        {"symbol": "399001.SZ", "name": "深证成指", "price": 10823.17, "change_pct": 0.83},
+        {"symbol": "399006.SZ", "name": "创业板指", "price": 2215.39, "change_pct": 1.26},
+    ]}
+
+@router.get("/rules/{market}")
+async def get_market_rules(market: str):
+    """市场交易规则"""
+    return {"success": True, "data": {
+        "market": market.upper(),
+        "lot_size": 100,
+        "price_limit_pct": 10,
+        "commission_rate": 0.00025,
+        "min_commission": 5,
+        "stamp_tax_rate": 0.001,
+        "stamp_tax_side": "SELL",
+        "settlement": "T+1",
+    }}
