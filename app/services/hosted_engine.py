@@ -189,7 +189,8 @@ class HostedEngine:
                 order_req = OrderRequest(
                     symbol=symbol, side="sell", quantity=sell_qty, order_type="market",
                 )
-                await place_order(db, user, order_req)
+                fallback = float(position.market_price) if position.market_price > 0 else None
+                await place_order(db, user, order_req, fallback_price=fallback)
                 self._add_log(
                     user_id, "success",
                     f"自动卖出 {symbol} {sell_qty}股 ({action_type})，"
