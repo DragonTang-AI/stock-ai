@@ -174,7 +174,7 @@ async def get_positions_summary(db: AsyncSession, user: User) -> Tuple[List[Posi
 
 
 # ============== 撮合（下单） ==============
-async def place_order(db: AsyncSession, user: User, req: OrderRequest) -> OrderItem:
+async def place_order(db: AsyncSession, user: User, req: OrderRequest, fallback_price: float | None = None) -> OrderItem:
     """
     下单（v1：市价立即成交）
 
@@ -191,13 +191,24 @@ async def place_order(db: AsyncSession, user: User, req: OrderRequest) -> OrderI
 
     # 1. 取市价
     symbol = req.symbol.upper()
+    quote = None
     try:
         quotes = await fetch_realtime_quotes([symbol])
+        if quotes:
+            quote = quotes[0]
     except Exception as e:
-        raise AppException(code="QUOTE_FAILED", message=f"获取行情失败: {e}", status_code=502)
-    if not quotes:
-        raise AppException(code="SYMBOL_NOT_FOUND", message=f"未找到股票 {symbol} 的行情", status_code=404)
-    quote = quotes[0]
+        if fallback_price and fallback_price > 0:
+            logger.warning(f"获取 {symbol} 行情失败，使用兜底价 {fallback_price}: {e}")
+        else:
+            raise AppException(code="QUOTE_FAILED", message=f"获取行情失败: {e}", status_code=502)
+
+    if not quote:
+        if fallback_price and fallback_price > 0:
+            from collections import namedtuple
+            FallbackQuote = namedtuple('FallbackQuote', ['symbol', 'name', 'price'])
+            quote = FallbackQuote(symbol=symbol, name=symbol, price=fallback_price)
+        else:
+            raise AppException(code="SYMBOL_NOT_FOUND", message=f"未找到股票 {symbol} 的行情", status_code=404)
 
     # 限价单：v1 简化处理为市价（实际应等待价格触及）
     fill_price = float(quote.price) if req.order_type == "market" else (req.price or float(quote.price))
@@ -336,7 +347,7 @@ async def _update_position(
                 name=name,
                 market="A",
                 quantity=quantity,
-                available=0,  # T+1：今日买入不可卖
+                available=quantity,  # 模拟盘不需要T+1限制
                 cost_price=Decimal(str(price)),
                 cost_amount=Decimal(str(price * quantity)),
                 market_price=Decimal(str(price)),
