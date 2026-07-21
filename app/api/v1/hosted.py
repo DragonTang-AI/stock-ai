@@ -1,6 +1,7 @@
-"""app.api/v1.hosted.py — AI托管路由
+"""app.api.v1.hosted.py — AI托管路由 v1.2
 
 使用 HostedEngine 驱动后台自动交易。
+修复：返回真实的 daily_loss_pct / active_signals_today / 结构化交易日志
 """
 import logging
 from datetime import datetime
@@ -44,6 +45,10 @@ async def get_hosted_status(current_user: User = Depends(get_current_user)):
             "enabled_at": None,
             "disabled_at": None,
             "total_trades": 0,
+            "total_triggered": 0,
+            "total_blocked": 0,
+            "total_skipped": 0,
+            "total_error": 0,
             "scan_count": 0,
             "last_scan": None,
             "last_action": None,
@@ -54,6 +59,7 @@ async def get_hosted_status(current_user: User = Depends(get_current_user)):
         }
 
     config = session.get("config", {})
+    daily_pnl_pct = session.get("daily_pnl_pct")
     return {
         "mode": "AI_HOSTED",
         "is_active": session["is_active"],
@@ -68,11 +74,15 @@ async def get_hosted_status(current_user: User = Depends(get_current_user)):
         "enabled_at": session["enabled_at"].isoformat() if session.get("enabled_at") else None,
         "disabled_at": None,
         "total_trades": session.get("total_trades", 0),
+        "total_triggered": session.get("total_triggered", 0),
+        "total_blocked": session.get("total_blocked", 0),
+        "total_skipped": session.get("total_skipped", 0),
+        "total_error": session.get("total_error", 0),
         "scan_count": session.get("scan_count", 0),
         "last_scan": session.get("last_scan"),
         "last_action": session.get("last_action"),
-        "active_signals_today": 0,
-        "daily_loss_pct": None,
+        "active_signals_today": session.get("signals_today", 0),
+        "daily_loss_pct": round(daily_pnl_pct, 2) if daily_pnl_pct is not None else None,
         "is_audit_mode": False,
         "disclaimer": "AI托管功能基于技术面量化分析，不构成投资推荐。过往表现不代表未来收益。",
     }
@@ -95,11 +105,17 @@ async def switch_hosted(data: dict, current_user: User = Depends(get_current_use
             "watchlist": data.get("watchlist", []),
         }
         session = await hosted_engine.enable(current_user.id, config)
+        daily_pnl_pct = session.get("daily_pnl_pct")
         return {
             "mode": "AI_HOSTED",
             "is_active": session["is_active"],
             "enabled_at": session["enabled_at"].isoformat(),
             "disabled_at": None,
+            "total_trades": session.get("total_trades", 0),
+            "total_triggered": session.get("total_triggered", 0),
+            "total_blocked": session.get("total_blocked", 0),
+            "active_signals_today": session.get("signals_today", 0),
+            "daily_loss_pct": round(daily_pnl_pct, 2) if daily_pnl_pct is not None else None,
             "disclaimer": "AI托管功能基于技术面量化分析，不构成投资推荐。",
         }
     else:
@@ -131,6 +147,7 @@ async def update_hosted_config(data: dict, current_user: User = Depends(get_curr
     result = await hosted_engine.update_config(current_user.id, updates)
 
     config = result.get("config", {})
+    daily_pnl_pct = result.get("daily_pnl_pct")
     return {
         "mode": "AI_HOSTED",
         "is_active": result["is_active"],
@@ -142,6 +159,11 @@ async def update_hosted_config(data: dict, current_user: User = Depends(get_curr
         "daily_trade_limit": config.get("daily_trade_limit", 200000),
         "industry_concentration": config.get("industry_concentration", 40.0),
         "auto_stop_loss": config.get("auto_stop_loss", True),
+        "total_trades": result.get("total_trades", 0),
+        "total_triggered": result.get("total_triggered", 0),
+        "total_blocked": result.get("total_blocked", 0),
+        "active_signals_today": result.get("signals_today", 0),
+        "daily_loss_pct": round(daily_pnl_pct, 2) if daily_pnl_pct is not None else None,
         "disclaimer": "AI托管功能基于技术面量化分析，不构成投资推荐。",
     }
 
@@ -156,13 +178,21 @@ async def get_hosted_logs(
     total = len(logs)
     formatted = []
     for i, entry in enumerate(reversed(logs)):
-        formatted.append({
-            "id": total - i,
-            "timestamp": entry["time"],
-            "action": entry["message"],
-            "detail": "",
-            "status": entry["level"],
-        })
+        item = {
+            "id": str(total - i),
+            "signal_id": entry.get("signal_id"),
+            "order_id": entry.get("order_id"),
+            "action": entry.get("action", ""),
+            "symbol": entry.get("symbol", ""),
+            "symbol_name": entry.get("symbol_name", ""),
+            "target_price": entry.get("target_price"),
+            "qty": entry.get("qty"),
+            "reason": entry.get("reason", entry.get("message", "")),
+            "status": entry.get("status", entry.get("level", "info").upper()),
+            "error": entry.get("error"),
+            "created_at": entry["time"],
+        }
+        formatted.append(item)
     page = formatted[offset:offset + limit]
     return {
         "total": total,
