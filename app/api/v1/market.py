@@ -146,3 +146,21 @@ async def get_market_rules(market: str):
         "stamp_tax_side": "SELL",
         "settlement": "T+1",
     }}
+
+from app.schemas.market import RankResponse
+
+
+@router.get("/ranking", response_model=RankResponse)
+async def get_ranking(
+    type: str = Query("gainers", description="排行类型: gainers(涨幅榜) / losers(跌幅榜) / hot(热门榜)"),
+    limit: int = Query(20, ge=5, le=50, description="返回条数"),
+):
+    """
+    获取全市场 A 股排行榜（公开接口，无需登录）。
+
+    数据源：东方财富公开 HTTP API，覆盖全部 A 股。
+    """
+    from app.services.market import fetch_ranking
+
+    data = await fetch_ranking(rank_type=type, limit=limit)
+    return {"success": True, "type": type, "data": data, "meta": {}}
