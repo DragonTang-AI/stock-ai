@@ -13,6 +13,35 @@
     </view>
     <view class="market-tag">{{ marketLabel }}</view>
 
+    <!-- 当前持仓（P1-5） -->
+    <view class="position-card" v-if="currentPosition">
+      <view class="position-header">
+        <text class="position-title">我的持仓</text>
+        <text class="position-pnl" :class="positionInfo.profit >= 0 ? 'up' : 'down'">
+          {{ positionInfo.profit >= 0 ? '+' : '' }}{{ positionInfo.profit.toFixed(2) }}
+          ({{ positionInfo.profit_pct >= 0 ? '+' : '' }}{{ positionInfo.profit_pct.toFixed(2) }}%)
+        </text>
+      </view>
+      <view class="position-stats">
+        <view class="pos-stat-item">
+          <text class="pos-stat-label">持仓</text>
+          <text class="pos-stat-value">{{ positionInfo.hold_qty }} 股</text>
+        </view>
+        <view class="pos-stat-item">
+          <text class="pos-stat-label">可卖</text>
+          <text class="pos-stat-value">{{ positionInfo.available }} 股</text>
+        </view>
+        <view class="pos-stat-item">
+          <text class="pos-stat-label">成本</text>
+          <text class="pos-stat-value">{{ positionInfo.avg_cost.toFixed(2) }}</text>
+        </view>
+        <view class="pos-stat-item">
+          <text class="pos-stat-label">市值</text>
+          <text class="pos-stat-value">{{ positionInfo.market_value.toFixed(2) }}</text>
+        </view>
+      </view>
+    </view>
+
     <!-- 交易方向 -->
     <view class="side-switch">
       <view
@@ -150,6 +179,7 @@ import type {
   FeeEstimateResponse,
   MarketRule,
 } from '@/api/trading'
+import { fetchSimulationPositions, type SimPosition } from '@/api/trading'
 import {
   fetchTradingStockInfo,
   estimateFee,
@@ -173,6 +203,23 @@ const customQty = ref<number | null>(null)
 const stockInfo = ref<TradingStockInfo>({} as TradingStockInfo)
 const accountCash = ref(0)
 const availableQty = ref(0)
+const currentPosition = ref<SimPosition | null>(null)
+const allPositions = ref<SimPosition[]>([])
+
+// 当前股票的持仓信息
+const positionInfo = computed(() => {
+  if (!currentPosition.value) return null
+  const pos = currentPosition.value
+  return {
+    hold_qty: pos.quantity,
+    available: pos.available_quantity,
+    avg_cost: pos.avg_cost,
+    current_price: pos.current_price,
+    market_value: pos.market_value,
+    profit: pos.profit,
+    profit_pct: pos.profit_pct,
+  }
+})
 const showConfirm = ref(false)
 const pendingOrder = ref<any>(null)
 const ruleHints = ref<string[]>([])
@@ -260,6 +307,20 @@ function formatChange(v: number | null | undefined): string {
 function formatAmount(v: number): string {
   if (isNaN(v)) return '0.00'
   return v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
+async function loadPositionForSymbol() {
+  try {
+    const res = await fetchSimulationPositions()
+    allPositions.value = res.data || []
+    const match = allPositions.value.find(
+      p => p.symbol === props.symbol || p.symbol.replace('.', '') === props.symbol
+    )
+    currentPosition.value = match || null
+    availableQty.value = match?.available_quantity ?? 0
+  } catch {
+    availableQty.value = 0
+  }
 }
 
 async function refreshFeeEstimate() {
@@ -408,6 +469,7 @@ onMounted(() => {
   loadStockInfo()
   loadAccount()
   loadMarketRule()
+  loadPositionForSymbol()
 })
 </script>
 
@@ -476,7 +538,56 @@ onMounted(() => {
   font-weight: 600;
   color: $color-primary;
   background: rgba(74, 144, 226, 0.1);
-  margin-bottom: 24rpx;
+  margin-bottom: 16rpx;
+}
+
+/* Position Card (P1-5) */
+.position-card {
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+  border: 1rpx solid #dbeafe;
+  border-radius: 12rpx;
+  padding: 20rpx;
+  margin-bottom: 20rpx;
+}
+.position-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+.position-title {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: $text-primary;
+}
+.position-pnl {
+  font-size: 24rpx;
+  font-weight: 700;
+  &.up { color: $color-up; }
+  &.down { color: $color-down; }
+}
+.position-stats {
+  display: flex;
+  gap: 8rpx;
+}
+.pos-stat-item {
+  flex: 1;
+  text-align: center;
+  background: #fff;
+  border-radius: 8rpx;
+  padding: 12rpx 4rpx;
+}
+.pos-stat-label {
+  display: block;
+  font-size: 20rpx;
+  color: $text-hint;
+  margin-bottom: 4rpx;
+}
+.pos-stat-value {
+  display: block;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: $text-primary;
 }
 
 // ─── 方向切换 ───

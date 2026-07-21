@@ -265,6 +265,90 @@ export function placeOrder(params: PlaceOrderRequest): Promise<Order> {
     })
 }
 
+
+// ──────────────────────────────────────────────────
+// 模拟持仓 / 订单 / 成交（P1-5）
+// ──────────────────────────────────────────────────
+
+export interface AccountInfo {
+  account_id: number
+  balance: number
+  frozen: number
+  total_equity: number
+  market_value: number
+  profit: number
+  profit_pct: number
+  market: string
+  created_at: string
+}
+
+export interface SimPosition {
+  id: number
+  symbol: string
+  name: string
+  quantity: number
+  available_quantity: number
+  avg_cost: number
+  current_price: number
+  market_value: number
+  profit: number
+  profit_pct: number
+  market: string
+}
+
+export interface SimOrder {
+  id: number
+  symbol: string
+  name?: string
+  side: 'buy' | 'sell'
+  order_type: string
+  quantity: number
+  filled_quantity: number
+  price: number | null
+  status: string
+  created_at: string
+  updated_at: string
+  error_msg?: string
+}
+
+export interface SimTrade {
+  id: number
+  order_id: number
+  symbol: string
+  name?: string
+  side: 'buy' | 'sell'
+  quantity: number
+  price: number
+  amount: number
+  created_at: string
+}
+
+/** 模拟账户 → /simulation/account */
+export function fetchSimulationAccount(): Promise<AccountInfo> {
+  return request<any>('/simulation/account', { method: 'GET' })
+    .then(res => (res?.data || res || {}))
+}
+
+/** 模拟持仓 → /simulation/positions */
+export function fetchSimulationPositions(): Promise<{ data: SimPosition[]; summary: any }> {
+  return request<any>('/simulation/positions', { method: 'GET' })
+    .then(res => ({ data: res?.data || [], summary: res?.summary || {} }))
+}
+
+/** 模拟订单历史 → /simulation/orders */
+export function fetchSimulationOrders(status?: string): Promise<{ data: SimOrder[]; total: number }> {
+  const params: Record<string, string> = {}
+  if (status && status !== 'all') params.status = status
+  return request<any>('/simulation/orders', { method: 'GET', params })
+    .then(res => ({ data: res?.data || [], total: res?.total || 0 }))
+}
+
+/** 模拟成交记录 → /simulation/trades */
+export function fetchSimulationTrades(): Promise<{ data: SimTrade[]; total: number }> {
+  return request<any>('/simulation/trades', { method: 'GET' })
+    .then(res => ({ data: res?.data || [], total: res?.total || 0 }))
+}
+
 /** 获取市场规则 → /market/rules/{market} */
 export function fetchMarketRule(market: 'A' | 'HK'): Promise<MarketRule> {
   return request<any>(`/market/rules/${market}`, { method: 'GET' })

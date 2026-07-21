@@ -151,7 +151,10 @@
             </view>
             <view class="qty-actions">
               <view class="qty-info">
-                <text class="qty-info-text" v-if="maxBuyQty > 0">可买 {{ maxBuyQty }} 股</text>
+                <text class="qty-info-text" v-if="tradeSide === 'sell' && currentPosition">
+                  可卖 {{ currentPosition.available_quantity }} 股
+                </text>
+                <text class="qty-info-text" v-else-if="maxTradeQty > 0">可买 {{ maxTradeQty }} 股</text>
                 <text class="qty-info-text dim" v-else>可买 0 股</text>
                 <text class="qty-info-text cash">可用 {{ accountCash.toFixed(2) }} 元</text>
               </view>
@@ -161,6 +164,33 @@
                 <view class="shortcut-btn" @click="fillHalf()">1/2</view>
                 <view class="shortcut-btn primary" @click="fillFullPosition()">全仓</view>
               </view>
+            </view>
+          </view>
+
+          <!-- 我的持仓（当前股票） -->
+          <view class="position-card" v-if="currentPosition">
+            <text class="section-label">我的持仓</text>
+            <view class="pos-grid">
+              <view class="pos-item">
+                <text class="pos-item-label">持仓</text>
+                <text class="pos-item-value">{{ currentPosition.quantity }} 股</text>
+              </view>
+              <view class="pos-item">
+                <text class="pos-item-label">可卖</text>
+                <text class="pos-item-value">{{ currentPosition.available_quantity }} 股</text>
+              </view>
+              <view class="pos-item">
+                <text class="pos-item-label">成本</text>
+                <text class="pos-item-value">{{ currentPosition.avg_cost.toFixed(2) }}</text>
+              </view>
+              <view class="pos-item">
+                <text class="pos-item-label">市值</text>
+                <text class="pos-item-value">{{ currentPosition.market_value.toFixed(2) }}</text>
+              </view>
+            </view>
+            <view class="pos-profit" :class="currentPosition.profit >= 0 ? 'up' : 'down'">
+              <text>浮动盈亏</text>
+              <text class="pos-profit-val">{{ currentPosition.profit >= 0 ? '+' : '' }}{{ currentPosition.profit.toFixed(2) }}（{{ currentPosition.profit_pct >= 0 ? '+' : '' }}{{ currentPosition.profit_pct.toFixed(2) }}%）</text>
             </view>
           </view>
 
@@ -193,7 +223,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import KlineChart from '@/components/market/KlineChart.vue'
 import { fetchQuote, fetchKline, type QuoteSnapshot, type KlinePoint } from '@/api/market'
-import { placeOrder, fetchAccount, type OrderSide } from '@/api/trading'
+import { placeOrder, fetchAccount, fetchSimulationPositions, type OrderSide, type SimPosition } from '@/api/trading'
 import { getTradeErrorMessage } from '@/utils/trade-errors'
 import { trackPageView } from '@/utils/tracker'
 
@@ -214,16 +244,24 @@ const tradeQty = ref('')
 const tradeError = ref('')
 const tradeSubmitting = ref(false)
 
+// 当前股票持仓
+const currentPosition = ref<SimPosition | null>(null)
+
 // 账户可用资金
 const accountCash = ref(0)
 const loadingAccount = ref(false)
 
-// 最大可买股数
-const maxBuyQty = computed(() => {
+// 最大可交易股数（买入=资金/价格，卖出=可卖数量）
+const maxTradeQty = computed(() => {
+  if (tradeSide.value === 'sell') {
+    return currentPosition.value?.available_quantity || 0
+  }
   const price = parseFloat(tradePrice.value)
   if (!price || price <= 0 || accountCash.value <= 0) return 0
   return Math.floor(accountCash.value / price / 100) * 100
 })
+
+const maxBuyQty = computed(() => maxTradeQty.value)
 
 // 横屏全屏模式
 const isFullscreen = ref(false)
@@ -349,12 +387,19 @@ watch(showTradeModal, async (open) => {
   }
   tradeQty.value = ''
   tradeError.value = ''
+  tradeSide.value = 'buy'
   loadingAccount.value = true
   try {
-    const account = await fetchAccount()
+    const [account, posResult] = await Promise.all([
+      fetchAccount(),
+      fetchSimulationPositions(),
+    ])
     accountCash.value = account.cash
+    const positions = posResult.data || []
+    currentPosition.value = positions.find((p: SimPosition) => p.symbol === code.value) || null
   } catch {
     accountCash.value = 0
+    currentPosition.value = null
   } finally {
     loadingAccount.value = false
   }
@@ -373,21 +418,21 @@ function adjustQty(delta: number) {
 }
 
 function fillFullPosition() {
-  if (maxBuyQty.value > 0) tradeQty.value = String(maxBuyQty.value)
+  if (maxTradeQty.value > 0) tradeQty.value = String(maxTradeQty.value)
 }
 
 function fillHalf() {
-  const qty = Math.floor(maxBuyQty.value / 200) * 100
+  const qty = Math.floor(maxTradeQty.value / 200) * 100
   tradeQty.value = String(Math.max(100, qty))
 }
 
 function fillThird() {
-  const qty = Math.floor(maxBuyQty.value / 300) * 100
+  const qty = Math.floor(maxTradeQty.value / 300) * 100
   tradeQty.value = String(Math.max(100, qty))
 }
 
 function fillQuarter() {
-  const qty = Math.floor(maxBuyQty.value / 400) * 100
+  const qty = Math.floor(maxTradeQty.value / 400) * 100
   tradeQty.value = String(Math.max(100, qty))
 }
 
@@ -404,6 +449,9 @@ async function handlePlaceOrder() {
   if (!quantity || quantity < 100) { tradeError.value = '数量不能少于100股'; return }
   if (quantity % 100 !== 0) { tradeError.value = '数量必须是100的整数倍'; return }
   if (!price || price <= 0) { tradeError.value = '请输入有效价格'; return }
+  if (tradeSide.value === 'sell' && currentPosition.value && quantity > currentPosition.value.available_quantity) {
+    tradeError.value = '可卖数量不足，最多可卖 ' + currentPosition.value.available_quantity + ' 股'; return
+  }
   tradeSubmitting.value = true
   try {
     // action: 小写 'buy'|'sell'，order_type: 大写
@@ -918,6 +966,60 @@ onShow(() => {
     background: $color-primary;
     border-color: $color-primary;
   }
+}
+
+// ---- 持仓卡片 ----
+.position-card {
+  background: var(--bg-page, #f8f9fc);
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 24rpx;
+}
+
+.pos-grid {
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 14rpx;
+}
+
+.pos-item {
+  width: 50%;
+  padding: 10rpx 0;
+}
+
+.pos-item-label {
+  font-size: 24rpx;
+  color: var(--text-hint, #999);
+}
+
+.pos-item-value {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--text-primary, #333);
+  margin-left: 12rpx;
+}
+
+.pos-profit {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 18rpx;
+  margin-top: 14rpx;
+  border-top: 2rpx dashed var(--border-color, #e8e8e8);
+  font-size: 24rpx;
+
+  &.up {
+    color: #EF5350;
+  }
+
+  &.down {
+    color: #26A69A;
+  }
+}
+
+.pos-profit-val {
+  font-size: 26rpx;
+  font-weight: 600;
 }
 
 // ---- 预估金额 ----
