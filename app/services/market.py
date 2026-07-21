@@ -309,3 +309,65 @@ async def fetch_kline(
     items = [_kline_to_item(k) for k in klines]
     items.reverse()  # Sina 返回最新在前，转为最早在前
     return items
+
+
+# ============== 排行榜（新增） ==============
+async def fetch_ranking(
+    rank_type: str = "gainers",
+    limit: int = 20,
+) -> list:
+    """
+    获取全市场 A 股排名（涨幅榜/跌幅榜/热门榜）。
+
+    数据源：东方财富公开 HTTP API（无需依赖 akshare）。
+
+    Args:
+        rank_type: "gainers"（涨幅榜）/ "losers"（跌幅榜）/ "hot"（热门，按成交额）
+        limit: 返回条数（≤50）
+
+    Returns:
+        RankItem 列表
+    """
+    from app.integrations.market_data.tencent import fetch_ranking as em_fetch_ranking
+
+    if rank_type == "gainers":
+        sort_by, order = "change_pct", "desc"
+    elif rank_type == "losers":
+        sort_by, order = "change_pct", "asc"
+    elif rank_type == "hot":
+        sort_by, order = "amount", "desc"
+    else:
+        rank_type = "gainers"
+        sort_by, order = "change_pct", "desc"
+
+    limit = min(limit, 50)
+
+    try:
+        items = await em_fetch_ranking(sort_by=sort_by, order=order, limit=limit)
+    except Exception as e:
+        logger.error(f"获取排行榜失败: {e}")
+        return []
+
+    # 转换为 schema
+    from app.schemas.market import RankItem as RankSchema
+    return [
+        RankSchema(
+            symbol=item.symbol,
+            code=item.code,
+            name=item.name,
+            price=item.price,
+            change=item.change,
+            change_pct=item.change_pct,
+            volume=item.volume,
+            amount=item.amount,
+            turnover_rate=item.turnover_rate,
+            high=item.high,
+            low=item.low,
+            open=item.open,
+            prev_close=item.prev_close,
+            pe_ratio=item.pe_ratio,
+            market_cap=item.market_cap,
+            circul_cap=item.circul_cap,
+        )
+        for item in items
+    ]

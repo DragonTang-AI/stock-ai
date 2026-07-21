@@ -110,3 +110,31 @@ class StockDetailResponse(BaseModel):
     success: bool
     data: Optional[StockDetail] = None
     message: str = ""
+
+# ============== 排行榜（新增） ==============
+class RankItem(BaseModel):
+    """排行条目"""
+    symbol: str          # "600519.SH"
+    code: str            # "600519"
+    name: str            # "贵州茅台"
+    price: float
+    change: float        # 涨跌额
+    change_pct: float    # 涨跌幅（%）
+    volume: int          # 成交量（手）
+    amount: float        # 成交额（元）
+    turnover_rate: Optional[float] = None
+    high: float
+    low: float
+    open: float
+    prev_close: float
+    pe_ratio: Optional[float] = None
+    market_cap: Optional[float] = None
+    circul_cap: Optional[float] = None
+
+
+class RankResponse(BaseModel):
+    """排行榜响应"""
+    success: bool
+    type: str             # "gainers" / "losers" / "hot"
+    data: List[RankItem] = Field(default_factory=list)
+    meta: dict = Field(default_factory=dict)
