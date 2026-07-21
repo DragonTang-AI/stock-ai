@@ -272,3 +272,44 @@ export function fetchIndices(): Promise<IndexItem[]> {
 export const marketApi = {
   getDetail: (symbol: string) => request<any>(`/market/detail/${symbol}`),
 }
+
+// ──────────────────────────────────────────────
+// 全市场排行榜（对接东方财富接口）
+// ──────────────────────────────────────────────
+
+export type RankType = 'gainers' | 'losers' | 'hot'
+
+export interface RankItem {
+  symbol: string          // "600519.SH"
+  code: string            // "600519"
+  name: string            // "贵州茅台"
+  price: number
+  change: number
+  change_pct: number
+  volume: number
+  amount: number
+  turnover_rate: number | null
+  high: number
+  low: number
+  open: number
+  prev_close: number
+  pe_ratio: number | null
+  market_cap: number | null
+  circul_cap: number | null
+}
+
+/**
+ * 获取全市场排行榜
+ * 后端路由: GET /api/v1/market/ranking?type=gainers|losers|hot&limit=20
+ * 数据源：东方财富，覆盖全部 A 股
+ */
+export async function fetchRanking(
+  type: RankType = 'gainers',
+  limit = 20
+): Promise<RankItem[]> {
+  const response = await request<any>('/market/ranking', {
+    method: 'GET',
+    params: { type, limit },
+  })
+  return Array.isArray(response?.data) ? response.data : []
+}
