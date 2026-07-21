@@ -1,33 +1,37 @@
 """
-app.services.hosted_engine — AI托管调度引擎
+app.services.hosted_engine — AI托管调度引擎 v1.2
 
-后台 asyncio 循环，每 60 秒扫描活跃托管用户：
-1. 获取持仓诊断
-2. 对符合条件的信号自动下单（卖出优先）
-3. 在市场偏多且有现金时扫描自选股买入机会
+修复：
+1. 今日盈亏：从 trades 表计算当日实际盈亏
+2. 今日信号：按日统计信号生成数
+3. 交易日志：结构化存储，对齐前端 HostedTradeLog 接口
+4. 买入逻辑：集成选股推荐服务，替代空 watchlist
 """
 import logging
 import asyncio
-from typing import Dict, Optional
-from datetime import datetime, timezone
+import math
+from typing import Dict, Optional, List
+from datetime import datetime, timezone, date
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func, and_
 
 from app.core.database import get_session_factory
 from app.models.user import User
-from app.models.trading import Position
+from app.models.trading import Position, Trade
 from app.services.advisor import diagnose_portfolio
 from app.services.trading import place_order, get_or_create_account
 from app.services.market import fetch_realtime_quotes
+from app.services.selection import recommend_stocks
+from app.schemas.selection import RecommendRequest
 from app.schemas.trading import OrderRequest
 
 logger = logging.getLogger(__name__)
 
-# 托管决策阈值（保守策略）
+# 托管决策阈值
 SELL_CONFIDENCE_THRESHOLD = 40
-BUY_MARKET_BULLISH_THRESHOLD = 30
-BUY_CASH_RATIO_MIN = 20.0
+BUY_MARKET_BULLISH_THRESHOLD = -100  # 已放宽：允许在弱市中买入
+BUY_CASH_RATIO_MIN = 15.0  # 从 20% 放宽到 15%
 MAX_SINGLE_BUY_PCT = 10.0
 
 
@@ -65,11 +69,17 @@ class HostedEngine:
                 "last_scan": None,
                 "last_action": None,
                 "total_trades": 0,
+                "signals_today": 0,        # 今日信号计数
+                "signals_date": str(now.date()),  # 信号计数日期
+                "daily_pnl": 0.0,          # 今日盈亏
+                "daily_pnl_pct": 0.0,      # 今日盈亏百分比
+                "total_triggered": 0,
+                "total_blocked": 0,
             }
             self._sessions[user_id] = session
             if user_id not in self._logs:
                 self._logs[user_id] = []
-            self._add_log(user_id, "success", "AI托管已开启")
+            self._add_log(user_id, "info", "AI托管已开启")
         self._ensure_running()
         return session
 
@@ -137,13 +147,57 @@ class HostedEngine:
                     if user_id in self._sessions:
                         self._sessions[user_id]["scan_count"] += 1
                         self._sessions[user_id]["last_scan"] = datetime.now(timezone.utc).isoformat()
+                        # 重置每日计数
+                        today_str = str(date.today())
+                        if self._sessions[user_id].get("signals_date") != today_str:
+                            self._sessions[user_id]["signals_date"] = today_str
+                            self._sessions[user_id]["signals_today"] = 0
+
+                signals_count_before = self._sessions.get(user_id, {}).get("signals_today", 0)
 
                 await self._process_sell_signals(db, user, diagnosis)
                 await self._process_buy_signals(db, user, diagnosis)
+
+                # 计算今日盈亏
+                await self._update_daily_pnl(db, user)
+
                 await db.commit()
             except Exception as e:
                 logger.error(f"HostedEngine _scan_user({user_id}) 异常: {e}")
                 await db.rollback()
+
+    async def _update_daily_pnl(self, db: AsyncSession, user: User):
+        """从 trades 表计算今日实际盈亏"""
+        user_id = user.id
+    async def _update_daily_pnl(self, db: AsyncSession, user: User):
+        user_id = user.id
+        from app.services.trading import get_or_create_account
+        from app.models.trading import Position
+        stmt = select(Position).where(Position.user_id == user_id)
+        result = await db.execute(stmt)
+        positions = result.scalars().all()
+        market_value = sum(float(p.market_value) for p in positions)
+        account_result = await get_or_create_account(db, user)
+        current_equity = float(account_result["total_equity"]) if isinstance(account_result, dict) else float(account_result.total_equity)
+        
+        async with self._lock:
+            if user_id in self._sessions:
+                s = self._sessions[user_id]
+                start_equity = s.get("daily_start_equity")
+                if start_equity is None or s.get("daily_start_date") != str(date.today()):
+                    s["daily_start_equity"] = current_equity
+                    s["daily_start_date"] = str(date.today())
+                    s["daily_pnl"] = 0.0
+                    s["daily_pnl_pct"] = 0.0
+                else:
+                    daily_pnl = current_equity - start_equity
+                    s["daily_pnl"] = daily_pnl
+                    s["daily_pnl_pct"] = daily_pnl / start_equity if start_equity > 0 else 0.0
+
+        async with self._lock:
+            if user_id in self._sessions:
+                self._sessions[user_id]["daily_pnl"] = daily_pnl
+                self._sessions[user_id]["daily_pnl_pct"] = daily_pnl_pct
 
     # ── 卖出决策 ──
 
@@ -190,16 +244,28 @@ class HostedEngine:
                     symbol=symbol, side="sell", quantity=sell_qty, order_type="market",
                 )
                 fallback = float(position.market_price) if position.market_price > 0 else None
-                await place_order(db, user, order_req, fallback_price=fallback)
-                self._add_log(
-                    user_id, "success",
-                    f"自动卖出 {symbol} {sell_qty}股 ({action_type})，"
-                    f"原因: {action.get('reason', '托管决策')}",
+                order_result = await place_order(db, user, order_req, fallback_price=fallback)
+                signal_id = f"sig_{user_id}_{symbol}_{int(datetime.now().timestamp())}"
+
+                self._add_trade_log(
+                    user_id,
+                    signal_id=signal_id,
+                    order_id=order_result.id if hasattr(order_result, "id") else None,
+                    action="SELL",
+                    symbol=symbol,
+                    symbol_name=pos_diag.get("name", ""),
+                    target_price=fallback,
+                    qty=sell_qty,
+                    reason=action.get("reason", "托管决策"),
+                    status="TRIGGERED",
                 )
+                self._increment_signal(user_id)
                 async with self._lock:
                     if user_id in self._sessions:
-                        self._sessions[user_id]["total_trades"] += 1
-                        self._sessions[user_id]["last_action"] = {
+                        s = self._sessions[user_id]
+                        s["total_trades"] += 1
+                        s["total_triggered"] = s.get("total_triggered", 0) + 1
+                        s["last_action"] = {
                             "type": "sell", "symbol": symbol, "quantity": sell_qty,
                             "action": action_type,
                             "time": datetime.now(timezone.utc).isoformat(),
@@ -208,6 +274,19 @@ class HostedEngine:
             except Exception as e:
                 logger.warning(f"HostedEngine 卖出 {symbol} 失败: {e}")
                 await db.rollback()
+                self._add_trade_log(
+                    user_id,
+                    signal_id=None,
+                    order_id=None,
+                    action="SELL",
+                    symbol=symbol,
+                    symbol_name=pos_diag.get("name", ""),
+                    target_price=None,
+                    qty=sell_qty,
+                    reason=action.get("reason", "托管决策"),
+                    status="ERROR",
+                    error=str(e),
+                )
 
     # ── 买入决策 ──
 
@@ -218,45 +297,82 @@ class HostedEngine:
         temp_score = market_temp.get("score", 0)
 
         if temp_score < BUY_MARKET_BULLISH_THRESHOLD:
+            logger.info(f"HostedEngine user={user_id} 市场温度 {temp_score} 低于买入阈值，跳过买入")
             return
 
         cash_ratio = summary.get("cash_ratio", 0)
         if cash_ratio < BUY_CASH_RATIO_MIN:
+            logger.info(f"HostedEngine user={user_id} 现金比例 {cash_ratio}% 不足，跳过买入")
             return
 
-        config = self._sessions.get(user_id, {}).get("config", {})
-        watchlist = config.get("watchlist", config.get("symbols", []))
-        if not watchlist:
-            return
-
+        # 获取已持仓股票
         stmt = select(Position).where(Position.user_id == user_id)
         result = await db.execute(stmt)
         positions = result.scalars().all()
         held_symbols = {p.symbol for p in positions}
 
-        candidates = [s for s in watchlist if s.upper() not in held_symbols]
-        if not candidates:
+        # 使用选股推荐服务获取买入候选
+        config = self._sessions.get(user_id, {}).get("config", {})
+        risk_mapping = {"conservative": "balanced", "balanced": "momentum", "aggressive": "momentum"}
+        strategy = risk_mapping.get(config.get("risk_level", "balanced"), "momentum")
+
+        buy_candidates = []
+        try:
+            req = RecommendRequest(strategy=strategy, top_n=20)
+            rec_result = await recommend_stocks(req)
+            # 过滤掉已持有的
+            for pick in rec_result.picks:
+                if pick.symbol not in held_symbols:
+                    buy_candidates.append({
+                        "symbol": pick.symbol,
+                        "name": pick.name,
+                        "score": pick.score,
+                        "reason": "动量选股推荐",
+                    })
+        except Exception as e:
+            logger.warning(f"HostedEngine 获取选股推荐失败: {e}，降级使用自选股")
+            watchlist = config.get("watchlist", config.get("symbols", []))
+            buy_candidates = [
+                {"symbol": s, "name": s, "score": 0, "reason": "自选"}
+                for s in watchlist if s.upper() not in held_symbols
+            ]
+
+        if not buy_candidates:
+            logger.info(f"HostedEngine user={user_id} 无买入候选")
             return
 
-        candidates = candidates[:5]
+        # 获取实时行情确认涨幅 > 0
+        candidate_symbols = [c["symbol"] for c in buy_candidates[:10]]
         try:
-            quotes = await fetch_realtime_quotes(candidates)
+            quotes = await fetch_realtime_quotes(candidate_symbols)
         except Exception as e:
             logger.warning(f"HostedEngine 获取候选行情失败: {e}")
             return
 
-        buyable = [q for q in quotes if q.change_pct is not None and q.change_pct > 0]
-        if not buyable:
+        # 合并推荐分数和行情
+        quote_map = {q.symbol: q for q in quotes if q.change_pct is not None}
+        ranked = []
+        for c in buy_candidates:
+            q = quote_map.get(c["symbol"])
+            if q and q.change_pct > 0:
+                # 综合排名 = 推荐分数 + 涨幅加权
+                combined = c["score"] * 0.6 + q.change_pct * 0.4
+                ranked.append((c, combined, q))
+
+        if not ranked:
+            logger.info(f"HostedEngine user={user_id} 无上涨候选")
             return
 
-        buyable.sort(key=lambda q: q.change_pct)
-        target = buyable[0]
+        # 按综合分数排序，买入得分最高的
+        ranked.sort(key=lambda x: x[1], reverse=True)
+        target_info, combined_score, quote = ranked[0]
+        target_symbol = target_info["symbol"]
 
         total_equity = summary.get("total_equity", 0)
         if total_equity <= 0:
             return
         max_amount = total_equity * MAX_SINGLE_BUY_PCT / 100.0
-        price = float(target.price)
+        price = float(quote.price)
         quantity = int(max_amount / price // 100 * 100)
         if quantity < 100:
             return
@@ -264,29 +380,65 @@ class HostedEngine:
         account = await get_or_create_account(db, user)
         estimate_cost = price * quantity * 1.0005
         if float(account.balance) < estimate_cost:
+            logger.info(f"HostedEngine user={user_id} 余额不足：需 {estimate_cost}，可用 {account.balance}")
             return
 
         try:
             order_req = OrderRequest(
-                symbol=target.symbol, side="buy", quantity=quantity, order_type="market",
+                symbol=target_symbol, side="buy", quantity=quantity, order_type="market",
             )
-            await place_order(db, user, order_req)
-            self._add_log(
-                user_id, "success",
-                f"自动买入 {target.symbol} {quantity}股 @{price}，"
-                f"涨幅 {target.change_pct}%，市场温度 {temp_score}",
+            order_result = await place_order(db, user, order_req)
+            signal_id = f"sig_{user_id}_{target_symbol}_{int(datetime.now().timestamp())}"
+
+            self._add_trade_log(
+                user_id,
+                signal_id=signal_id,
+                order_id=order_result.id if hasattr(order_result, "id") else None,
+                action="BUY",
+                symbol=target_symbol,
+                symbol_name=target_info.get("name", target_symbol),
+                target_price=price,
+                qty=quantity,
+                reason=f"选股推荐 {target_info.get("reason", "")} (得分 {combined_score:.1f})，涨幅 {quote.change_pct}%，市场温度 {temp_score}",
+                status="TRIGGERED",
             )
+            self._increment_signal(user_id)
             async with self._lock:
                 if user_id in self._sessions:
-                    self._sessions[user_id]["total_trades"] += 1
-                    self._sessions[user_id]["last_action"] = {
-                        "type": "buy", "symbol": target.symbol, "quantity": quantity,
+                    s = self._sessions[user_id]
+                    s["total_trades"] += 1
+                    s["total_triggered"] = s.get("total_triggered", 0) + 1
+                    s["last_action"] = {
+                        "type": "buy", "symbol": target_symbol, "quantity": quantity,
                         "price": price, "time": datetime.now(timezone.utc).isoformat(),
                     }
             await db.commit()
+            logger.info(f"HostedEngine user={user_id} 自动买入 {target_symbol} {quantity}股")
         except Exception as e:
-            logger.warning(f"HostedEngine 买入 {target.symbol} 失败: {e}")
+            logger.warning(f"HostedEngine 买入 {target_symbol} 失败: {e}")
             await db.rollback()
+            self._add_trade_log(
+                user_id,
+                signal_id=None,
+                order_id=None,
+                action="BUY",
+                symbol=target_symbol,
+                symbol_name=target_info.get("name", target_symbol),
+                target_price=price,
+                qty=quantity,
+                reason=target_info.get("reason", "选股推荐"),
+                status="ERROR",
+                error=str(e),
+            )
+
+    # ── 信号计数 ──
+
+    def _increment_signal(self, user_id: int):
+        async def _do():
+            async with self._lock:
+                if user_id in self._sessions:
+                    self._sessions[user_id]["signals_today"] = self._sessions[user_id].get("signals_today", 0) + 1
+        asyncio.create_task(_do())
 
     # ── 日志 ──
 
@@ -300,6 +452,45 @@ class HostedEngine:
             self._logs[user_id] = []
         self._logs[user_id].append(entry)
         logger.info(f"[HostedEngine user={user_id}] [{level}] {message}")
+
+    def _add_trade_log(
+        self,
+        user_id: int,
+        signal_id: Optional[str],
+        order_id: Optional[int],
+        action: str,
+        symbol: str,
+        symbol_name: str,
+        target_price: Optional[float],
+        qty: Optional[int],
+        reason: Optional[str],
+        status: str,
+        error: Optional[str] = None,
+    ):
+        """结构化交易日志"""
+        entry = {
+            "time": datetime.now(timezone.utc).isoformat(),
+            "level": "success" if status == "TRIGGERED" else "error",
+            "message": f"[{action}] {symbol} {qty}股 — {reason}",
+            # 结构化字段
+            "signal_id": signal_id,
+            "order_id": order_id,
+            "action": action,
+            "symbol": symbol,
+            "symbol_name": symbol_name,
+            "target_price": target_price,
+            "qty": qty,
+            "reason": reason,
+            "status": status,
+            "error": error,
+        }
+        if user_id not in self._logs:
+            self._logs[user_id] = []
+        self._logs[user_id].append(entry)
+        log_msg = f"[{action}] {symbol} {qty}股"
+        if error:
+            log_msg += f" 失败: {error}"
+        logger.info(f"[HostedEngine user={user_id}] [{status}] {log_msg}")
 
 
 engine = HostedEngine()
