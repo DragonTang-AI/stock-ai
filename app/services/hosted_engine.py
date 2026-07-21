@@ -467,12 +467,11 @@ class HostedEngine:
         status: str,
         error: Optional[str] = None,
     ):
-        """结构化交易日志"""
+        """结构化交易日志 + 持久化信号到 DB"""
         entry = {
             "time": datetime.now(timezone.utc).isoformat(),
             "level": "success" if status == "TRIGGERED" else "error",
             "message": f"[{action}] {symbol} {qty}股 — {reason}",
-            # 结构化字段
             "signal_id": signal_id,
             "order_id": order_id,
             "action": action,
@@ -491,6 +490,70 @@ class HostedEngine:
         if error:
             log_msg += f" 失败: {error}"
         logger.info(f"[HostedEngine user={user_id}] [{status}] {log_msg}")
+
+        # 持久化信号到 DB
+        if signal_id:
+            asyncio.create_task(self._persist_signal(
+                user_id=user_id,
+                signal_id=signal_id,
+                action=action,
+                symbol=symbol,
+                symbol_name=symbol_name,
+                target_price=target_price,
+                qty=qty,
+                reason=reason,
+                status=status,
+                order_id=order_id,
+                error=error,
+            ))
+
+    async def _persist_signal(
+        self,
+        user_id: int,
+        signal_id: str,
+        action: str,
+        symbol: str,
+        symbol_name: str = "",
+        target_price: Optional[float] = None,
+        qty: Optional[int] = None,
+        reason: Optional[str] = None,
+        status: str = "PENDING",
+        order_id: Optional[int] = None,
+        error: Optional[str] = None,
+    ):
+        """将信号持久化到 PostgreSQL"""
+        try:
+            from app.core.database import get_session_factory
+            from app.models.signals import Signal
+            from sqlalchemy.dialects.postgresql import insert
+
+            factory = get_session_factory()
+            async with factory() as db:
+                stmt = insert(Signal).values(
+                    user_id=user_id,
+                    signal_id=signal_id,
+                    action=action,
+                    symbol=symbol,
+                    symbol_name=symbol_name,
+                    target_price=target_price,
+                    qty=qty,
+                    reason=reason,
+                    status=status,
+                    order_id=order_id,
+                    error=error,
+                )
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["signal_id"],
+                    set_=dict(
+                        status=status,
+                        order_id=order_id,
+                        error=error,
+                    ),
+                )
+                await db.execute(stmt)
+                await db.commit()
+        except Exception as e:
+            logger.warning(f"HostedEngine 信号持久化失败 signal={signal_id}: {e}")
 
 
 engine = HostedEngine()
