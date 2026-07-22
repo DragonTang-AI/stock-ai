@@ -1,13 +1,15 @@
 import os
+from dotenv import load_dotenv
+load_dotenv()
 import httpx
 import json
 from typing import AsyncIterator, Optional
 
 
 def _get_deepseek_config():
-    api_key = os.environ.get("DEEPSEEK_API_KEY") or os.getenv("DEEPSEEK_API_KEY")
-    api_url = os.environ.get("DEEPSEEK_API_URL") or os.getenv("DEEPSEEK_API_URL") or "https://api.deepseek.com/v1"
-    model = os.environ.get("DEEPSEEK_MODEL") or os.getenv("DEEPSEEK_MODEL") or "deepseek-v4-flash"
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    api_url = os.getenv("DEEPSEEK_API_URL") or "https://api.deepseek.com/v1"
+    model = os.getenv("DEEPSEEK_MODEL") or "deepseek-v4-flash"
     return {"api_key": api_key, "api_url": api_url, "model": model}
 
 
