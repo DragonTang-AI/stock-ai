@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.core.database import init_db, close_db
 from app.core.exceptions import AppException
 
-from app.api.v1 import auth, market, portfolio, analysis, selection, simulation, watchlist, trading, hosted, signals, notifications, broadcast, feedback, events, metrics
+from app.api.v1 import auth, market, portfolio, analysis, selection, simulation, watchlist, trading, hosted, signals, notifications, broadcast, feedback, events, metrics, points, agent
 
 
 @asynccontextmanager
@@ -86,6 +86,8 @@ app.include_router(broadcast.router, prefix="/api/v1/broadcast", tags=["播报"]
 app.include_router(feedback.router, prefix="/api/v1/feedback", tags=["反馈"])
 app.include_router(events.router, prefix="/api/v1", tags=["事件埋点"])
 app.include_router(metrics.router, prefix="/api/v1", tags=["性能监控"])
+app.include_router(points.router, prefix="/api/v1/points", tags=["积分"])
+app.include_router(agent.router, prefix="/api/v1/agent", tags=["交易员"])
 
 
 @app.get("/health")

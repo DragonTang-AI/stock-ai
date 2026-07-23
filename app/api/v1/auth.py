@@ -22,6 +22,7 @@ from app.core.security import (
     verify_token,
 )
 from app.models.user import User
+from app.models.points import UserPoints, PointsTransaction
 from app.schemas.auth import (
     LoginRequest,
     MessageResponse,
@@ -161,6 +162,25 @@ async def register(
     db.add(user)
     await db.commit()
     await db.refresh(user)
+
+    # 新用户注册赠送 100 积分
+    user_points = UserPoints(
+        user_id=user.id,
+        balance=100,
+        total_earned=100,
+        total_spent=0,
+    )
+    db.add(user_points)
+    
+    points_tx = PointsTransaction(
+        user_id=user.id,
+        amount=100,
+        balance_after=100,
+        tx_type="initial",
+        description="注册赠送",
+    )
+    db.add(points_tx)
+    await db.commit()
 
     return user
 
