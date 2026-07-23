@@ -187,6 +187,31 @@ onShow(() => {
 
 <style lang="scss" scoped>
 .selection-page {
+
+.agent-banner {
+  margin: 16rpx 24rpx;
+  padding: 24rpx 28rpx;
+  background: linear-gradient(135deg, #1a1a3e 0%, #2a1a4e 100%);
+  border: 1rpx solid rgba(74, 144, 226, 0.3);
+  border-radius: 16rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.agent-banner-left {
+  display: flex;
+  align-items: center;
+}
+.agent-banner-icon {
+  font-size: 36rpx;
+  margin-right: 16rpx;
+}
+.agent-banner-text {
+  font-size: 26rpx;
+  color: #aabbcc;
+  font-weight: 500;
+}
+
   min-height: 100vh;
   background: $bg-page;
   padding-bottom: env(safe-area-inset-bottom);
