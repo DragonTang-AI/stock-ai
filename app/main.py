@@ -12,6 +12,7 @@ from app.core.database import init_db, close_db
 from app.core.exceptions import AppException
 
 from app.api.v1 import auth, market, portfolio, analysis, selection, simulation, watchlist, trading, hosted, signals, notifications, broadcast, feedback, events, metrics, points, agent, agent_console
+from app.engine import scheduler
 
 
 @asynccontextmanager
@@ -21,9 +22,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     print(f"[{settings.app_name}] 启动中...")
     await init_db()
     print(f"[{settings.app_name}] 数据库初始化完成")
+    # 启动交易引擎定时调度器
+    await scheduler.start_scheduler()
+    print(f"[{settings.app_name}] 交易引擎调度器已启动")
     yield
     # ── 关闭 ───────────────────────────────────────────
     print(f"[{settings.app_name}] 关闭中...")
+    await scheduler.stop_scheduler()
+    print(f"[{settings.app_name}] 交易引擎调度器已停止")
     await close_db()
     print(f"[{settings.app_name}] 数据库连接已关闭")
 
