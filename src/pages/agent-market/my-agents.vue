@@ -48,12 +48,25 @@
           </view>
 
           <view class="card-footer">
-            <view class="mode-row" @click="switchMode(item)">
-              <text class="mode-label">切换模式</text>
-              <text class="mode-arrow">&gt;</text>
+            <view class="footer-row">
+              <view class="ft-btn console-btn" @click="goConsole(item)">
+                <text>进入控制台</text>
+              </view>
+              <view class="mode-row" @click="switchMode(item)">
+                <text class="mode-label">切换模式</text>
+                <text class="mode-arrow">&gt;</text>
+              </view>
             </view>
-            <view class="dismiss-btn" @click="handleDismiss(item)">
-              <text class="dismiss-text">解雇</text>
+            <view class="footer-row footer-actions">
+              <view v-if="item.status === 'active'" class="ft-btn pause-btn" @click="handlePause(item)">
+                <text>暂停</text>
+              </view>
+              <view v-if="item.status === 'paused'" class="ft-btn resume-btn" @click="handleResume(item)">
+                <text>恢复</text>
+              </view>
+              <view class="ft-btn terminate-btn" @click="handleTerminate(item)">
+                <text>终止</text>
+              </view>
             </view>
           </view>
         </view>
@@ -64,7 +77,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'; import { onShow } from '@dcloudio/uni-app'
-import { getMyAgents, updateManagementMode, dismissAgent, type UserAgent } from '@/api/agent'
+import { getMyAgents, updateManagementMode, dismissAgent, pauseAgent, resumeAgent, terminateAgent, type UserAgent } from '@/api/agent'
 
 const loading = ref(true)
 const myAgents = ref<UserAgent[]>([])
@@ -83,6 +96,65 @@ const loadData = async () => {
   } finally {
     loading.value = false
   }
+}
+
+
+const goConsole = (item: UserAgent) => {
+  uni.navigateTo({ url: `/pages/agent-console/index?hire_id=${item.id}` })
+}
+
+const handlePause = (item: UserAgent) => {
+  uni.showModal({
+    title: '暂停交易员',
+      content: `确定暂停「${item.agent.code_name}」吗？暂停后不再生成新信号。`,
+    success: async (res) => {
+      if (res.confirm) {
+        try {
+          await pauseAgent(item.id)
+          item.status = 'paused'
+          uni.showToast({ title: '已暂停', icon: 'success' })
+        } catch (e: any) {
+          uni.showToast({ title: e?.message || '操作失败', icon: 'none' })
+        }
+      }
+    },
+  })
+}
+
+const handleResume = (item: UserAgent) => {
+  uni.showModal({
+    title: '恢复交易员',
+      content: `确定恢复「${item.agent.code_name}」吗？`,
+    success: async (res) => {
+      if (res.confirm) {
+        try {
+          await resumeAgent(item.id)
+          item.status = 'active'
+          uni.showToast({ title: '已恢复', icon: 'success' })
+        } catch (e: any) {
+          uni.showToast({ title: e?.message || '操作失败', icon: 'none' })
+        }
+      }
+    },
+  })
+}
+
+const handleTerminate = (item: UserAgent) => {
+  uni.showModal({
+    title: '终止雇佣',
+      content: `确定终止「${item.agent.code_name}」的雇佣关系吗？将清理所有持仓和信号，此操作不可撤销。`,
+    success: async (res) => {
+      if (res.confirm) {
+        try {
+          await terminateAgent(item.id)
+          uni.showToast({ title: '已终止', icon: 'success' })
+          loadData()
+        } catch (e: any) {
+          uni.showToast({ title: e?.message || '操作失败', icon: 'none' })
+        }
+      }
+    },
+  })
 }
 
 const goMarket = () => {
@@ -287,4 +359,39 @@ onShow(() => {
 
 .up { color: #e74c3c; }
 .down { color: #27ae60; }
+
+  .footer-row {
+    display: flex;
+    align-items: center;
+    gap: 16rpx;
+    margin-bottom: 12rpx;
+  }
+  .footer-actions {
+    margin-bottom: 0;
+  }
+  .ft-btn {
+    padding: 12rpx 24rpx;
+    border-radius: 10rpx;
+    font-size: 24rpx;
+    font-weight: 600;
+  }
+  .console-btn {
+    background: linear-gradient(135deg, #4A90E2, #7B68EE);
+    color: #fff;
+    flex: 1;
+    text-align: center;
+  }
+  .pause-btn {
+    background: rgba(243, 156, 18, 0.15);
+    color: #f39c12;
+  }
+  .resume-btn {
+    background: rgba(39, 174, 96, 0.15);
+    color: #27ae60;
+  }
+  .terminate-btn {
+    background: rgba(231, 76, 60, 0.15);
+    color: #e74c3c;
+  }
+
 </style>

@@ -176,6 +176,7 @@
 },    {      "path": "pages/points/index",      "style": {        "navigationBarTitleText": "我的积分",        "animationType": "slide-in-bottom",        "animationDuration": 300      }
       }
     },
+},    {      "path": "pages/agent-console/index",      "style": {        "navigationBarTitleText": "控制台",        "animationType": "slide-in-right",        "animationDuration": 250      }    }
     {
       "path": "pages/dashboard/index",
       "style": {

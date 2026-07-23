@@ -52,6 +52,23 @@
       </view>
     </view>
 
+    <!-- 交易员 -->
+    <view class="section">
+      <view class="menu-list">
+        <view class="menu-item" @click="navigateTo('/pages/points/index')">
+          <text class="menu-icon">💎</text>
+          <text class="menu-label">我的积分</text>
+          <text class="menu-arrow">›</text>
+        </view>
+        <view class="menu-item" @click="navigateTo('/pages/agent-market/my-agents')">
+          <text class="menu-icon">🧑‍💼</text>
+          <text class="menu-label">我的交易员</text>
+          <view class="menu-badge" v-if="agentCount > 0">{{ agentCount }}</view>
+          <text class="menu-arrow">›</text>
+        </view>
+      </view>
+    </view>
+
     <!-- 退出登录 -->
     <view class="section">
       <button
@@ -77,10 +94,12 @@ import { onShow } from '@dcloudio/uni-app'
 import { useAuthStore } from '@/stores/auth'
 import { getCurrentUser } from '@/api/auth'
 import { fetchNotifications } from '@/api/notifications'
+import { getMyAgents } from '@/api/agent'
 
 const authStore = useAuthStore()
 
 const unreadCount = ref(0)
+const agentCount = ref(0)
 
 const userInfo = computed(() => authStore.userInfo)
 const avatarText = computed(() => {
@@ -103,18 +122,29 @@ async function fetchUserInfo() {
 onMounted(() => {
   fetchUserInfo()
   fetchUnreadCount()
+  fetchAgentCount()
 })
 
 // uni-app 页面生命周期
 onShow(() => {
   fetchUserInfo()
   fetchUnreadCount()
+  fetchAgentCount()
 })
 
 async function fetchUnreadCount() {
   try {
     const res = await fetchNotifications({ limit: 1, offset: 0 })
     unreadCount.value = res.unread_count
+  } catch {
+    // 静默失败
+  }
+}
+
+async function fetchAgentCount() {
+  try {
+    const agents = await getMyAgents()
+    agentCount.value = agents.length
   } catch {
     // 静默失败
   }
