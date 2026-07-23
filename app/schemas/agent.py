@@ -48,7 +48,6 @@ class AgentPerformanceResponse(BaseModel):
 
 
 class AgentPerformanceDetailResponse(BaseModel):
-    """交易员表现详情（含收益曲线和雷达图数据）"""
     agent_id: str
     performance_metrics: AgentPerformanceResponse | None = None
     salary_curve: list[dict] = []
@@ -91,6 +90,78 @@ class UserAgentResponse(BaseModel):
 
 class UpdateManagementModeRequest(BaseModel):
     management_mode: str = Field(pattern=r"^(advisory|full_managed)$")
+
+
+# ── 控制台 Schemas ──
+
+class ConsoleOverviewResponse(BaseModel):
+    hire_id: int
+    trader_name: str
+    trader_tag: str = ""
+    management_mode: str
+    status: str
+    total_assets: float = 0
+    unrealized_pnl: float = 0
+    today_signals: int = 0
+    pending_signals: int = 0
+    position_count: int = 0
+
+
+class ConsoleSignalResponse(BaseModel):
+    id: int
+    hire_id: int
+    trader_id: str
+    symbol: str
+    symbol_name: str
+    action: str
+    price: float
+    quantity: int
+    confidence: int
+    reasoning: str | None = None
+    exec_status: str
+    created_at: datetime
+    updated_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class SignalConfirmRequest(BaseModel):
+    quantity: int | None = None
+
+
+class ConsolePortfolioResponse(BaseModel):
+    id: int
+    hire_id: int
+    symbol: str
+    symbol_name: str
+    quantity: int
+    avg_cost: float
+    current_price: float | None = None
+    market_value: float | None = None
+    unrealized_pnl: float | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class ConsoleTradeResponse(BaseModel):
+    id: int
+    symbol: str
+    symbol_name: str
+    action: str
+    price: float
+    quantity: int
+    confidence: int
+    reasoning: str | None = None
+    exec_status: str
+    executed_at: datetime | None = None
+
+
+class EquityCurvePoint(BaseModel):
+    date: str
+    equity: float
+    daily_pnl: float = 0
 
 
 AgentTraderDetail.model_rebuild()

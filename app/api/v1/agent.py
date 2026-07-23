@@ -342,3 +342,84 @@ async def dismiss_agent(
 
     ua.status = "expired"
     return {"success": True, "message": "已解雇该交易员"}
+
+# ── 暂停交易员 ──
+
+@router.post('/my-agents/{user_agent_id}/pause')
+async def pause_agent(
+    user_agent_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(UserAgent).where(
+            and_(UserAgent.id == user_agent_id, UserAgent.user_id == current_user.id)
+        )
+    )
+    ua = result.scalar_one_or_none()
+    if not ua:
+        raise HTTPException(status_code=404, detail='交易员不存在')
+    if ua.status == 'paused':
+        return {'success': True, 'message': '交易员已处于暂停状态'}
+    if ua.status == 'expired':
+        raise HTTPException(status_code=400, detail='交易员已终止，无法暂停')
+    ua.status = 'paused'
+    return {'success': True, 'user_agent_id': ua.id, 'status': 'paused', 'message': '已暂停交易员'}
+
+
+# ── 恢复交易员 ──
+
+@router.post('/my-agents/{user_agent_id}/resume')
+async def resume_agent(
+    user_agent_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(UserAgent).where(
+            and_(UserAgent.id == user_agent_id, UserAgent.user_id == current_user.id)
+        )
+    )
+    ua = result.scalar_one_or_none()
+    if not ua:
+        raise HTTPException(status_code=404, detail='交易员不存在')
+    if ua.status == 'expired':
+        raise HTTPException(status_code=400, detail='交易员已终止，无法恢复')
+    ua.status = 'active'
+    return {'success': True, 'user_agent_id': ua.id, 'status': 'active', 'message': '已恢复交易员'}
+
+
+# ── 终止雇佣 ──
+
+@router.post('/my-agents/{user_agent_id}/terminate')
+async def terminate_agent(
+    user_agent_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from datetime import datetime as dt
+    result = await db.execute(
+        select(UserAgent).where(
+            and_(UserAgent.id == user_agent_id, UserAgent.user_id == current_user.id)
+        )
+    )
+    ua = result.scalar_one_or_none()
+    if not ua:
+        raise HTTPException(status_code=404, detail='交易员不存在')
+    from app.models.agent import AgentPortfolio, AgentSignal
+    await db.execute(
+        AgentPortfolio.__table__.delete().where(AgentPortfolio.hire_id == user_agent_id)
+    )
+    await db.execute(
+        AgentSignal.__table__.update()
+        .where(
+            and_(
+                AgentSignal.hire_id == user_agent_id,
+                AgentSignal.exec_status == 'pending',
+            )
+        )
+        .values(exec_status='expired', updated_at=dt.now())
+    )
+    ua.status = 'expired'
+    ua.updated_at = dt.now()
+    return {'success': True, 'user_agent_id': ua.id, 'status': 'expired', 'message': '已终止雇佣，持仓已清理'}

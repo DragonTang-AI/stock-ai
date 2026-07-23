@@ -2,7 +2,7 @@
 from datetime import datetime, date
 
 from sqlalchemy import (
-    Boolean, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, func,
+    Boolean, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, func, Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -78,4 +78,65 @@ class AgentPerformance(Base):
     win_rate: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class AgentSignal(Base):
+    """交易信号"""
+    __tablename__ = "agent_signals"
+    __table_args__ = {"schema": "agent"}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hire_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("agent.user_agents.id", ondelete="CASCADE"), nullable=False
+    )
+    trader_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("agent.agent_traders.id", ondelete="RESTRICT"), nullable=False
+    )
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    symbol: Mapped[str] = mapped_column(String(16), nullable=False)
+    symbol_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    action: Mapped[str] = mapped_column(String(8), nullable=False)  # buy / sell
+    price: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    confidence: Mapped[int] = mapped_column(Integer, nullable=False, default=50)
+    reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    exec_status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class AgentPortfolio(Base):
+    """交易员持仓"""
+    __tablename__ = "agent_portfolios"
+    __table_args__ = {"schema": "agent"}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hire_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("agent.user_agents.id", ondelete="CASCADE"), nullable=False
+    )
+    trader_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("agent.agent_traders.id", ondelete="RESTRICT"), nullable=False
+    )
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    symbol: Mapped[str] = mapped_column(String(16), nullable=False)
+    symbol_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    avg_cost: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    current_price: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    market_value: Mapped[float | None] = mapped_column(Numeric(16, 2), nullable=True)
+    unrealized_pnl: Mapped[float | None] = mapped_column(Numeric(16, 2), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
