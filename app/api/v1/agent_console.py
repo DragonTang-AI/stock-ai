@@ -1,7 +1,7 @@
 """
 app/api/v1/agent_console.py — 交易员控制台接口
 """
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, case, desc
@@ -17,6 +17,9 @@ from app.schemas.agent import (
     SignalConfirmRequest,
 )
 from app.api.v1.auth import get_current_user
+from app.schemas.trading import OrderRequest
+from app.services import trading as trading_service
+from app.core.exceptions import AppException
 
 router = APIRouter()
 
@@ -46,6 +49,22 @@ HOT_STOCKS = [
 ]
 
 # ── 辅助函数 ──
+
+def _normalize_to_trading_symbol(raw_symbol: str) -> str:
+    s = raw_symbol.strip()
+    if '.' in s:
+        return s.upper()
+    if s.startswith('6'):
+        return f'{s}.SH'
+    elif s.startswith(('0', '3')):
+        return f'{s}.SZ'
+    elif s.startswith(('4', '8')):
+        return f'{s}.BJ'
+    return s.upper()
+
+def _round_to_lot(quantity: int) -> int:
+    return max(100, (quantity // 100) * 100)
+
 
 async def _get_hire_or_404(db: AsyncSession, hire_id: int, user_id: int) -> UserAgent:
     result = await db.execute(
@@ -191,56 +210,128 @@ async def confirm_signal(
     if signal.exec_status != "pending":
         raise HTTPException(status_code=400, detail=f"信号状态为 {signal.exec_status}，无法确认")
 
-    # 更新数量（如果提供）
     if req and req.quantity:
         signal.quantity = req.quantity
+
+    trading_symbol = _normalize_to_trading_symbol(signal.symbol)
+    lot_qty = _round_to_lot(signal.quantity)
+    order_result = None
+    trading_error = None
+
+    try:
+        order_req = OrderRequest(
+            symbol=trading_symbol,
+            side=signal.action,
+            quantity=lot_qty,
+            price=float(signal.price),
+            order_type="market",
+        )
+        order_result = await trading_service.place_order(
+            db=db,
+            user=current_user,
+            req=order_req,
+            fallback_price=float(signal.price),
+        )
+    except AppException as e:
+        trading_error = {"code": e.code, "message": e.message}
+    except HTTPException:
+        raise
+    except Exception as e:
+        trading_error = {"code": "TRADING_FAILED", "message": str(e)}
 
     signal.exec_status = "confirmed"
     signal.updated_at = datetime.now()
     await db.flush()
 
-    # 同步到持仓
-    pf_result = await db.execute(
-        select(AgentPortfolio).where(
-            and_(
-                AgentPortfolio.hire_id == signal.hire_id,
-                AgentPortfolio.symbol == signal.symbol,
+    if order_result is not None:
+        actual_price = order_result.filled_price
+        actual_qty = order_result.filled_quantity
+        pf_result = await db.execute(
+            select(AgentPortfolio).where(
+                and_(
+                    AgentPortfolio.hire_id == signal.hire_id,
+                    AgentPortfolio.symbol == signal.symbol,
+                )
             )
         )
-    )
-    portfolio = pf_result.scalar_one_or_none()
-
-    if signal.action == "buy":
-        if portfolio:
-            # 加仓：重新计算平均成本
-            total_cost = float(portfolio.avg_cost) * portfolio.quantity + float(signal.price) * signal.quantity
-            portfolio.quantity += signal.quantity
-            portfolio.avg_cost = total_cost / portfolio.quantity
-        else:
-            portfolio = AgentPortfolio(
-                hire_id=signal.hire_id,
-                trader_id=signal.trader_id,
-                user_id=signal.user_id,
-                symbol=signal.symbol,
-                symbol_name=signal.symbol_name,
-                quantity=signal.quantity,
-                avg_cost=signal.price,
-                current_price=signal.price,
-                market_value=float(signal.price) * signal.quantity,
-                unrealized_pnl=0,
-            )
-            db.add(portfolio)
-    elif signal.action == "sell" and portfolio:
-        if portfolio.quantity >= signal.quantity:
-            portfolio.quantity -= signal.quantity
-            if portfolio.quantity == 0:
-                await db.delete(portfolio)
-            else:
-                portfolio.market_value = float(portfolio.current_price or signal.price) * portfolio.quantity
+        portfolio = pf_result.scalar_one_or_none()
+        if signal.action == "buy":
+            if portfolio:
+                total_cost = float(portfolio.avg_cost) * portfolio.quantity + actual_price * actual_qty
+                portfolio.quantity += actual_qty
+                portfolio.avg_cost = total_cost / portfolio.quantity
+                portfolio.current_price = actual_price
+                portfolio.market_value = actual_price * portfolio.quantity
                 portfolio.unrealized_pnl = portfolio.market_value - float(portfolio.avg_cost) * portfolio.quantity
+            else:
+                portfolio = AgentPortfolio(
+                    hire_id=signal.hire_id,
+                    trader_id=signal.trader_id,
+                    user_id=signal.user_id,
+                    symbol=signal.symbol,
+                    symbol_name=signal.symbol_name,
+                    quantity=actual_qty,
+                    avg_cost=actual_price,
+                    current_price=actual_price,
+                    market_value=actual_price * actual_qty,
+                    unrealized_pnl=0,
+                )
+                db.add(portfolio)
+        elif signal.action == "sell" and portfolio:
+            if portfolio.quantity >= actual_qty:
+                portfolio.quantity -= actual_qty
+                if portfolio.quantity == 0:
+                    await db.delete(portfolio)
+                else:
+                    portfolio.current_price = actual_price
+                    portfolio.market_value = actual_price * portfolio.quantity
+                    portfolio.unrealized_pnl = portfolio.market_value - float(portfolio.avg_cost) * portfolio.quantity
+    else:
+        pf_result = await db.execute(
+            select(AgentPortfolio).where(
+                and_(
+                    AgentPortfolio.hire_id == signal.hire_id,
+                    AgentPortfolio.symbol == signal.symbol,
+                )
+            )
+        )
+        portfolio = pf_result.scalar_one_or_none()
+        if signal.action == "buy":
+            if portfolio:
+                total_cost = float(portfolio.avg_cost) * portfolio.quantity + float(signal.price) * signal.quantity
+                portfolio.quantity += signal.quantity
+                portfolio.avg_cost = total_cost / portfolio.quantity
+            else:
+                portfolio = AgentPortfolio(
+                    hire_id=signal.hire_id,
+                    trader_id=signal.trader_id,
+                    user_id=signal.user_id,
+                    symbol=signal.symbol,
+                    symbol_name=signal.symbol_name,
+                    quantity=signal.quantity,
+                    avg_cost=signal.price,
+                    current_price=signal.price,
+                    market_value=float(signal.price) * signal.quantity,
+                    unrealized_pnl=0,
+                )
+                db.add(portfolio)
+        elif signal.action == "sell" and portfolio:
+            if portfolio.quantity >= signal.quantity:
+                portfolio.quantity -= signal.quantity
+                if portfolio.quantity == 0:
+                    await db.delete(portfolio)
+                else:
+                    portfolio.market_value = float(portfolio.current_price or signal.price) * portfolio.quantity
+                    portfolio.unrealized_pnl = portfolio.market_value - float(portfolio.avg_cost) * portfolio.quantity
 
-    return {"success": True, "signal_id": signal_id, "message": "信号已确认执行"}
-
+    response_data = {"success": True, "signal_id": signal_id, "message": "已确认执行"}
+    if order_result is not None:
+        response_data["order_id"] = order_result.id
+        response_data["filled_price"] = order_result.filled_price
+        response_data["filled_quantity"] = order_result.filled_quantity
+    if trading_error:
+        response_data["trading_warning"] = trading_error
+    return response_data
 
 # ── 忽略信号 ──
 
@@ -441,8 +532,7 @@ async def generate_signals(
             confidence=sig.get("confidence", 50),
             reasoning=sig.get("reasoning", ""),
             exec_status="auto_executed" if hire.management_mode == "full_managed" else "pending",
-            created_at=None,
-            updated_at=None,
+            created_at=datetime.now(timezone.utc),
         ))
 
     return signals
