@@ -92,7 +92,7 @@ async def generate_signals(
 
     # 3. 获取股票池
     stock_list = await market_data.get_stock_list(db, limit=20)
-    tickers = [s["symbol"] for s in stock_list[:10]]  # 最多分析 10 只
+    tickers = [s["symbol"] for s in stock_list[:5]]   # 最多分析 5 只（Yahoo Finance 限流）
     ticker_map = {s["symbol"]: s["name"] for s in stock_list}
 
     # 4. 判断使用真实引擎还是 mock
@@ -134,17 +134,26 @@ async def _generate_real_signals(
             logger.warning("ai-hedge-fund 分析失败: %s，切换到 mock", result.get("error"))
             return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map)
 
-        decisions = result.get("decisions", [])
+        decisions = result.get("decisions", {})
         if not decisions:
             logger.info("ai-hedge-fund 未产生交易决策，切换 mock")
             return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map)
 
         # 解析 decisions → 信号
+        # decisions 格式：{"ticker": {"action": "buy", "quantity": 100, ...}, ...}
         candidate_signals = []
-        for d in decisions:
-            sig = hedge_fund_client.parse_decision_to_signal(d, ticker_map)
-            if sig:
-                candidate_signals.append(sig)
+        if isinstance(decisions, dict):
+            for ticker, d in decisions.items():
+                if isinstance(d, dict):
+                    d["ticker"] = ticker  # 注入 ticker 字段供解析
+                    sig = hedge_fund_client.parse_decision_to_signal(d, ticker_map)
+                    if sig:
+                        candidate_signals.append(sig)
+        else:
+            for d in decisions:
+                sig = hedge_fund_client.parse_decision_to_signal(d, ticker_map)
+                if sig:
+                    candidate_signals.append(sig)
 
         if not candidate_signals:
             return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map)
