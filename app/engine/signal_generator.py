@@ -173,7 +173,7 @@ async def _generate_real_signals(
                 quantity=sig["quantity"],
                 confidence=sig["confidence"],
                 reasoning=sig.get("reasoning", ""),
-                exec_status="auto_executed",
+                exec_status="pending",  # advisory 默认 pending；full_managed 在端点层自动执行
                 created_at=datetime.now(),
             )
             db.add(db_signal)
@@ -275,7 +275,7 @@ async def _generate_mock_signals(
             quantity=sig["quantity"],
             confidence=sig["confidence"],
             reasoning=sig.get("reasoning", ""),
-            exec_status="auto_executed",
+            exec_status="pending",  # advisory 默认 pending；full_managed 在端点层自动执行
             created_at=datetime.now(),
         )
         db.add(db_signal)

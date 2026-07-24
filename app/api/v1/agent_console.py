@@ -521,7 +521,7 @@ async def generate_signals(
     signals = []
     for sig in generated:
         signals.append(ConsoleSignalResponse(
-            id=0,
+            id=sig.get("id", 0),
             hire_id=hire_id,
             trader_id=hire.agent_id,
             symbol=sig["symbol"],
@@ -532,7 +532,7 @@ async def generate_signals(
             confidence=sig.get("confidence", 50),
             reasoning=sig.get("reasoning", ""),
             exec_status="auto_executed" if hire.management_mode == "full_managed" else "pending",
-            created_at=datetime.now(timezone.utc),
+            created_at=sig.get("created_at", datetime.now(timezone.utc)),
         ))
 
     return signals
