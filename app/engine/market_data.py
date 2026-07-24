@@ -51,24 +51,11 @@ def get_ticker_map() -> dict[str, str]:
 
 async def get_stock_list(db: AsyncSession, limit: int = 30) -> list[dict[str, str]]:
     """
-    从 stocks 表获取股票列表作为分析候选池。
-    如果 stocks 表为空，回退到 HOT_A_STOCKS。
+    返回股票列表作为分析候选池。
+    注：stocks 表尚未创建，直接使用内置 HOT_A_STOCKS。
+    待 stocks 表创建后可切换回数据库查询。
     """
-    try:
-        result = await db.execute(
-            text(
-                "SELECT DISTINCT code, name FROM stocks "
-                "WHERE status='active' AND code IS NOT NULL "
-                "ORDER BY code LIMIT :limit"
-            ),
-            {"limit": limit},
-        )
-        rows = result.fetchall()
-        if rows:
-            return [{"symbol": row[0], "name": row[1] or row[0]} for row in rows]
-    except Exception:
-        pass
-
+    # TODO: 创建 stocks 表后，替换为数据库查询
     return HOT_A_STOCKS[:limit]
 
 

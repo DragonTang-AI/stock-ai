@@ -26,12 +26,18 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 # 单个 ticker 超时（秒）
 TICKER_TIMEOUT = int(os.environ.get("AI_HEDGE_FUND_TICKER_TIMEOUT", "60"))
 
+# DeepSeek 配置
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
+DEFAULT_MODEL_NAME = os.environ.get("AI_HEDGE_FUND_MODEL", DEEPSEEK_MODEL if DEEPSEEK_API_KEY else "gpt-4o")
+DEFAULT_MODEL_PROVIDER = os.environ.get("AI_HEDGE_FUND_PROVIDER", "DeepSeek" if DEEPSEEK_API_KEY else "OpenAI")
+
 
 async def is_available() -> bool:
     """检查 ai-hedge-fund 是否可用"""
     if not ENABLED:
         return False
-    if not OPENAI_API_KEY:
+    if not OPENAI_API_KEY and not os.environ.get("DEEPSEEK_API_KEY", ""):
         return False
     if not os.path.isdir(HEDGE_FUND_PATH):
         return False
@@ -50,8 +56,8 @@ async def is_available() -> bool:
 async def analyze(
     tickers: list[str],
     agents: list[str],
-    model_name: str = "gpt-4o",
-    model_provider: str = "OpenAI",
+    model_name: str = DEFAULT_MODEL_NAME,
+    model_provider: str = DEFAULT_MODEL_PROVIDER,
     timeout: int | None = None,
 ) -> dict[str, Any]:
     """

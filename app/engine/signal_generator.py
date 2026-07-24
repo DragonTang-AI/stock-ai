@@ -160,7 +160,7 @@ async def _generate_real_signals(
 
         # 写入信号
         today = date.today()
-        saved_signals = []
+        saved_orm = []
         for sig in passed:
             db_signal = AgentSignal(
                 hire_id=hire_id,
@@ -177,9 +177,26 @@ async def _generate_real_signals(
                 created_at=datetime.now(),
             )
             db.add(db_signal)
-            saved_signals.append(sig)
+            saved_orm.append(db_signal)
 
         await db.commit()
+
+        saved_signals = [
+            {
+                "id": s.id or 0,
+                "symbol": s.symbol,
+                "name": s.symbol_name,
+                "action": s.action,
+                "price": float(s.price or 0),
+                "quantity": s.quantity or 0,
+                "confidence": s.confidence or 0,
+                "reasoning": s.reasoning or "",
+                "exec_status": s.exec_status,
+                "created_at": s.created_at,
+                "updated_at": s.updated_at,
+            }
+            for s in saved_orm
+        ]
 
         return {
             "signals": saved_signals,
@@ -245,7 +262,7 @@ async def _generate_mock_signals(
     passed, rejected = await risk_manager.check_risk(db, hire_id, candidate_signals)
 
     # 写入信号
-    saved_signals = []
+    saved_orm = []
     for sig in passed:
         db_signal = AgentSignal(
             hire_id=hire_id,
@@ -262,9 +279,26 @@ async def _generate_mock_signals(
             created_at=datetime.now(),
         )
         db.add(db_signal)
-        saved_signals.append(sig)
+        saved_orm.append(db_signal)
 
     await db.commit()
+
+    saved_signals = [
+        {
+            "id": s.id or 0,
+            "symbol": s.symbol,
+            "name": s.symbol_name,
+            "action": s.action,
+            "price": float(s.price or 0),
+            "quantity": s.quantity or 0,
+            "confidence": s.confidence or 0,
+            "reasoning": s.reasoning or "",
+            "exec_status": s.exec_status,
+            "created_at": s.created_at,
+            "updated_at": s.updated_at,
+        }
+        for s in saved_orm
+    ]
 
     return {
         "signals": saved_signals,
