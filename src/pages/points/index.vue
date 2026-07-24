@@ -96,16 +96,16 @@ const formatTime = (t: string) => {
   if (!t) return ''
   const d = new Date(t)
   const pad = (n: number) => n.toString().padStart(2, '0')
-  return 
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 const loadData = async () => {
   try {
     const balRes = await getPointsBalance()
-    balance.value = balRes.data?.balance ?? 0
+    balance.value = (balRes as any).balance ?? 0
 
-    const txRes = await getPointsHistory({ limit: 50 })
-    transactions.value = txRes.data?.items ?? txRes.data ?? []
+    const txRes = await getPointsHistory(1, 50)
+    transactions.value = (txRes as any).items ?? []
   } catch (e) {
     console.error('load points error', e)
   }

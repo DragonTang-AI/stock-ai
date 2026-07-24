@@ -14,6 +14,13 @@ const globalOffline = ref(false)
 
 onLaunch(() => {
   console.log('App Launch')
+  // #ifdef H5
+  // 全局捕获未处理的 Promise rejection，避免白屏
+  window.addEventListener('unhandledrejection', (event) => {
+    console.error('[Global] Unhandled Promise Rejection:', event.reason)
+    event.preventDefault()
+  })
+  // #endif
 
   // 初始化埋点
   initTracker()
