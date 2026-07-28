@@ -64,7 +64,7 @@
         <text class="section-title">能力雷达图</text>
         <canvas
           type="2d"
-          canvas-id="radarCanvas"
+          
           id="radarCanvas"
           class="radar-canvas"
           @touchstart="noop"
@@ -81,7 +81,7 @@
         <text class="section-title">收益曲线</text>
         <canvas
           type="2d"
-          canvas-id="chartCanvas"
+          
           id="chartCanvas"
           class="chart-canvas"
           @touchstart="noop"
@@ -300,6 +300,9 @@ const drawRadar = () => {
     canvas.height = h * dpr
     const ctx = canvas.getContext('2d')
     ctx.scale(dpr, dpr)
+    const cx = w / 2
+    const cy = h / 2
+    const r = Math.min(w, h) / 2 - 30
 
     // Background grid
     for (let level = 1; level <= 5; level++) {
@@ -414,7 +417,7 @@ const drawChart = () => {
       ctx.setFontSize(10)
       ctx.setFillStyle('#667788')
       ctx.setTextAlign('right')
-      ctx.fillText(val.toFixed(1) + '%', pad.left - 6, y + 3)
+      ctx.fillText(val.toFixed(0), pad.left - 6, y + 3)
     }
 
     // Zero line
