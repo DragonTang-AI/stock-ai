@@ -62,13 +62,17 @@
       <!-- 雷达图 -->
       <view class="radar-section" v-if="radarScores">
         <text class="section-title">能力雷达图</text>
+        <!-- #ifdef H5 -->
+        <view class="radar-canvas" id="radarCanvasH5"></view>
+        <!-- #endif -->
+        <!-- #ifndef H5 -->
         <canvas
           type="2d"
-          
           id="radarCanvas"
           class="radar-canvas"
           @touchstart="noop"
         />
+        <!-- #endif -->
         <view class="radar-legend">
           <text class="legend-item" v-for="item in legendItems" :key="item.label">
             {{ item.label }}: {{ item.value }}
@@ -79,13 +83,17 @@
       <!-- 收益曲线 -->
       <view class="perf-chart-section" v-if="salaryCurve.length > 0">
         <text class="section-title">收益曲线</text>
+        <!-- #ifdef H5 -->
+        <view class="chart-canvas" id="chartCanvasH5"></view>
+        <!-- #endif -->
+        <!-- #ifndef H5 -->
         <canvas
           type="2d"
-          
           id="chartCanvas"
           class="chart-canvas"
           @touchstart="noop"
         />
+        <!-- #endif -->
       </view>
 
       <!-- 近期表现 -->
@@ -249,10 +257,11 @@ const loadData = async (agentId: string) => {
     }
 
     await nextTick()
-    nextTick(() => {
+    // Use setTimeout to ensure canvas is ready
+    setTimeout(() => {
       drawRadar()
       drawChart()
-    })
+    }, 300)
   } catch (e) {
     console.error('加载交易员详情失败', e)
     uni.showToast({ title: '加载失败', icon: 'none' })
@@ -279,7 +288,7 @@ const doHire = async () => {
 
 const goBack = () => uni.navigateBack()
 
-// ── Radar Chart ──
+// ── Radar Chart (H5 Compatible) ──
 const drawRadar = () => {
   if (!radarScores.value) return
   const labels = Object.keys(radarScores.value)
@@ -287,7 +296,33 @@ const drawRadar = () => {
   const n = labels.length
   if (n === 0) return
 
-  // Using Canvas 2D API for H5 compatibility
+  // #ifdef H5
+  const container = document.getElementById('radarCanvasH5')
+  if (container) {
+    // Remove any existing canvas
+    const existingCanvas = container.querySelector('canvas')
+    if (existingCanvas) container.removeChild(existingCanvas)
+    
+    const w = container.clientWidth || 300
+    const h = container.clientHeight || 260
+    const dpr = window.devicePixelRatio || 1
+    
+    const canvas = document.createElement('canvas')
+    canvas.style.width = '100%'
+    canvas.style.height = '100%'
+    canvas.width = w * dpr
+    canvas.height = h * dpr
+    container.appendChild(canvas)
+    
+    const ctx = canvas.getContext('2d')!
+    ctx.scale(dpr, dpr)
+    drawRadarCore(ctx, w, h, labels, values, n)
+    console.log('[detail] radar drawn via H5 native canvas')
+    return
+  }
+  // #endif
+
+  // #ifndef H5
   const query = uni.createSelectorQuery()
   query.select('#radarCanvas').fields({ node: true, size: true }).exec((res: any) => {
     const info = res[0]
@@ -300,86 +335,116 @@ const drawRadar = () => {
     canvas.height = h * dpr
     const ctx = canvas.getContext('2d')
     ctx.scale(dpr, dpr)
-    const cx = w / 2
-    const cy = h / 2
-    const r = Math.min(w, h) / 2 - 30
+    drawRadarCore(ctx, w, h, labels, values, n)
+    ctx.draw()
+  })
+  // #endif
+}
 
-    // Background grid
-    for (let level = 1; level <= 5; level++) {
-      const rr = (r * level) / 5
-      ctx.beginPath()
-      for (let i = 0; i < n; i++) {
-        const angle = (Math.PI * 2 * i) / n - Math.PI / 2
-        const x = cx + rr * Math.cos(angle)
-        const y = cy + rr * Math.sin(angle)
-        if (i === 0) ctx.moveTo(x, y)
-        else ctx.lineTo(x, y)
-      }
-      ctx.closePath()
-      ctx.setStrokeStyle('rgba(255,255,255,0.1)')
-      ctx.stroke()
-    }
+const drawRadarCore = (ctx: any, w: number, h: number, labels: string[], values: number[], n: number) => {
+  const cx = w / 2
+  const cy = h / 2
+  const r = Math.min(w, h) / 2 - 30
 
-    // Axis lines
-    for (let i = 0; i < n; i++) {
-      const angle = (Math.PI * 2 * i) / n - Math.PI / 2
-      ctx.beginPath()
-      ctx.moveTo(cx, cy)
-      ctx.lineTo(cx + r * Math.cos(angle), cy + r * Math.sin(angle))
-      ctx.setStrokeStyle('rgba(255,255,255,0.15)')
-      ctx.stroke()
-    }
-
-    // Data polygon
+  // Background grid
+  for (let level = 1; level <= 5; level++) {
+    const rr = (r * level) / 5
     ctx.beginPath()
     for (let i = 0; i < n; i++) {
       const angle = (Math.PI * 2 * i) / n - Math.PI / 2
-      const val = Math.max(0, Math.min(10, values[i])) / 10
-      const x = cx + r * val * Math.cos(angle)
-      const y = cy + r * val * Math.sin(angle)
+      const x = cx + rr * Math.cos(angle)
+      const y = cy + rr * Math.sin(angle)
       if (i === 0) ctx.moveTo(x, y)
       else ctx.lineTo(x, y)
     }
     ctx.closePath()
-    ctx.setFillStyle('rgba(74, 144, 226, 0.2)')
-    ctx.fill()
-    ctx.setStrokeStyle('#4A90E2')
-    ctx.setLineWidth(2)
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)'
     ctx.stroke()
+  }
 
-    // Data points
-    for (let i = 0; i < n; i++) {
-      const angle = (Math.PI * 2 * i) / n - Math.PI / 2
-      const val = Math.max(0, Math.min(10, values[i])) / 10
-      const x = cx + r * val * Math.cos(angle)
-      const y = cy + r * val * Math.sin(angle)
-      ctx.beginPath()
-      ctx.arc(x, y, 4, 0, Math.PI * 2)
-      ctx.setFillStyle('#4A90E2')
-      ctx.fill()
-    }
+  // Axis lines
+  for (let i = 0; i < n; i++) {
+    const angle = (Math.PI * 2 * i) / n - Math.PI / 2
+    ctx.beginPath()
+    ctx.moveTo(cx, cy)
+    ctx.lineTo(cx + r * Math.cos(angle), cy + r * Math.sin(angle))
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)'
+    ctx.stroke()
+  }
 
-    // Labels
-    for (let i = 0; i < n; i++) {
-      const angle = (Math.PI * 2 * i) / n - Math.PI / 2
-      const lr = r + 24
-      const lx = cx + lr * Math.cos(angle)
-      const ly = cy + lr * Math.sin(angle)
-      ctx.setFontSize(11)
-      ctx.setFillStyle('#8899aa')
-      ctx.setTextAlign('center')
-      ctx.fillText(radarLabels[labels[i]] || labels[i], lx, ly + 5)
-    }
+  // Data polygon
+  ctx.beginPath()
+  for (let i = 0; i < n; i++) {
+    const angle = (Math.PI * 2 * i) / n - Math.PI / 2
+    const val = Math.max(0, Math.min(10, values[i])) / 10
+    const x = cx + r * val * Math.cos(angle)
+    const y = cy + r * val * Math.sin(angle)
+    if (i === 0) ctx.moveTo(x, y)
+    else ctx.lineTo(x, y)
+  }
+  ctx.closePath()
+  ctx.fillStyle = 'rgba(74, 144, 226, 0.2)'
+  ctx.fill()
+  ctx.strokeStyle = '#4A90E2'
+  ctx.lineWidth = 2
+  ctx.stroke()
 
-    ctx.draw()
-  })
+  // Data points
+  for (let i = 0; i < n; i++) {
+    const angle = (Math.PI * 2 * i) / n - Math.PI / 2
+    const val = Math.max(0, Math.min(10, values[i])) / 10
+    const x = cx + r * val * Math.cos(angle)
+    const y = cy + r * val * Math.sin(angle)
+    ctx.beginPath()
+    ctx.arc(x, y, 4, 0, Math.PI * 2)
+    ctx.fillStyle = '#4A90E2'
+    ctx.fill()
+  }
+
+  // Labels
+  ctx.font = '11px sans-serif'
+  for (let i = 0; i < n; i++) {
+    const angle = (Math.PI * 2 * i) / n - Math.PI / 2
+    const lr = r + 24
+    const lx = cx + lr * Math.cos(angle)
+    const ly = cy + lr * Math.sin(angle)
+    ctx.fillStyle = '#8899aa'
+    ctx.textAlign = 'center'
+    ctx.fillText(radarLabels[labels[i]] || labels[i], lx, ly + 5)
+  }
 }
 
-// ── Performance Curve ──
+// ── Performance Curve (H5 Compatible) ──
 const drawChart = () => {
   const curve = salaryCurve.value
   if (!curve || curve.length === 0) return
 
+  // #ifdef H5
+  const chartContainer = document.getElementById("chartCanvasH5")
+  if (chartContainer) {
+    const existingCanvas = chartContainer.querySelector("canvas")
+    if (existingCanvas) chartContainer.removeChild(existingCanvas)
+    
+    const w = chartContainer.clientWidth || 340
+    const h = chartContainer.clientHeight || 220
+    const dpr = window.devicePixelRatio || 1
+    
+    const canvas = document.createElement("canvas")
+    canvas.style.width = "100%"
+    canvas.style.height = "100%"
+    canvas.width = w * dpr
+    canvas.height = h * dpr
+    chartContainer.appendChild(canvas)
+    
+    const ctx = canvas.getContext("2d")!
+    ctx.scale(dpr, dpr)
+    drawChartCore(ctx, w, h, curve)
+    console.log("[detail] chart drawn via H5 native canvas, points:", curve.length)
+    return
+  }
+  // #endif
+
+  // #ifndef H5
   const query = uni.createSelectorQuery()
   query.select('#chartCanvas').fields({ node: true, size: true }).exec((res: any) => {
     const info = res[0]
@@ -392,62 +457,53 @@ const drawChart = () => {
     canvas.height = h * dpr
     const ctx = canvas.getContext('2d')
     ctx.scale(dpr, dpr)
-    const pad = { top: 16, right: 16, bottom: 32, left: 40 }
-    const pw = w - pad.left - pad.right
-    const ph = h - pad.top - pad.bottom
-    const data = curve.map(c => c.value)
-    const minVal = Math.min(...data, 0)
-    const maxVal = Math.max(...data, 0)
-    const range = maxVal - minVal || 1
+    drawChartCore(ctx, w, h, curve)
+    ctx.draw()
+  })
+  // #endif
+}
 
-    // Background
-    ctx.setFillStyle('#1a1a2e')
-    ctx.fillRect(0, 0, w, h)
+const drawChartCore = (ctx: any, w: number, h: number, curve: { date: string; value: number; period?: string }[]) => {
+  const pad = { top: 16, right: 16, bottom: 32, left: 40 }
+  const pw = w - pad.left - pad.right
+  const ph = h - pad.top - pad.bottom
+  const data = curve.map(c => c.value)
+  const minVal = Math.min(...data, 0)
+  const maxVal = Math.max(...data, 0)
+  const range = maxVal - minVal || 1
 
-    // Grid lines
-    for (let i = 0; i <= 4; i++) {
-      const y = pad.top + (ph * i) / 4
-      ctx.beginPath()
-      ctx.moveTo(pad.left, y)
-      ctx.lineTo(w - pad.right, y)
-      ctx.setStrokeStyle('rgba(255,255,255,0.06)')
-      ctx.stroke()
+  // Background
+  ctx.fillStyle = '#1a1a2e'
+  ctx.fillRect(0, 0, w, h)
 
-      const val = maxVal - (range * i) / 4
-      ctx.setFontSize(10)
-      ctx.setFillStyle('#667788')
-      ctx.setTextAlign('right')
-      ctx.fillText(val.toFixed(0), pad.left - 6, y + 3)
-    }
+  // Grid lines
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (ph * i) / 4
+    ctx.beginPath()
+    ctx.moveTo(pad.left, y)
+    ctx.lineTo(w - pad.right, y)
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)'
+    ctx.stroke()
 
-    // Zero line
-    if (minVal < 0 && maxVal > 0) {
-      const zy = pad.top + ph * (maxVal / range)
-      ctx.beginPath()
-      ctx.moveTo(pad.left, zy)
-      ctx.lineTo(w - pad.right, zy)
-      ctx.setStrokeStyle('rgba(255,255,255,0.1)')
-      ctx.stroke()
-    }
+    const val = maxVal - (range * i) / 4
+    ctx.font = '10px sans-serif'
+    ctx.fillStyle = '#667788'
+    ctx.textAlign = 'right'
+    ctx.fillText(val.toFixed(0), pad.left - 6, y + 3)
+  }
 
-    // Gradient fill
-    if (data.length > 1) {
-      ctx.beginPath()
-      for (let i = 0; i < data.length; i++) {
-        const x = pad.left + (pw * i) / (data.length - 1)
-        const y = pad.top + ph * (1 - (data[i] - minVal) / range)
-        if (i === 0) ctx.moveTo(x, y)
-        else ctx.lineTo(x, y)
-      }
-      // Close to bottom
-      ctx.lineTo(pad.left + pw, pad.top + ph)
-      ctx.lineTo(pad.left, pad.top + ph)
-      ctx.closePath()
-      ctx.setFillStyle('rgba(74,144,226,0.08)')
-      ctx.fill()
-    }
+  // Zero line
+  if (minVal < 0 && maxVal > 0) {
+    const zy = pad.top + ph * (maxVal / range)
+    ctx.beginPath()
+    ctx.moveTo(pad.left, zy)
+    ctx.lineTo(w - pad.right, zy)
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)'
+    ctx.stroke()
+  }
 
-    // Line
+  // Gradient fill
+  if (data.length > 1) {
     ctx.beginPath()
     for (let i = 0; i < data.length; i++) {
       const x = pad.left + (pw * i) / (data.length - 1)
@@ -455,35 +511,47 @@ const drawChart = () => {
       if (i === 0) ctx.moveTo(x, y)
       else ctx.lineTo(x, y)
     }
-    ctx.setStrokeStyle('#4A90E2')
-    ctx.setLineWidth(2)
-    ctx.setLineCap('round')
-    ctx.stroke()
+    ctx.lineTo(pad.left + pw, pad.top + ph)
+    ctx.lineTo(pad.left, pad.top + ph)
+    ctx.closePath()
+    ctx.fillStyle = 'rgba(74,144,226,0.08)'
+    ctx.fill()
+  }
 
-    // Dots
-    for (let i = 0; i < data.length; i++) {
-      const x = pad.left + (pw * i) / (data.length - 1)
-      const y = pad.top + ph * (1 - (data[i] - minVal) / range)
-      ctx.beginPath()
-      ctx.arc(x, y, 3, 0, Math.PI * 2)
-      ctx.setFillStyle(i === data.length - 1 ? '#4ade80' : '#4A90E2')
-      ctx.fill()
-    }
+  // Line
+  ctx.beginPath()
+  for (let i = 0; i < data.length; i++) {
+    const x = pad.left + (pw * i) / (data.length - 1)
+    const y = pad.top + ph * (1 - (data[i] - minVal) / range)
+    if (i === 0) ctx.moveTo(x, y)
+    else ctx.lineTo(x, y)
+  }
+  ctx.strokeStyle = '#4A90E2'
+  ctx.lineWidth = 2
+  ctx.lineCap = 'round'
+  ctx.stroke()
 
-    // X labels
-    if (data.length > 1) {
-      const first = curve[0]
-      const last = curve[curve.length - 1]
-      ctx.setFontSize(9)
-      ctx.setFillStyle('#556677')
-      ctx.setTextAlign('left')
-      if (first && first.period) ctx.fillText(first.period, pad.left, h - 6)
-      ctx.setTextAlign('right')
-      if (last && last.period) ctx.fillText(last.period, w - pad.right, h - 6)
-    }
+  // Dots
+  for (let i = 0; i < data.length; i++) {
+    const x = pad.left + (pw * i) / (data.length - 1)
+    const y = pad.top + ph * (1 - (data[i] - minVal) / range)
+    ctx.beginPath()
+    ctx.arc(x, y, 3, 0, Math.PI * 2)
+    ctx.fillStyle = i === data.length - 1 ? '#4ade80' : '#4A90E2'
+    ctx.fill()
+  }
 
-    ctx.draw()
-  })
+  // X labels
+  if (data.length > 1) {
+    const first = curve[0]
+    const last = curve[curve.length - 1]
+    ctx.font = '9px sans-serif'
+    ctx.fillStyle = '#556677'
+    ctx.textAlign = 'left'
+    if (first && first.period) ctx.fillText(first.period, pad.left, h - 6)
+    ctx.textAlign = 'right'
+    if (last && last.period) ctx.fillText(last.period, w - pad.right, h - 6)
+  }
 }
 
 const formatPct = (v: number | null | undefined) => {
@@ -563,7 +631,7 @@ onMounted(() => {
   display: flex; flex-wrap: wrap;
   .m-item {
     width: 33.33%; text-align: center; padding: 16rpx 0;
-    .m-value { font-size: 32rpx; font-weight: 700; font-family: 'DIN Alternate', monospace; }
+    .m-value { font-size: 32rpx; font-weight: 700; font-family: "DIN Alternate", monospace; color: #e0e0e0; }
     .m-label { font-size: 22rpx; color: #667788; display: block; margin-top: 4rpx; }
   }
 }
