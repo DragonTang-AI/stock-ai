@@ -62,17 +62,7 @@
       <!-- 雷达图 -->
       <view class="radar-section" v-if="radarScores">
         <text class="section-title">能力雷达图</text>
-        <!-- #ifdef H5 -->
-        <view class="radar-canvas" id="radarCanvasH5"></view>
-        <!-- #endif -->
-        <!-- #ifndef H5 -->
-        <canvas
-          type="2d"
-          id="radarCanvas"
-          class="radar-canvas"
-          @touchstart="noop"
-        />
-        <!-- #endif -->
+        <view id="radarContainer" class="chart-container"></view>
         <view class="radar-legend">
           <text class="legend-item" v-for="item in legendItems" :key="item.label">
             {{ item.label }}: {{ item.value }}
@@ -83,17 +73,7 @@
       <!-- 收益曲线 -->
       <view class="perf-chart-section" v-if="salaryCurve.length > 0">
         <text class="section-title">收益曲线</text>
-        <!-- #ifdef H5 -->
-        <view class="chart-canvas" id="chartCanvasH5"></view>
-        <!-- #endif -->
-        <!-- #ifndef H5 -->
-        <canvas
-          type="2d"
-          id="chartCanvas"
-          class="chart-canvas"
-          @touchstart="noop"
-        />
-        <!-- #endif -->
+        <view id="chartContainer" class="chart-container"></view>
       </view>
 
       <!-- 近期表现 -->
@@ -196,6 +176,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue'
+import F2 from '@antv/f2'
 import { getAgentDetail, hireAgent } from '@/api/agent'
 import { getPointsBalance } from '@/api/points'
 
@@ -259,8 +240,8 @@ const loadData = async (agentId: string) => {
     await nextTick()
     // Use setTimeout to ensure canvas is ready
     setTimeout(() => {
-      drawRadar()
-      drawChart()
+      renderRadar()
+      renderChart()
     }, 300)
   } catch (e) {
     console.error('加载交易员详情失败', e)
@@ -288,270 +269,137 @@ const doHire = async () => {
 
 const goBack = () => uni.navigateBack()
 
-// ── Radar Chart (H5 Compatible) ──
-const drawRadar = () => {
+// ── Radar Chart (F2) ──
+let radarChart: any = null
+
+const renderRadar = () => {
   if (!radarScores.value) return
   const labels = Object.keys(radarScores.value)
   const values = labels.map(k => radarScores.value![k] || 0)
-  const n = labels.length
-  if (n === 0) return
+  if (labels.length === 0) return
 
-  // #ifdef H5
-  const container = document.getElementById('radarCanvasH5')
-  if (container) {
-    // Remove any existing canvas
-    const existingCanvas = container.querySelector('canvas')
-    if (existingCanvas) container.removeChild(existingCanvas)
-    
-    const w = container.clientWidth || 300
-    const h = container.clientHeight || 260
-    const dpr = window.devicePixelRatio || 1
-    
-    const canvas = document.createElement('canvas')
-    canvas.style.width = '100%'
-    canvas.style.height = '100%'
-    canvas.width = w * dpr
-    canvas.height = h * dpr
-    container.appendChild(canvas)
-    
-    const ctx = canvas.getContext('2d')!
-    ctx.scale(dpr, dpr)
-    drawRadarCore(ctx, w, h, labels, values, n)
-    console.log('[detail] radar drawn via H5 native canvas')
-    return
+  const container = document.getElementById('radarContainer')
+  if (!container) return
+
+  if (radarChart) {
+    radarChart.destroy()
+    radarChart = null
   }
-  // #endif
 
-  // #ifndef H5
-  const query = uni.createSelectorQuery()
-  query.select('#radarCanvas').fields({ node: true, size: true }).exec((res: any) => {
-    const info = res[0]
-    if (!info || !info.node) return
-    const canvas = info.node
-    const w = info.width || 300
-    const h = info.height || 260
-    const dpr = uni.getSystemInfoSync().pixelRatio
-    canvas.width = w * dpr
-    canvas.height = h * dpr
-    const ctx = canvas.getContext('2d')
-    ctx.scale(dpr, dpr)
-    drawRadarCore(ctx, w, h, labels, values, n)
-    ctx.draw()
+  // Clear container
+  container.innerHTML = ''
+
+  const data = labels.map((k, i) => ({
+    item: radarLabels[k] || k,
+    score: values[i]
+  }))
+
+  const w = container.clientWidth || 300
+  const h = 280
+
+  const chart = new F2.Chart({
+    id: 'radarContainer',
+    pixelRatio: window.devicePixelRatio || 1,
+    width: w,
+    height: h,
+    padding: [40, 40, 40, 40]
   })
-  // #endif
+
+  chart.source(data, {
+    score: { min: 0, max: 10, tickCount: 5 }
+  })
+  chart.coord('polar', {
+    transposed: true,
+    inner: 0
+  })
+  chart.axis('score', {
+    grid: { type: 'line', lineDash: null },
+    label: { fontSize: 10, fill: '#667788' },
+    line: null
+  })
+  chart.axis('item', {
+    grid: { lineDash: null },
+    label: { fontSize: 11, fill: '#8899aa' },
+    line: null
+  })
+  chart.area()
+    .position('item*score')
+    .color('rgba(74,144,226,0.15)')
+  chart.line()
+    .position('item*score')
+    .color('#4A90E2')
+    .size(2)
+  chart.point()
+    .position('item*score')
+    .color('#4A90E2')
+    .size(4)
+  chart.render()
+
+  radarChart = chart
 }
 
-const drawRadarCore = (ctx: any, w: number, h: number, labels: string[], values: number[], n: number) => {
-  const cx = w / 2
-  const cy = h / 2
-  const r = Math.min(w, h) / 2 - 30
+// ── Performance Curve (F2) ──
+let lineChart: any = null
 
-  // Background grid
-  for (let level = 1; level <= 5; level++) {
-    const rr = (r * level) / 5
-    ctx.beginPath()
-    for (let i = 0; i < n; i++) {
-      const angle = (Math.PI * 2 * i) / n - Math.PI / 2
-      const x = cx + rr * Math.cos(angle)
-      const y = cy + rr * Math.sin(angle)
-      if (i === 0) ctx.moveTo(x, y)
-      else ctx.lineTo(x, y)
-    }
-    ctx.closePath()
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)'
-    ctx.stroke()
-  }
-
-  // Axis lines
-  for (let i = 0; i < n; i++) {
-    const angle = (Math.PI * 2 * i) / n - Math.PI / 2
-    ctx.beginPath()
-    ctx.moveTo(cx, cy)
-    ctx.lineTo(cx + r * Math.cos(angle), cy + r * Math.sin(angle))
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)'
-    ctx.stroke()
-  }
-
-  // Data polygon
-  ctx.beginPath()
-  for (let i = 0; i < n; i++) {
-    const angle = (Math.PI * 2 * i) / n - Math.PI / 2
-    const val = Math.max(0, Math.min(10, values[i])) / 10
-    const x = cx + r * val * Math.cos(angle)
-    const y = cy + r * val * Math.sin(angle)
-    if (i === 0) ctx.moveTo(x, y)
-    else ctx.lineTo(x, y)
-  }
-  ctx.closePath()
-  ctx.fillStyle = 'rgba(74, 144, 226, 0.2)'
-  ctx.fill()
-  ctx.strokeStyle = '#4A90E2'
-  ctx.lineWidth = 2
-  ctx.stroke()
-
-  // Data points
-  for (let i = 0; i < n; i++) {
-    const angle = (Math.PI * 2 * i) / n - Math.PI / 2
-    const val = Math.max(0, Math.min(10, values[i])) / 10
-    const x = cx + r * val * Math.cos(angle)
-    const y = cy + r * val * Math.sin(angle)
-    ctx.beginPath()
-    ctx.arc(x, y, 4, 0, Math.PI * 2)
-    ctx.fillStyle = '#4A90E2'
-    ctx.fill()
-  }
-
-  // Labels
-  ctx.font = '11px sans-serif'
-  for (let i = 0; i < n; i++) {
-    const angle = (Math.PI * 2 * i) / n - Math.PI / 2
-    const lr = r + 24
-    const lx = cx + lr * Math.cos(angle)
-    const ly = cy + lr * Math.sin(angle)
-    ctx.fillStyle = '#8899aa'
-    ctx.textAlign = 'center'
-    ctx.fillText(radarLabels[labels[i]] || labels[i], lx, ly + 5)
-  }
-}
-
-// ── Performance Curve (H5 Compatible) ──
-const drawChart = () => {
+const renderChart = () => {
   const curve = salaryCurve.value
   if (!curve || curve.length === 0) return
 
-  // #ifdef H5
-  const chartContainer = document.getElementById("chartCanvasH5")
-  if (chartContainer) {
-    const existingCanvas = chartContainer.querySelector("canvas")
-    if (existingCanvas) chartContainer.removeChild(existingCanvas)
-    
-    const w = chartContainer.clientWidth || 340
-    const h = chartContainer.clientHeight || 220
-    const dpr = window.devicePixelRatio || 1
-    
-    const canvas = document.createElement("canvas")
-    canvas.style.width = "100%"
-    canvas.style.height = "100%"
-    canvas.width = w * dpr
-    canvas.height = h * dpr
-    chartContainer.appendChild(canvas)
-    
-    const ctx = canvas.getContext("2d")!
-    ctx.scale(dpr, dpr)
-    drawChartCore(ctx, w, h, curve)
-    console.log("[detail] chart drawn via H5 native canvas, points:", curve.length)
-    return
-  }
-  // #endif
+  const container = document.getElementById('chartContainer')
+  if (!container) return
 
-  // #ifndef H5
-  const query = uni.createSelectorQuery()
-  query.select('#chartCanvas').fields({ node: true, size: true }).exec((res: any) => {
-    const info = res[0]
-    if (!info || !info.node) return
-    const canvas = info.node
-    const w = info.width || 340
-    const h = info.height || 220
-    const dpr = uni.getSystemInfoSync().pixelRatio
-    canvas.width = w * dpr
-    canvas.height = h * dpr
-    const ctx = canvas.getContext('2d')
-    ctx.scale(dpr, dpr)
-    drawChartCore(ctx, w, h, curve)
-    ctx.draw()
+  if (lineChart) {
+    lineChart.destroy()
+    lineChart = null
+  }
+
+  container.innerHTML = ''
+
+  const w = container.clientWidth || 340
+  const h = 260
+
+  const chart = new F2.Chart({
+    id: 'chartContainer',
+    pixelRatio: window.devicePixelRatio || 1,
+    width: w,
+    height: h,
+    padding: [20, 16, 36, 44]
   })
-  // #endif
-}
 
-const drawChartCore = (ctx: any, w: number, h: number, curve: { date: string; value: number; period?: string }[]) => {
-  const pad = { top: 16, right: 16, bottom: 32, left: 40 }
-  const pw = w - pad.left - pad.right
-  const ph = h - pad.top - pad.bottom
-  const data = curve.map(c => c.value)
-  const minVal = Math.min(...data, 0)
-  const maxVal = Math.max(...data, 0)
-  const range = maxVal - minVal || 1
+  const source = curve.map(c => ({
+    date: c.period || c.date,
+    value: c.value
+  }))
 
-  // Background
-  ctx.fillStyle = '#1a1a2e'
-  ctx.fillRect(0, 0, w, h)
+  chart.source(source, {
+    value: { tickCount: 5 }
+  })
+  chart.axis('date', {
+    label: { fontSize: 9, fill: '#556677' },
+    line: { stroke: 'rgba(255,255,255,0.1)' }
+  })
+  chart.axis('value', {
+    label: { fontSize: 10, fill: '#667788' },
+    grid: { stroke: 'rgba(255,255,255,0.06)' },
+    line: null
+  })
+  chart.area()
+    .position('date*value')
+    .color('rgba(74,144,226,0.08)')
+  chart.line()
+    .position('date*value')
+    .color('#4A90E2')
+    .size(2)
+  chart.point()
+    .position('date*value')
+    .color('value', (val: number) => {
+      const last = source[source.length - 1]
+      return (val === last.value && source.length > 1) ? '#4ade80' : '#4A90E2'
+    })
+    .size(3)
+  chart.render()
 
-  // Grid lines
-  for (let i = 0; i <= 4; i++) {
-    const y = pad.top + (ph * i) / 4
-    ctx.beginPath()
-    ctx.moveTo(pad.left, y)
-    ctx.lineTo(w - pad.right, y)
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)'
-    ctx.stroke()
-
-    const val = maxVal - (range * i) / 4
-    ctx.font = '10px sans-serif'
-    ctx.fillStyle = '#667788'
-    ctx.textAlign = 'right'
-    ctx.fillText(val.toFixed(0), pad.left - 6, y + 3)
-  }
-
-  // Zero line
-  if (minVal < 0 && maxVal > 0) {
-    const zy = pad.top + ph * (maxVal / range)
-    ctx.beginPath()
-    ctx.moveTo(pad.left, zy)
-    ctx.lineTo(w - pad.right, zy)
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)'
-    ctx.stroke()
-  }
-
-  // Gradient fill
-  if (data.length > 1) {
-    ctx.beginPath()
-    for (let i = 0; i < data.length; i++) {
-      const x = pad.left + (pw * i) / (data.length - 1)
-      const y = pad.top + ph * (1 - (data[i] - minVal) / range)
-      if (i === 0) ctx.moveTo(x, y)
-      else ctx.lineTo(x, y)
-    }
-    ctx.lineTo(pad.left + pw, pad.top + ph)
-    ctx.lineTo(pad.left, pad.top + ph)
-    ctx.closePath()
-    ctx.fillStyle = 'rgba(74,144,226,0.08)'
-    ctx.fill()
-  }
-
-  // Line
-  ctx.beginPath()
-  for (let i = 0; i < data.length; i++) {
-    const x = pad.left + (pw * i) / (data.length - 1)
-    const y = pad.top + ph * (1 - (data[i] - minVal) / range)
-    if (i === 0) ctx.moveTo(x, y)
-    else ctx.lineTo(x, y)
-  }
-  ctx.strokeStyle = '#4A90E2'
-  ctx.lineWidth = 2
-  ctx.lineCap = 'round'
-  ctx.stroke()
-
-  // Dots
-  for (let i = 0; i < data.length; i++) {
-    const x = pad.left + (pw * i) / (data.length - 1)
-    const y = pad.top + ph * (1 - (data[i] - minVal) / range)
-    ctx.beginPath()
-    ctx.arc(x, y, 3, 0, Math.PI * 2)
-    ctx.fillStyle = i === data.length - 1 ? '#4ade80' : '#4A90E2'
-    ctx.fill()
-  }
-
-  // X labels
-  if (data.length > 1) {
-    const first = curve[0]
-    const last = curve[curve.length - 1]
-    ctx.font = '9px sans-serif'
-    ctx.fillStyle = '#556677'
-    ctx.textAlign = 'left'
-    if (first && first.period) ctx.fillText(first.period, pad.left, h - 6)
-    ctx.textAlign = 'right'
-    if (last && last.period) ctx.fillText(last.period, w - pad.right, h - 6)
-  }
+  lineChart = chart
 }
 
 const formatPct = (v: number | null | undefined) => {
@@ -638,7 +486,7 @@ onMounted(() => {
 
 // Radar
 .radar-section { padding: 24rpx; margin: 0 24rpx 24rpx; background: #1a1a2e; border-radius: 20rpx; }
-.radar-canvas { width: 100%; height: 280rpx; margin-top: 12rpx; }
+.chart-container { width: 100%; height: 300px; margin-top: 12rpx; background: transparent; }
 .radar-legend {
   display: flex; flex-wrap: wrap; margin-top: 12rpx; justify-content: center;
   .legend-item {
@@ -648,7 +496,7 @@ onMounted(() => {
 
 // Chart
 .perf-chart-section { padding: 24rpx; margin: 0 24rpx 24rpx; background: #1a1a2e; border-radius: 20rpx; }
-.chart-canvas { width: 100%; height: 240rpx; margin-top: 12rpx; }
+/* chart moved to .chart-container */
 
 .strategy-section, .desc-section {
   padding: 24rpx; margin: 0 24rpx 24rpx; background: #1a1a2e; border-radius: 20rpx;

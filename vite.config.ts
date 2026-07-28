@@ -7,6 +7,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
+      '@antv/f2': resolve(__dirname, 'node_modules/@antv/f2/lib/index.js'),
     },
   },
   server: {
