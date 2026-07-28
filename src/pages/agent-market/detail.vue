@@ -63,6 +63,7 @@
       <view class="radar-section" v-if="radarScores">
         <text class="section-title">能力雷达图</text>
         <canvas
+          type="2d"
           canvas-id="radarCanvas"
           id="radarCanvas"
           class="radar-canvas"
@@ -79,6 +80,7 @@
       <view class="perf-chart-section" v-if="salaryCurve.length > 0">
         <text class="section-title">收益曲线</text>
         <canvas
+          type="2d"
           canvas-id="chartCanvas"
           id="chartCanvas"
           class="chart-canvas"
@@ -285,17 +287,19 @@ const drawRadar = () => {
   const n = labels.length
   if (n === 0) return
 
-  // Using uni.createSelectorQuery for H5 compatibility
+  // Using Canvas 2D API for H5 compatibility
   const query = uni.createSelectorQuery()
   query.select('#radarCanvas').fields({ node: true, size: true }).exec((res: any) => {
     const info = res[0]
-    if (!info) return
+    if (!info || !info.node) return
+    const canvas = info.node
     const w = info.width || 300
     const h = info.height || 260
-    const cx = w / 2
-    const cy = h / 2
-    const r = Math.min(cx, cy) - 30
-    const ctx = uni.createCanvasContext('radarCanvas')
+    const dpr = uni.getSystemInfoSync().pixelRatio
+    canvas.width = w * dpr
+    canvas.height = h * dpr
+    const ctx = canvas.getContext('2d')
+    ctx.scale(dpr, dpr)
 
     // Background grid
     for (let level = 1; level <= 5; level++) {
@@ -376,14 +380,18 @@ const drawChart = () => {
   const query = uni.createSelectorQuery()
   query.select('#chartCanvas').fields({ node: true, size: true }).exec((res: any) => {
     const info = res[0]
-    if (!info) return
+    if (!info || !info.node) return
+    const canvas = info.node
     const w = info.width || 340
     const h = info.height || 220
+    const dpr = uni.getSystemInfoSync().pixelRatio
+    canvas.width = w * dpr
+    canvas.height = h * dpr
+    const ctx = canvas.getContext('2d')
+    ctx.scale(dpr, dpr)
     const pad = { top: 16, right: 16, bottom: 32, left: 40 }
     const pw = w - pad.left - pad.right
     const ph = h - pad.top - pad.bottom
-
-    const ctx = uni.createCanvasContext('chartCanvas')
     const data = curve.map(c => c.value)
     const minVal = Math.min(...data, 0)
     const maxVal = Math.max(...data, 0)
@@ -466,9 +474,9 @@ const drawChart = () => {
       ctx.setFontSize(9)
       ctx.setFillStyle('#556677')
       ctx.setTextAlign('left')
-      if (first && first.date) ctx.fillText(first.date.substring(0, 10), pad.left, h - 6)
+      if (first && first.period) ctx.fillText(first.period, pad.left, h - 6)
       ctx.setTextAlign('right')
-      if (last && last.date) ctx.fillText(last.date.substring(0, 10), w - pad.right, h - 6)
+      if (last && last.period) ctx.fillText(last.period, w - pad.right, h - 6)
     }
 
     ctx.draw()
@@ -477,7 +485,7 @@ const drawChart = () => {
 
 const formatPct = (v: number | null | undefined) => {
   if (v == null) return '--'
-  return (v * 100).toFixed(2) + '%'
+  return v.toFixed(2) + '%'
 }
 
 const formatDate = (d: string | null) => {
