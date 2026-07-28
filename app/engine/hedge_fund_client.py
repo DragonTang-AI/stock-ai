@@ -276,8 +276,14 @@ def parse_decision_to_signal(decision: dict, ticker_name_map: dict[str, str]) ->
     action = decision.get("action", "").lower()
     ticker = decision.get("ticker", "")
 
+    # A 股暂不支持融券做空和买券还券，将 short → sell, cover → buy
+    if action == "short":
+        action = "sell"
+    elif action == "cover":
+        action = "buy"
+
     if action not in ("buy", "sell"):
-        return None  # hold/short/cover 暂不处理
+        return None  # hold 暂不处理
 
     confidence = decision.get("confidence", 0.5)
     if isinstance(confidence, (int, float)):

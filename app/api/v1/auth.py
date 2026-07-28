@@ -29,6 +29,7 @@ from app.schemas.auth import (
     RefreshTokenRequest,
     RefreshTokenResponse,
     RegisterRequest,
+    RegisterResponse,
     TokenResponse,
     UserResponse,
 )
@@ -136,11 +137,11 @@ async def login(
     )
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     body: RegisterRequest,
     db: AsyncSession = Depends(get_db),
-) -> User:
+) -> RegisterResponse:
     """用户注册（V1 仅支持用户名+密码）"""
     # 检查重复
     existing = await db.execute(
@@ -182,7 +183,14 @@ async def register(
     db.add(points_tx)
     await db.commit()
 
-    return user
+    # 注册即登录：直接签发 token，前端无需二次登录
+    token_data = {"sub": str(user.id), "username": user.username}
+    return RegisterResponse(
+        access_token=create_access_token(token_data),
+        refresh_token=create_refresh_token(token_data),
+        expires_in=settings.access_token_expire_minutes * 60,
+        user=UserResponse.model_validate(user),
+    )
 
 
 @router.post("/refresh", response_model=RefreshTokenResponse)

@@ -21,26 +21,16 @@ from app.core.database import get_db
 # ── 热门 A 股股票池（Phase 2 原有的 + 扩展）──
 
 HOT_A_STOCKS: list[dict[str, str]] = [
+    {"symbol": "600036", "name": "招商银行"},
     {"symbol": "600519", "name": "贵州茅台"},
+    {"symbol": "000858", "name": "五粮液"},
     {"symbol": "300750", "name": "宁德时代"},
     {"symbol": "002594", "name": "比亚迪"},
-    {"symbol": "000858", "name": "五粮液"},
     {"symbol": "601318", "name": "中国平安"},
-    {"symbol": "000333", "name": "美的集团"},
-    {"symbol": "600036", "name": "招商银行"},
-    {"symbol": "002475", "name": "立讯精密"},
-    {"symbol": "300059", "name": "东方财富"},
-    {"symbol": "601012", "name": "隆基绿能"},
-    {"symbol": "600276", "name": "恒瑞医药"},
-    {"symbol": "002415", "name": "海康威视"},
-    {"symbol": "300124", "name": "汇川技术"},
     {"symbol": "600900", "name": "长江电力"},
-    {"symbol": "002371", "name": "北方华创"},
-    {"symbol": "300274", "name": "阳光电源"},
-    {"symbol": "601899", "name": "紫金矿业"},
-    {"symbol": "600809", "name": "山西汾酒"},
-    {"symbol": "300760", "name": "迈瑞医疗"},
-    {"symbol": "002142", "name": "宁波银行"},
+    {"symbol": "000333", "name": "美的集团"},
+    {"symbol": "603259", "name": "药明康德"},
+    {"symbol": "688981", "name": "中芯国际"},
 ]
 
 
@@ -49,7 +39,7 @@ def get_ticker_map() -> dict[str, str]:
     return {s["symbol"]: s["name"] for s in HOT_A_STOCKS}
 
 
-async def get_stock_list(db: AsyncSession, limit: int = 30) -> list[dict[str, str]]:
+async def get_stock_list(db: AsyncSession, limit: int = 10) -> list[dict[str, str]]:
     """
     返回股票列表作为分析候选池。
     注：stocks 表尚未创建，直接使用内置 HOT_A_STOCKS。

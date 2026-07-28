@@ -86,18 +86,19 @@ async def generate_signals(
     if hire.status != "active":
         return {"signals": [], "source": "mock", "rejected_count": 0, "error": "雇佣关系非活跃状态"}
 
-    # 2. 确定使用的 agents（trader.id 即策略代码，如 value_hunter）
     strategy = trader.id or "value_hunter"
     agents = hedge_fund_client.get_agents_for_strategy(strategy)
 
     # 3. 获取股票池
-    stock_list = await market_data.get_stock_list(db, limit=20)
-    tickers = [s["symbol"] for s in stock_list[:5]]   # 最多分析 5 只（Yahoo Finance 限流）
+    stock_list = await market_data.get_stock_list(db, limit=10)
+    tickers = [s["symbol"] for s in stock_list[:10]]   # 最多分析 5 只（Yahoo Finance 限流）
     ticker_map = {s["symbol"]: s["name"] for s in stock_list}
 
     # 4. 判断使用真实引擎还是 mock
     use_real = force_real or await hedge_fund_client.is_available()
 
+    print(f'[DEBUG] use_real={use_real} tickers={tickers}', flush=True)
+    print(f"[DEBUG] use_real={use_real} tickers={tickers}", flush=True)
     if use_real:
         logger.info("使用 ai-hedge-fund 真实引擎，策略=%s agents=%s", strategy, agents)
         return await _generate_real_signals(
@@ -135,6 +136,7 @@ async def _generate_real_signals(
             return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map)
 
         decisions = result.get("decisions", {})
+        logger.info("DEBUG decisions type=%s len=%s value=%s", type(decisions).__name__, len(decisions) if hasattr(decisions, "__len__") else "N/A", str(decisions)[:500])
         if not decisions:
             logger.info("ai-hedge-fund 未产生交易决策，切换 mock")
             return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map)
@@ -147,6 +149,7 @@ async def _generate_real_signals(
                 if isinstance(d, dict):
                     d["ticker"] = ticker  # 注入 ticker 字段供解析
                     sig = hedge_fund_client.parse_decision_to_signal(d, ticker_map)
+                    logger.info("DEBUG ticker=%s action=%s sig=%s", ticker, d.get("action"), sig)
                     if sig:
                         candidate_signals.append(sig)
         else:
@@ -155,6 +158,7 @@ async def _generate_real_signals(
                 if sig:
                     candidate_signals.append(sig)
 
+        logger.info("DEBUG candidate_signals count=%s", len(candidate_signals))
         if not candidate_signals:
             return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map)
 
@@ -165,7 +169,7 @@ async def _generate_real_signals(
                 sig["price"] = prices[sig["symbol"]]["price"]
 
         # 风控过滤
-        passed, rejected = await risk_manager.check_risk(db, hire_id, candidate_signals)
+        passed, rejected = await risk_manager.check_risk(db, hire_id, candidate_signals, total_capital=500000)
 
         # 写入信号
         today = date.today()
@@ -230,6 +234,8 @@ async def _generate_mock_signals(
     """使用模拟信号（Phase 2 兼容）"""
     count = random.randint(1, 3)
     num_stocks = min(count, len(tickers))
+    print(f"[MOCK] tickers={tickers} num_stocks={num_stocks}", flush=True)
+    print(f'[MOCK] tickers={tickers}', flush=True)
     if num_stocks == 0:
         return {"signals": [], "source": "mock", "rejected_count": 0, "error": None}
 
@@ -240,7 +246,7 @@ async def _generate_mock_signals(
         action = random.choice(["buy", "sell"])
         base_price = random.uniform(10, 500)
         price = round(base_price, 2)
-        quantity = random.choice([100, 200, 300, 500])
+        quantity = random.choice([5, 10, 20, 50])
         confidence = random.randint(40, 95)
 
         if action == "buy":
@@ -268,7 +274,7 @@ async def _generate_mock_signals(
         pass
 
     # 风控过滤
-    passed, rejected = await risk_manager.check_risk(db, hire_id, candidate_signals)
+    passed, rejected = await risk_manager.check_risk(db, hire_id, candidate_signals, total_capital=500000)
 
     # 写入信号
     saved_orm = []
