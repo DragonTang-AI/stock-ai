@@ -313,29 +313,3 @@ export async function fetchRanking(
   })
   return Array.isArray(response?.data) ? response.data : []
 }
-
-// ──────────────────────────────────────────────
-// 股票搜索 API
-// ──────────────────────────────────────────────
-
-export interface SearchResult {
-  code: string
-  symbol: string
-  name: string
-  market: string
-  price: number | null
-  change_pct: number | null
-}
-
-/**
- * 搜索股票（按名称或代码）
- * 后端路由: GET /api/v1/market/search?q=xxx&limit=20
- */
-export async function searchStocks(q: string, limit = 10): Promise<SearchResult[]> {
-  if (!q || !q.trim()) return []
-  const response = await request<any>('/market/search', {
-    method: 'GET',
-    params: { q: q.trim(), limit },
-  })
-  return Array.isArray(response?.data) ? response.data : []
-}

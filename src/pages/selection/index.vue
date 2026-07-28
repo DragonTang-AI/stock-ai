@@ -2,9 +2,59 @@
   <view class="selection-page">
     <!-- 骨架屏 -->
     <LoadingSkeleton v-if="loading" scene="selection" :rows="3" />
+  <!-- ========== 股票搜索 ========== -->
+  <view class="search-wrap">
+    <view class="search-input-wrap">
+      <text class="search-icon">🔍</text>
+      <input
+        class="search-input"
+        v-model="searchQuery"
+        placeholder="搜索股票代码或名称"
+        @input="onSearchInput"
+        @confirm="onSearchConfirm"
+        @focus="searchFocused = true"
+        @blur="onSearchBlur"
+      />
+      <text v-if="searchQuery" class="search-clear" @click="clearSearch">✕</text>
+    </view>
+    <!-- 下拉结果 -->
+    <view v-if="searchFocused && searchResults.length > 0" class="search-dropdown">
+      <view
+        v-for="(item, idx) in searchResults"
+        :key="item.symbol"
+        class="search-item"
+        :class="{ 'search-item--active': searchActiveIdx === idx }"
+        @mousedown.prevent="selectStock(item)"
+        @touchstart.prevent="selectStock(item)"
+      >
+        <view class="search-item-left">
+          <text class="search-item-name">
+            <template v-for="(seg, si) in highlightMatch(item.name, searchQuery)" :key="si">
+              <text v-if="seg.highlight" class="highlight">{{ seg.text }}</text>
+              <text v-else>{{ seg.text }}</text>
+            </template>
+          </text>
+          <text class="search-item-code">{{ item.code }}</text>
+        </view>
+        <view class="search-item-actions">
+          <button class="btn-buy" @mousedown.stop.prevent="handleBuy(item)" @touchstart.stop.prevent="handleBuy(item)">买入</button>
+          <button class="btn-detail-sm" @mousedown.stop.prevent="handleViewDetail(item.symbol)" @touchstart.stop.prevent="handleViewDetail(item.symbol)">详情</button>
+        </view>
+      </view>
+    </view>
+    <!-- 加载中 -->
+    <view v-if="searchFocused && searchLoading" class="search-dropdown search-dropdown--empty">
+      <text class="search-hint">搜索中...</text>
+    </view>
+    <!-- 无结果 -->
+    <view v-if="searchFocused && !searchLoading && searchQuery && searchResults.length === 0 && searchTouched" class="search-dropdown search-dropdown--empty">
+      <text class="search-hint">未找到匹配结果</text>
+    </view>
+  </view>
+
 
     <!-- 委员会分析结果 -->
-    <view v-else-if="results.length > 0">
+    <view v-if="!loading && results.length > 0">
       <view class="section-title">AI 委员会选股</view>
 
       <view
@@ -65,7 +115,7 @@
             </button>
             <button
               class="btn-detail"
-              @click="handleViewDetail(item.symbol)"
+              @click="handleSelectionDetail(item.symbol)"
             >
               查看详情
             </button>
@@ -75,7 +125,7 @@
     </view>
 
     <!-- 空状态 -->
-    <view v-else class="state-view">
+    <view v-if="!loading && !error && results.length === 0" class="state-view">
       <text class="state-text">暂无选股结果</text>
       <text class="state-hint">每日收盘后 AI 委员会将自动生成分析</text>
     </view>
@@ -101,6 +151,90 @@ import {
   removeFromWatchlist,
   type CommitteeResult,
 } from '@/api/selection'
+
+
+// ─────────── 股票搜索 ───────────
+import { searchStocks, type SearchResult } from '@/api/market'
+
+const searchQuery = ref('')
+const searchResults = ref<SearchResult[]>([])
+const searchLoading = ref(false)
+const searchFocused = ref(false)
+const searchTouched = ref(false)
+const searchActiveIdx = ref(-1)
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+
+function highlightMatch(text: string, query: string): { text: string; highlight: boolean }[] {
+  if (!query || !text) return [{ text: text || '', highlight: false }]
+  const idx = text.toLowerCase().indexOf(query.toLowerCase())
+  if (idx < 0) return [{ text, highlight: false }]
+  return [
+    { text: text.slice(0, idx), highlight: false },
+    { text: text.slice(idx, idx + query.length), highlight: true },
+    { text: text.slice(idx + query.length), highlight: false },
+  ]
+}
+
+function onSearchInput(e: any) {
+  searchTouched.value = true
+  const val = (e.detail?.value || e.target?.value || searchQuery.value || '').trim()
+  searchQuery.value = val
+  searchActiveIdx.value = -1
+  if (searchTimer) clearTimeout(searchTimer)
+  if (!val) {
+    searchResults.value = []
+    searchLoading.value = false
+    return
+  }
+  searchLoading.value = true
+  searchTimer = setTimeout(async () => {
+    try {
+      searchResults.value = await searchStocks(val, 10)
+    } catch {
+      searchResults.value = []
+    } finally {
+      searchLoading.value = false
+    }
+  }, 300)
+}
+
+function onSearchConfirm(e: any) {
+  if (searchResults.value.length > 0) {
+    selectStock(searchResults.value[0])
+  }
+}
+
+function onSearchBlur() {
+  setTimeout(() => { searchFocused.value = false }, 200)
+}
+
+function selectStock(item: SearchResult) {
+  searchFocused.value = false
+  searchQuery.value = ''
+  searchResults.value = []
+  uni.navigateTo({ url: `/pages/detail/index?code=${item.symbol}` })
+}
+
+function clearSearch() {
+  searchQuery.value = ''
+  searchResults.value = []
+  searchTouched.value = false
+}
+
+function handleBuy(item: SearchResult) {
+  searchFocused.value = false
+  searchQuery.value = ''
+  searchResults.value = []
+  // 跳转到详情页，可以操作买入
+  uni.navigateTo({ url: `/pages/detail/index?code=${item.symbol}&action=buy` })
+}
+
+function handleViewDetail(symbol: string) {
+  searchFocused.value = false
+  searchQuery.value = ''
+  searchResults.value = []
+  uni.navigateTo({ url: `/pages/detail/index?code=${symbol}` })
+}
 
 const results = ref<CommitteeResult[]>([])
 const loading = ref(true)
@@ -160,7 +294,7 @@ async function handleToggleWatch(symbol: string) {
   }
 }
 
-function handleViewDetail(symbol: string) {
+function handleSelectionDetail(symbol: string) {
   uni.navigateTo({ url: `/pages/selection/detail?symbol=${encodeURIComponent(symbol)}` })
 }
 
@@ -472,3 +606,140 @@ onShow(() => {
   &::after { border: none; }
 }
 </style>
+
+/* ========== 搜索框 ========== */
+.search-wrap {
+  position: relative;
+  margin: 20rpx 24rpx 12rpx;
+  z-index: 100;
+}
+
+.search-input-wrap {
+  display: flex;
+  align-items: center;
+  background: var(--bg-card, #fff);
+  border-radius: 24rpx;
+  padding: 0 24rpx;
+  height: 76rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+  border: 2rpx solid var(--border-color, #f0f0f0);
+}
+
+.search-input-wrap:focus-within {
+  border-color: var(--color-primary, #4a90e2);
+}
+
+.search-icon {
+  font-size: 32rpx;
+  margin-right: 16rpx;
+  flex-shrink: 0;
+}
+
+.search-input {
+  flex: 1;
+  font-size: 28rpx;
+  color: var(--text-primary, #1f1f1f);
+  height: 100%;
+}
+
+.search-clear {
+  font-size: 28rpx;
+  color: var(--text-hint, #999);
+  padding: 8rpx;
+  flex-shrink: 0;
+}
+
+.search-dropdown {
+  position: absolute;
+  top: 84rpx;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-radius: 16rpx;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.12);
+  max-height: 600rpx;
+  overflow-y: auto;
+  z-index: 200;
+}
+
+.search-dropdown--empty {
+  padding: 32rpx;
+  text-align: center;
+}
+
+.search-hint {
+  font-size: 26rpx;
+  color: var(--text-hint, #999);
+}
+
+.search-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22rpx 24rpx;
+  border-bottom: 1rpx solid var(--border-color, #f0f0f0);
+}
+
+.search-item:last-child {
+  border-bottom: none;
+}
+
+.search-item--active {
+  background: rgba(74, 144, 226, 0.06);
+}
+
+.search-item:active {
+  background: rgba(74, 144, 226, 0.06);
+}
+
+.search-item-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.search-item-name {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--text-primary, #1f1f1f);
+}
+
+.search-item-code {
+  font-size: 22rpx;
+  color: var(--text-hint, #999);
+}
+
+.highlight {
+  color: var(--color-primary, #4a90e2);
+  font-weight: 700;
+}
+
+.search-item-actions {
+  display: flex;
+  gap: 12rpx;
+  flex-shrink: 0;
+}
+
+.btn-buy {
+  padding: 10rpx 24rpx;
+  font-size: 24rpx;
+  color: #fff;
+  background: var(--color-up, #e25c5c);
+  border-radius: 10rpx;
+  border: none;
+  line-height: 1.4;
+}
+
+.btn-buy::after { border: none; }
+
+.btn-detail-sm {
+  padding: 10rpx 24rpx;
+  font-size: 24rpx;
+  color: var(--color-primary, #4a90e2);
+  background: rgba(74, 144, 226, 0.08);
+  border-radius: 10rpx;
+  border: 1rpx solid rgba(74, 144, 226, 0.2);
+  line-height: 1.4;
+}
+
+.btn-detail-sm::after { border: none; }
