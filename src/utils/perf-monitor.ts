@@ -224,7 +224,7 @@ function flushMetrics(): void {
   uni.request({
     url: reportEndpoint,
     method: 'POST',
-    data: { metrics: batch },
+    data: { entries: batch, timestamp: Date.now() },
     header,
     fail: () => { /* 上报失败不影响业务 */ },
   })

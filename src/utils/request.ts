@@ -266,6 +266,9 @@ function triggerErrorHandler(err: HttpError) {
   // 动态导入避免循环依赖
   import('./error-handler').then(({ handleGlobalError }) => {
     handleGlobalError(err)
+  }).catch(() => {
+    // 动态导入失败时静默降级（避免 Unhandled Promise Rejection）
+    console.error('[Request] error-handler import failed', err.message)
   })
 }
 
