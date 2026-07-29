@@ -4,57 +4,12 @@
     <ErrorPage v-else-if="error" :message="error" @retry="fetchMarketData" />
 
     <view v-else class="market-content">
-            <!-- ========== 股票搜索 ========== -->
-      <view class="search-wrap">
-        <view class="search-input-wrap">
-          <text class="search-icon">🔍</text>
-          <input
-            class="search-input"
-            v-model="searchQuery"
-            placeholder="搜索股票代码或名称"
-            @input="onSearchInput"
-            @confirm="onSearchConfirm"
-            @focus="searchFocused = true"
-            @blur="onSearchBlur"
-          />
-          <text v-if="searchQuery" class="search-clear" @click="clearSearch">✕</text>
-        </view>
-        <!-- 下拉结果 -->
-        <view v-if="searchFocused && searchResults.length > 0" class="search-dropdown">
-          <view
-            v-for="(item, idx) in searchResults"
-            :key="item.symbol"
-            class="search-item"
-            :class="{ 'search-item--active': searchActiveIdx === idx }"
-            @mousedown.prevent="selectStock(item)"
-            @touchstart.prevent="selectStock(item)"
-          >
-            <view class="search-item-left">
-              <text class="search-item-name">
-                <template v-for="(seg, si) in highlightMatch(item.name, searchQuery)" :key="si">
-                  <text v-if="seg.highlight" class="highlight">{{ seg.text }}</text>
-                  <text v-else>{{ seg.text }}</text>
-                </template>
-              </text>
-              <text class="search-item-code">{{ item.code }}</text>
-            </view>
-            <view class="search-item-right">
-              <text class="search-item-price">{{ item.price != null ? item.price.toFixed(2) : '--' }}</text>
-              <text v-if="item.change_pct != null" class="search-item-change" :class="item.change_pct >= 0 ? 'up' : 'down'">
-                {{ item.change_pct >= 0 ? '+' : '' }}{{ item.change_pct.toFixed(2) }}%
-              </text>
-            </view>
-          </view>
-        </view>
-        <!-- 加载中 -->
-        <view v-if="searchFocused && searchLoading" class="search-dropdown search-dropdown--empty">
-          <text class="search-hint">搜索中...</text>
-        </view>
-        <!-- 无结果 -->
-        <view v-if="searchFocused && !searchLoading && searchQuery && searchResults.length === 0 && searchTouched" class="search-dropdown search-dropdown--empty">
-          <text class="search-hint">未找到匹配结果</text>
-        </view>
+      <!-- ========== 搜索入口 ========== -->
+      <view class="search-entry" @click="goSearch">
+        <text class="search-entry-icon">🔍</text>
+        <text class="search-entry-text">搜索股票代码或名称</text>
       </view>
+
 
 <!-- ========== 大盘指数 Hero ========== -->
       <view class="index-hero">
@@ -204,77 +159,10 @@ interface StockItem {
 }
 
 
-// ─────────── 股票搜索 ───────────
-import { searchStocks, type SearchResult } from '@/api/market'
-
-const searchQuery = ref('')
-const searchResults = ref<SearchResult[]>([])
-const searchLoading = ref(false)
-const searchFocused = ref(false)
-const searchTouched = ref(false)
-const searchActiveIdx = ref(-1)
-let searchTimer: ReturnType<typeof setTimeout> | null = null
-
-function highlightMatch(text: string, query: string): { text: string; highlight: boolean }[] {
-  if (!query || !text) return [{ text: text || '', highlight: false }]
-  const idx = text.toLowerCase().indexOf(query.toLowerCase())
-  if (idx < 0) return [{ text, highlight: false }]
-  return [
-    { text: text.slice(0, idx), highlight: false },
-    { text: text.slice(idx, idx + query.length), highlight: true },
-    { text: text.slice(idx + query.length), highlight: false },
-  ]
+function goSearch() {
+  uni.navigateTo({ url: '/pages/search/index' })
 }
 
-function onSearchInput(e: any) {
-  searchTouched.value = true
-  const val = (e.detail?.value || e.target?.value || searchQuery.value || '').trim()
-  searchQuery.value = val
-  searchActiveIdx.value = -1
-  if (searchTimer) clearTimeout(searchTimer)
-  if (!val) {
-    searchResults.value = []
-    searchLoading.value = false
-    return
-  }
-  searchLoading.value = true
-  searchTimer = setTimeout(async () => {
-    try {
-      searchResults.value = await searchStocks(val, 10)
-    } catch {
-      searchResults.value = []
-    } finally {
-      searchLoading.value = false
-    }
-  }, 300)
-}
-
-function onSearchConfirm(e: any) {
-  if (searchResults.value.length > 0) {
-    selectStock(searchResults.value[0])
-  }
-}
-
-function onSearchBlur() {
-  // 延迟关闭下拉，让点击事件有机会触发
-  setTimeout(() => {
-    searchFocused.value = false
-  }, 200)
-}
-
-function selectStock(item: SearchResult) {
-  searchFocused.value = false
-  searchQuery.value = ''
-  searchResults.value = []
-  // 跳转详情
-  uni.navigateTo({ url: `/pages/detail/index?code=${item.symbol}` })
-}
-
-function clearSearch() {
-  searchQuery.value = ''
-  searchResults.value = []
-  searchTouched.value = false
-}
 
 const loading = ref(true)
 const error = ref('')
@@ -763,131 +651,31 @@ onMounted(() => {
 }
 </style>
 
-/* ========== 搜索框 ========== */
-.search-wrap {
-  position: relative;
-  margin: 20rpx 24rpx 12rpx;
-  z-index: 100;
-}
-
-.search-input-wrap {
+/* ========== 搜索入口 ========== */
+.search-entry {
   display: flex;
   align-items: center;
-  background: var(--bg-card, #fff);
-  border-radius: 24rpx;
-  padding: 0 24rpx;
+  margin: 20rpx 24rpx 12rpx;
   height: 76rpx;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
-  border: 2rpx solid var(--border-color, #f0f0f0);
+  background: var(--bg-input, #F0F0F5);
+  border-radius: 38rpx;
+  padding: 0 28rpx;
+  border: 2rpx solid var(--border-color, #E5E5EA);
+  transition: all 0.15s ease;
 }
 
-.search-input-wrap:focus-within {
-  border-color: var(--color-primary, #4a90e2);
+.search-entry:active {
+  opacity: 0.7;
 }
 
-.search-icon {
-  font-size: 32rpx;
+.search-entry-icon {
+  font-size: 28rpx;
   margin-right: 16rpx;
   flex-shrink: 0;
+  opacity: 0.5;
 }
 
-.search-input {
-  flex: 1;
-  font-size: 28rpx;
-  color: var(--text-primary, #1f1f1f);
-  height: 100%;
-}
-
-.search-clear {
-  font-size: 28rpx;
-  color: var(--text-hint, #999);
-  padding: 8rpx;
-  flex-shrink: 0;
-}
-
-.search-dropdown {
-  position: absolute;
-  top: 84rpx;
-  left: 0;
-  right: 0;
-  background: #fff;
-  border-radius: 16rpx;
-  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.12);
-  max-height: 600rpx;
-  overflow-y: auto;
-  z-index: 200;
-}
-
-.search-dropdown--empty {
-  padding: 32rpx;
-  text-align: center;
-}
-
-.search-hint {
+.search-entry-text {
   font-size: 26rpx;
   color: var(--text-hint, #999);
-}
-
-.search-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 22rpx 24rpx;
-  border-bottom: 1rpx solid var(--border-color, #f0f0f0);
-  transition: background 0.1s;
-}
-
-.search-item:last-child {
-  border-bottom: none;
-}
-
-.search-item--active {
-  background: rgba(74, 144, 226, 0.06);
-}
-
-.search-item:active {
-  background: rgba(74, 144, 226, 0.06);
-}
-
-.search-item-left {
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
-}
-
-.search-item-name {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: var(--text-primary, #1f1f1f);
-}
-
-.search-item-code {
-  font-size: 22rpx;
-  color: var(--text-hint, #999);
-}
-
-.highlight {
-  color: var(--color-primary, #4a90e2);
-  font-weight: 700;
-}
-
-.search-item-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4rpx;
-}
-
-.search-item-price {
-  font-size: 28rpx;
-  font-weight: 700;
-  color: var(--text-primary, #1f1f1f);
-}
-
-.search-item-change {
-  font-size: 24rpx;
-  font-weight: 600;
-
-  &.up   { color: var(--color-up, #e25c5c); }
-  &.down { color: var(--color-down, #34c759); }
 }

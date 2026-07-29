@@ -38,6 +38,15 @@
       }
     },
     {
+      "path": "pages/search/index",
+      "style": {
+        "navigationBarTitleText": "搜索",
+        "animationType": "slide-in-bottom",
+        "animationDuration": 300,
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/selection/index",
       "style": {
         "navigationBarTitleText": "选股",

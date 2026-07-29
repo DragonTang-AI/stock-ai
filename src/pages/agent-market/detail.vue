@@ -274,7 +274,9 @@ let radarChart: any = null
 
 const renderRadar = () => {
   if (!radarScores.value) return
-  const labels = Object.keys(radarScores.value)
+  // 固定轴序：正上→右上→右→右下→下→左下（顺时针）
+  const radarOrder = ['position_management', 'industry_research', 'stock_picking', 'risk_control', 'stability', 'timing']
+  const labels = radarOrder.filter(k => k in radarScores.value!)
   const values = labels.map(k => radarScores.value![k] || 0)
   if (labels.length === 0) return
 
@@ -288,6 +290,8 @@ const renderRadar = () => {
 
   // Clear container
   container.innerHTML = ''
+  const radarCanvas = document.createElement('canvas')
+  container.appendChild(radarCanvas)
 
   const data = labels.map((k, i) => ({
     item: radarLabels[k] || k,
@@ -298,7 +302,7 @@ const renderRadar = () => {
   const h = 280
 
   const chart = new F2.Chart({
-    id: 'radarContainer',
+    el: radarCanvas,
     pixelRatio: window.devicePixelRatio || 1,
     width: w,
     height: h,
@@ -309,7 +313,7 @@ const renderRadar = () => {
     score: { min: 0, max: 10, tickCount: 5 }
   })
   chart.coord('polar', {
-    transposed: true,
+    transposed: false,
     inner: 0
   })
   chart.axis('score', {
@@ -354,12 +358,14 @@ const renderChart = () => {
   }
 
   container.innerHTML = ''
+  const lineCanvas = document.createElement('canvas')
+  container.appendChild(lineCanvas)
 
   const w = container.clientWidth || 340
   const h = 260
 
   const chart = new F2.Chart({
-    id: 'chartContainer',
+    el: lineCanvas,
     pixelRatio: window.devicePixelRatio || 1,
     width: w,
     height: h,
