@@ -12,7 +12,7 @@ from app.core.database import init_db, close_db
 from app.core.exceptions import AppException
 
 from app.api.v1 import auth, market, portfolio, analysis, selection, simulation, watchlist, trading, hosted, signals, notifications, broadcast, feedback, events, metrics, points, agent, agent_console
-from app.engine import scheduler
+from app.engine import scheduler_v2 as scheduler
 
 
 @asynccontextmanager

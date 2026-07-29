@@ -148,6 +148,9 @@ async def get_market_rules(market: str):
     }}
 
 from app.schemas.market import RankResponse
+import aiohttp
+import json
+import re as re_mod
 
 
 @router.get("/ranking", response_model=RankResponse)
@@ -164,3 +167,86 @@ async def get_ranking(
 
     data = await fetch_ranking(rank_type=type, limit=limit)
     return {"success": True, "type": type, "data": data, "meta": {}}
+
+
+# ─────────── 股票搜索 API（新浪财经） ───────────
+
+SEARCH_URL = "https://suggest3.sinajs.cn/suggest/"
+
+
+@router.get("/search")
+async def search_stocks(
+    q: str = Query(..., description="搜索关键词，股票名称或代码"),
+    limit: int = Query(20, ge=1, le=50, description="返回条数"),
+):
+    """
+    搜索股票（公开接口，无需登录）。
+
+    调用新浪财经搜索 API，按名称或代码模糊匹配。
+    返回: [{code, symbol, name, market, price, change_pct}]
+    """
+    import urllib.parse
+
+    if not q or not q.strip():
+        return {"success": True, "data": [], "query": q}
+
+    try:
+        encoded = urllib.parse.quote(q.strip())
+        url = f"{SEARCH_URL}type=11,12,13,14,15&key={encoded}"
+        timeout = aiohttp.ClientTimeout(total=5)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(url, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Referer": "https://finance.sina.com.cn",
+            }) as resp:
+                raw_bytes = await resp.read()
+    except Exception:
+        return {"success": True, "data": [], "query": q, "note": "搜索服务暂时不可用"}
+
+    # 解码 — 尝试 gbk 再 utf-8
+    raw = ""
+    for enc in ["gbk", "utf-8"]:
+        try:
+            raw = raw_bytes.decode(enc)
+            break
+        except Exception:
+            continue
+
+    # 解析: var suggestvalue="名称,类型,代码,shszcode,...";
+    results = []
+    try:
+        match = re_mod.search(r'suggestvalue="(.+?)"', raw)
+        if match:
+            items_str = match.group(1)
+            for item_str in items_str.split(";"):
+                parts = item_str.split(",")
+                if len(parts) < 4:
+                    continue
+                name = parts[0]
+                code = parts[2]
+                shsz = parts[3].upper()
+
+                # 判断市场
+                if shsz.startswith("SH"):
+                    symbol = code + ".SH"
+                elif shsz.startswith("SZ"):
+                    symbol = code + ".SZ"
+                elif code.startswith("6"):
+                    symbol = code + ".SH"
+                else:
+                    symbol = code + ".SZ"
+
+                results.append({
+                    "code": code,
+                    "symbol": symbol,
+                    "name": name,
+                    "market": "A",
+                    "price": None,
+                    "change_pct": None,
+                })
+                if len(results) >= limit:
+                    break
+    except Exception:
+        pass
+
+    return {"success": True, "data": results, "query": q}

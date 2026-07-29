@@ -197,6 +197,8 @@ async def _generate_real_signals(
         saved_signals = [
             {
                 "id": s.id or 0,
+                "hire_id": hire_id,
+                "trader_id": trader_id,
                 "symbol": s.symbol,
                 "name": s.symbol_name,
                 "action": s.action,
@@ -301,6 +303,8 @@ async def _generate_mock_signals(
     saved_signals = [
         {
             "id": s.id or 0,
+            "hire_id": hire_id,
+            "trader_id": trader_id,
             "symbol": s.symbol,
             "name": s.symbol_name,
             "action": s.action,

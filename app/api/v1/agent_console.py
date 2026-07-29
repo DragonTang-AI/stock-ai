@@ -331,7 +331,67 @@ async def confirm_signal(
         response_data["filled_quantity"] = order_result.filled_quantity
     if trading_error:
         response_data["trading_warning"] = trading_error
+    # 更新交易员统计数据
+    await _update_trader_stats(db, signal.trader_id)
+
     return response_data
+
+
+
+
+async def _update_trader_stats(db: AsyncSession, trader_id: str):
+    """更新指定交易员的统计指标（信号确认后自动调用）"""
+    from app.models.agent import AgentPerformance
+
+    agent_result = await db.execute(
+        select(AgentTrader).where(AgentTrader.id == trader_id)
+    )
+    agent = agent_result.scalar_one_or_none()
+    if not agent:
+        return
+
+    # total_trades: 已确认信号数
+    trades_q = select(func.count(AgentSignal.id)).where(
+        and_(
+            AgentSignal.trader_id == trader_id,
+            AgentSignal.exec_status == 'confirmed',
+        )
+    )
+    total_trades = (await db.execute(trades_q)).scalar() or 0
+    agent.total_trades = total_trades
+
+    # 从 agent_performances 聚合指标
+    perf_q = (
+        select(AgentPerformance)
+        .where(AgentPerformance.agent_id == trader_id)
+        .order_by(AgentPerformance.period_end.desc())
+        .limit(12)
+    )
+    perfs = (await db.execute(perf_q)).scalars().all()
+
+    if perfs:
+        win_rates = [float(p.win_rate) for p in perfs if p.win_rate is not None]
+        if win_rates:
+            agent.win_rate = round(sum(win_rates) / len(win_rates), 2)
+
+        drawdowns = [float(p.max_drawdown) for p in perfs if p.max_drawdown is not None]
+        if drawdowns:
+            agent.max_drawdown = round(min(drawdowns), 2)
+
+        sharpes = [float(p.sharpe_ratio) for p in perfs if p.sharpe_ratio is not None]
+        if sharpes:
+            agent.sharpe_ratio = round(sum(sharpes) / len(sharpes), 2)
+
+    # annual_return: 从 salary_curve 计算年化收益
+    salary_curve = agent.salary_curve or []
+    if salary_curve and len(salary_curve) >= 2:
+        first_value = float(salary_curve[0].get("value", 10000))
+        last_value = float(salary_curve[-1].get("value", first_value))
+        months = len(salary_curve)
+        years = months / 12
+        if years > 0 and first_value > 0:
+            agent.annual_return = round((pow(last_value / 10000, 1 / years) - 1) * 100, 2)
+
 
 # ── 忽略信号 ──
 
@@ -531,8 +591,20 @@ async def generate_signals(
             quantity=sig.get("quantity", 100),
             confidence=sig.get("confidence", 50),
             reasoning=sig.get("reasoning", ""),
-            exec_status="auto_executed" if hire.management_mode == "full_managed" else "pending",
+            exec_status="pending",
             created_at=sig.get("created_at", datetime.now(timezone.utc)),
         ))
 
     return signals
+
+
+# ── 调度器状态 ──
+
+
+# ── 调度器状态 ──
+
+@router.get("/scheduler-status")
+async def get_scheduler_status():
+    """获取调度器运行状态"""
+    from app.engine.scheduler_v2 import get_status
+    return get_status()
