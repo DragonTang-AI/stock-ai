@@ -17,6 +17,7 @@ from app.models.agent import AgentSignal, AgentPortfolio, UserAgent, AgentTrader
 from app.services import trading as trading_service
 from app.schemas.trading import OrderRequest
 from app.core.exceptions import AppException
+from app.engine.market_hours import is_market_hours
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,11 @@ async def auto_execute_signals(
     Returns:
         {"executed": [...], "pending": [...], "failed": [...], "mode": "..."}
     """
+    # 非交易时段不执行
+    if not is_market_hours():
+        logger.warning("非交易时段，跳过自动执行 hire=%d", hire_id)
+        return {"executed": [], "failed": [], "pending": signals, "mode": "full_managed", "skipped_reason": "非交易时段"}
+
     if management_mode == "full_managed":
         return await _auto_execute(db, hire_id, user_id, signals)
     else:

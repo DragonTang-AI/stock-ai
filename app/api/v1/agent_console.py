@@ -20,6 +20,7 @@ from app.api.v1.auth import get_current_user
 from app.schemas.trading import OrderRequest
 from app.services import trading as trading_service
 from app.core.exceptions import AppException
+from app.engine.market_hours import is_market_hours
 
 router = APIRouter()
 
@@ -209,6 +210,10 @@ async def confirm_signal(
         raise HTTPException(status_code=404, detail="信号不存在")
     if signal.exec_status != "pending":
         raise HTTPException(status_code=400, detail=f"信号状态为 {signal.exec_status}，无法确认")
+
+    # 非交易时段不允许确认
+    if not is_market_hours():
+        raise HTTPException(status_code=400, detail="当前非交易时段（A股：周一至周五 9:30-11:30, 13:00-15:00），无法确认信号")
 
     if req and req.quantity:
         signal.quantity = req.quantity

@@ -24,6 +24,7 @@ from app.core.database import get_db_context
 from app.models.agent import UserAgent, AgentTrader, AgentSignal
 from app.engine import signal_generator
 from app.engine.auto_executor import auto_execute_signals
+from app.engine.market_hours import is_market_hours
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,8 @@ PRE_MARKET_TIME = dt_time(9, 0)
 MARKET_OPEN_TIME = dt_time(9, 30)
 MARKET_CLOSE_TIME = dt_time(15, 0)
 POST_MARKET_TIME = dt_time(15, 30)
+
+
 
 # 单个 hire 信号生成超时（秒）
 PER_HIRE_TIMEOUT = 120
@@ -198,6 +201,12 @@ async def _run_one_cycle():
 
     _scheduler_status["current_phase"] = "running"
     start_time = time.time()
+    # 非交易时段跳过
+    if not is_market_hours():
+        logger.info("非交易时段，跳过本次调度")
+        _scheduler_status["current_phase"] = "idle"
+        return
+    
 
     try:
         async with get_db_context() as db:
