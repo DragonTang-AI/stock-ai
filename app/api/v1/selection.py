@@ -7,7 +7,10 @@ from typing import Optional
 from app.models.user import User
 from app.api.v1.auth import get_current_user_optional
 from app.schemas.selection import RecommendResponse, RecommendRequest
+import logging
 from app.services.selection import recommend_stocks
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 

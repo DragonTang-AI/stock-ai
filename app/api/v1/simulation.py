@@ -5,6 +5,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.api.v1.auth import get_current_user
 from app.schemas.trading import OrderRequest, OrderResponse
+import logging
 from app.core.exceptions import AppException
 from app.engine.market_hours import is_market_hours
 from app.services.trading import (
@@ -14,6 +15,8 @@ from app.services.trading import (
     get_trades,
     place_order,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -82,10 +85,12 @@ async def place_simulation_order(
             price=price if price > 0 else None,
         )
         order = await place_order(db, current_user, req)
+        logger.info(f"Place order: user={current_user.id} symbol={request.symbol} side={request.side.value} qty={request.quantity}")
         return {"success": True, "data": order, "message": "下单成功"}
     except AppException:
         raise
     except Exception as e:
+        logger.error(f"Order failed: user={current_user.id} {e}", exc_info=True)
         raise AppException(code="ORDER_FAILED", message=str(e), status_code=400)
 
 

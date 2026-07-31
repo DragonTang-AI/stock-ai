@@ -6,9 +6,12 @@ from fastapi import APIRouter, Depends, Query
 from typing import List, Optional
 from app.models.user import User
 from app.api.v1.auth import get_current_user_optional
+import logging
 from app.core.exceptions import AppException
 from app.schemas.market import QuoteItem, QuoteResponse, KLineItem, KLineResponse, StockDetailResponse
 from app.services import market as market_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -121,6 +124,7 @@ async def get_stock_detail(
     except AppException:
         raise
     except Exception as e:
+        logger.error(f"Stock detail failed: {e}", exc_info=True)
         raise AppException(code="DETAIL_FAILED", message=f"获取详情失败: {e}", status_code=500)
 
 

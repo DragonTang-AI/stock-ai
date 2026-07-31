@@ -17,6 +17,7 @@ from typing import Optional
 
 from app.models.user import User
 from app.api.v1.auth import get_current_user
+import logging
 from app.core.database import get_db
 from app.schemas.stock import (
     WatchlistResponse,
@@ -36,6 +37,8 @@ from app.services.stock import (
     check_watchlist,
     batch_add_watchlist,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["自选股"])
 
@@ -110,4 +113,5 @@ async def batch_add_watchlist_endpoint(
 ):
     """批量添加自选股（跳过已存在）"""
     items = await batch_add_watchlist(db, current_user.id, batch.symbols)
+    logger.info(f"Watchlist batch add: user={current_user.id} count={len(items)}")
     return WatchlistResponse(success=True, data=items, total=len(items))
