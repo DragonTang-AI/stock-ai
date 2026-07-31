@@ -135,7 +135,7 @@
         </view>
       </view>
 
-      <EmptyState v-if="!loading && hotStocks.length === 0" message="暂无行情数据" />
+      <EmptyState v-if="!loading && hotStocks.length === 0" message="暂无行情数据" hint="当前非交易时段或网络异常，请稍后下拉刷新" />
     </view>
 
     <Disclaimer />

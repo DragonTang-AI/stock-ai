@@ -61,6 +61,26 @@ import { ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { register } from '@/api/auth'
 import Disclaimer from '@/components/compliance/Disclaimer.vue'
+// ─── 表单校验 ───
+interface RegisterForm {
+  username: string
+  email: string
+  password: string
+}
+
+function validateForm(form: RegisterForm): string | null {
+  if (!form.username || !form.username.trim()) return '请输入用户名'
+  if (form.username.trim().length < 2) return '用户名至少 2 个字符'
+  if (form.username.trim().length > 20) return '用户名不能超过 20 个字符'
+  if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]+$/.test(form.username.trim())) return '用户名只能包含中英文、数字和下划线'
+  if (!form.email || !form.email.trim()) return '请输入邮箱'
+  if (!/^[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}$/.test(form.email.trim())) return '请输入有效的邮箱地址'
+  if (!form.password) return '请输入密码'
+  if (form.password.length < 6) return '密码至少 6 位'
+  if (form.password.length > 128) return '密码不能超过 128 位'
+  return null
+}
+
 
 const authStore = useAuthStore()
 const username = ref('')

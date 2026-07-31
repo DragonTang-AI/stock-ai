@@ -140,6 +140,10 @@ import {
 const isLoading = ref(false)
 const broadcast = ref<Broadcast | null>(null)
 const historyList = ref<Broadcast[]>([])
+const historyPage = ref(0)
+const hasMoreHistory = ref(false)
+const loadingMoreHistory = ref(false)
+const HISTORY_PAGE_SIZE = 30
 const currentIndex = ref(0)
 const playerPlaying = ref(false)
 const playerRef = ref<InstanceType<typeof BroadcastPlayer> | null>(null)
@@ -202,17 +206,28 @@ async function loadToday() {
   }
 }
 
-async function loadHistory() {
+async function loadHistory(append = false) {
+  if (append && (loadingMoreHistory.value || !hasMoreHistory.value)) return
+  if (append) loadingMoreHistory.value = true
   try {
-    const res = await fetchBroadcastList({ limit: 30, offset: 0 })
-    historyList.value = res.items || []
-    // 定位当前播报在历史列表中的位置
-    if (broadcast.value) {
+    const offset = append ? (historyPage.value + 1) * HISTORY_PAGE_SIZE : 0
+    const res = await fetchBroadcastList({ limit: HISTORY_PAGE_SIZE, offset })
+    if (append) {
+      historyList.value.push(...(res.items || []))
+      historyPage.value++
+    } else {
+      historyList.value = res.items || []
+      historyPage.value = 0
+    }
+    hasMoreHistory.value = res.has_next ?? ((res.items || []).length === HISTORY_PAGE_SIZE)
+    if (!append && broadcast.value) {
       const idx = historyList.value.findIndex(b => b.id === broadcast.value!.id)
       if (idx >= 0) currentIndex.value = idx
     }
   } catch (err) {
     console.warn('[Broadcast] 加载历史列表失败', err)
+  } finally {
+    if (append) loadingMoreHistory.value = false
   }
 }
 
@@ -226,6 +241,9 @@ function goNext() {
   if (!hasNext.value) return
   currentIndex.value++
   broadcast.value = historyList.value[currentIndex.value]
+  if (currentIndex.value >= historyList.value.length - 5 && hasMoreHistory.value) {
+    loadHistory(true)
+  }
 }
 
 function togglePlayer() {
