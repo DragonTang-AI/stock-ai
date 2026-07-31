@@ -20,7 +20,7 @@ from typing import Any
 from sqlalchemy import and_, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db_context
+from app.core.database import get_scheduler_db_context as get_db_context
 from app.models.agent import UserAgent, AgentTrader, AgentSignal
 from app.engine import signal_generator
 from app.engine.auto_executor import auto_execute_signals
@@ -42,7 +42,7 @@ POST_MARKET_TIME = dt_time(15, 30)
 
 
 # 单个 hire 信号生成超时（秒）
-PER_HIRE_TIMEOUT = 120
+PER_HIRE_TIMEOUT = 180
 
 # 同一 hire 最小间隔（秒）—— 避免短时间内重复生成
 MIN_HIRE_INTERVAL = 3 * 60

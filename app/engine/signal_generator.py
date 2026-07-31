@@ -91,7 +91,7 @@ async def generate_signals(
 
     # 3. 获取股票池
     stock_list = await market_data.get_stock_list(db, limit=10)
-    tickers = [s["symbol"] for s in stock_list[:10]]   # 最多分析 5 只（Yahoo Finance 限流）
+    tickers = [s["symbol"] for s in stock_list[:5]]   # 最多分析 5 只（Yahoo Finance 限流）
     ticker_map = {s["symbol"]: s["name"] for s in stock_list}
 
     # 4. 判断使用真实引擎还是 mock

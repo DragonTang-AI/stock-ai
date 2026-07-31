@@ -135,6 +135,8 @@ class TradeItem(BaseModel):
     commission: float
     tax: float
     trade_date: date
+    source: str = "user"
+    trader_name: str | None = None
     created_at: datetime
 
 

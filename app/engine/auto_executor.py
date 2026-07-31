@@ -154,6 +154,7 @@ async def _execute_single_signal(
             user=user_stub,
             req=order_req,
             fallback_price=float(signal.get("price", 0)),
+            signal_id=str(signal["id"]) if signal.get("id") else None,
         )
 
         await _update_portfolio(

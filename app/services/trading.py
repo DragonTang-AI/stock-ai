@@ -174,7 +174,7 @@ async def get_positions_summary(db: AsyncSession, user: User) -> Tuple[List[Posi
 
 
 # ============== 撮合（下单） ==============
-async def place_order(db: AsyncSession, user: User, req: OrderRequest, fallback_price: float | None = None) -> OrderItem:
+async def place_order(db: AsyncSession, user: User, req: OrderRequest, fallback_price: float | None = None, signal_id: str | None = None) -> OrderItem:
     """
     下单（v1：市价立即成交）
 
@@ -263,6 +263,7 @@ async def place_order(db: AsyncSession, user: User, req: OrderRequest, fallback_
         commission=Decimal(str(commission)),
         tax=Decimal(str(tax)),
         status="filled",
+        signal_id=signal_id,
         filled_at=datetime.now(timezone.utc),
     )
     db.add(order)
@@ -623,6 +624,36 @@ async def get_trades(
     result = await db.execute(stmt)
     trades = result.scalars().all()
 
+    # 关联订单 -> 信号 -> 交易员，识别成交来源
+    from sqlalchemy import select as sa_select
+    from app.models.agent import AgentSignal, AgentTrader
+    order_ids = [t.order_id for t in trades]
+    source_map: dict[int, dict] = {}
+    if order_ids:
+        orders_res = await db.execute(
+            sa_select(Order.id, Order.signal_id).where(Order.id.in_(order_ids))
+        )
+        sig_map = {oid: sid for oid, sid in orders_res.all()}
+        sig_ids = [sid for sid in sig_map.values() if sid and str(sid).isdigit()]
+        if sig_ids:
+            sigs_res = await db.execute(
+                sa_select(AgentSignal.id, AgentSignal.trader_id).where(AgentSignal.id.in_([int(s) for s in sig_ids]))
+            )
+            tid_by_sig = {str(sid): tid for sid, tid in sigs_res.all()}
+            trader_ids = list({tid for tid in tid_by_sig.values() if tid})
+            if trader_ids:
+                traders_res = await db.execute(
+                    sa_select(AgentTrader.id, AgentTrader.code_name).where(AgentTrader.id.in_(trader_ids))
+                )
+                name_by_tid = {tid: cname for tid, cname in traders_res.all()}
+                for oid, sid in sig_map.items():
+                    tid = tid_by_sig.get(str(sid)) if sid else None
+                    if tid and tid in name_by_tid:
+                        source_map[oid] = {source: agent, trader_name: name_by_tid[tid]}
+        for oid in order_ids:
+            if oid not in source_map:
+                source_map[oid] = {source: user, trader_name: None}
+
     items = [
         TradeItem(
             id=t.id,
@@ -637,6 +668,8 @@ async def get_trades(
             tax=float(t.tax),
             trade_date=t.trade_date,
             created_at=t.created_at,
+            source=source_map.get(t.order_id, {}).get(source, user),
+            trader_name=source_map.get(t.order_id, {}).get(trader_name),
         )
         for t in trades
     ]

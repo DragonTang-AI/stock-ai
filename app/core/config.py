@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     )
     database_pool_size: int = 20
     database_max_overflow: int = 10
+    scheduler_pool_size: int = 30
+    scheduler_max_overflow: int = 20
+
 
     # ── Redis ────────────────────────────────────────────
     redis_url: str = "redis://localhost:6379/0"

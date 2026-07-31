@@ -97,6 +97,53 @@ async def get_db_context() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
+# ── Scheduler Engine（独立连接池，与 API 隔离）──────────────────────────
+
+_scheduler_engine: AsyncEngine | None = None
+_scheduler_session_factory: async_sessionmaker[AsyncSession] | None = None
+
+
+def get_scheduler_engine() -> AsyncEngine:
+    """调度器独立引擎，连接池与 API 引擎完全隔离"""
+    global _scheduler_engine
+    if _scheduler_engine is None:
+        _scheduler_engine = create_async_engine(
+            settings.database_url,
+            pool_size=settings.scheduler_pool_size,
+            max_overflow=settings.scheduler_max_overflow,
+            echo=settings.debug,
+            pool_pre_ping=True,
+        )
+    return _scheduler_engine
+
+
+def get_scheduler_session_factory() -> async_sessionmaker[AsyncSession]:
+    """调度器独立 session factory"""
+    global _scheduler_session_factory
+    if _scheduler_session_factory is None:
+        _scheduler_session_factory = async_sessionmaker(
+            bind=get_scheduler_engine(),
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autoflush=False,
+            autocommit=False,
+        )
+    return _scheduler_session_factory
+
+
+@asynccontextmanager
+async def get_scheduler_db_context() -> AsyncGenerator[AsyncSession, None]:
+    """调度器专用的 db context，使用独立连接池"""
+    factory = get_scheduler_session_factory()
+    async with factory() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
 # ── Init（lifespan 调用）─────────────────────────────────────────────────
 
 async def init_db() -> None:
@@ -108,8 +155,12 @@ async def init_db() -> None:
 
 async def close_db() -> None:
     """关闭引擎（shutdown 调用）"""
-    global _engine, _async_session_factory
+    global _engine, _async_session_factory, _scheduler_engine, _scheduler_session_factory
     if _engine is not None:
         await _engine.dispose()
         _engine = None
         _async_session_factory = None
+    if _scheduler_engine is not None:
+        await _scheduler_engine.dispose()
+        _scheduler_engine = None
+        _scheduler_session_factory = None

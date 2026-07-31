@@ -7,7 +7,7 @@ from typing import Optional
 
 from sqlalchemy import text
 
-from app.core.database import get_session_factory
+from app.core.database import get_scheduler_db_context
 from app.core.exceptions import AppException
 
 logger = logging.getLogger(__name__)
@@ -170,7 +170,7 @@ async def run_hosted_signal_processor():
     """AI托管 v3.0：LLM 智能卖出 + T+1 感知"""
     logger.info("[托管v3] ======== 开始智能决策 ========")
 
-    async with get_session_factory()() as db:
+    async with get_scheduler_db_context() as db:
         try:
             hosted_users = await get_hosted_users(db)
             if not hosted_users:

@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.exceptions import AppException
+from app.engine.market_hours import is_market_hours
 from app.models.user import User
 from app.api.v1.auth import get_current_user
 from app.schemas.trading import (
@@ -112,6 +113,11 @@ async def create_order(
     if hosted_engine.is_active(current_user.id):
         from app.core.exceptions import AppException
         raise AppException(code="HOSTED_ACTIVE", message="AI托管已开启，手动交易已禁用。请先关闭AI托管再操作。", status_code=403)
+
+    if not is_market_hours():
+        from app.core.exceptions import AppException
+        raise AppException(code="NOT_TRADING_HOURS", message="当前非交易时段（A股：周一至周五 9:30-11:30, 13:00-15:00），无法下单", status_code=400)
+
     
     try:
         order = await place_order(db, current_user, req)
