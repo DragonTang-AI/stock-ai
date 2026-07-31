@@ -106,6 +106,8 @@ export interface TradeItem {
   price: number
   amount: number
   created_at: string
+  source?: 'agent' | 'user'
+  trader_name?: string | null
 }
 
 export async function getTrades(): Promise<{ data: TradeItem[]; total: number }> {
