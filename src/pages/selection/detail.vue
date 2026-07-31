@@ -75,6 +75,9 @@
         <view class="section-header">
           <text class="section-title">分 Agent 评分</text>
         </view>
+        <view v-if="!detail.agents || detail.agents.length === 0" class="agents-empty">
+          <text class="agents-empty-text">暂无 Agent 评分数据</text>
+        </view>
         <view
           v-for="agent in detail.agents"
           :key="agent.agent"
@@ -821,6 +824,14 @@ function formatChangePct(v: number): string {
   padding: 24rpx 28rpx;
 }
 
+.agents-empty {
+  padding: 48rpx 0;
+  text-align: center;
+}
+.agents-empty-text {
+  font-size: 26rpx;
+  color: #999;
+}
 .agent-card {
   padding: 20rpx 0;
   border-bottom: 1rpx solid $border-color;

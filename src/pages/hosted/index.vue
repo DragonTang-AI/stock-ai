@@ -450,6 +450,29 @@ async function handleToggle(e: { detail: { value: boolean } }) {
 
 /* ---- 保存设置 ---- */
 async function handleSaveConfig() {
+  // 表单校验
+  const maxPos = parseFloat(configForm.max_position_ratio)
+  const maxSingle = parseFloat(configForm.max_single_trade_ratio)
+  if (!maxPos || maxPos <= 0 || maxPos > 100) {
+    uni.showToast({ title: '单票仓位比例需在 0-100 之间', icon: 'none' })
+    return
+  }
+  if (!maxSingle || maxSingle <= 0 || maxSingle > 100) {
+    uni.showToast({ title: '单笔仓位比例需在 0-100 之间', icon: 'none' })
+    return
+  }
+  if (configForm.single_trade_limit && parseFloat(configForm.single_trade_limit) <= 0) {
+    uni.showToast({ title: '单笔限额需大于 0', icon: 'none' })
+    return
+  }
+  if (configForm.daily_trade_limit && parseFloat(configForm.daily_trade_limit) <= 0) {
+    uni.showToast({ title: '日限额需大于 0', icon: 'none' })
+    return
+  }
+  if (configForm.industry_concentration && (parseFloat(configForm.industry_concentration) <= 0 || parseFloat(configForm.industry_concentration) > 100)) {
+    uni.showToast({ title: '行业集中度需在 0-100 之间', icon: 'none' })
+    return
+  }
   savingConfig.value = true
   try {
     const body: HostedConfigRequest = { risk_level: configForm.risk_level }

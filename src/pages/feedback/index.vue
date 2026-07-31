@@ -98,6 +98,17 @@ const canSubmit = computed(() => {
 async function handleSubmit() {
   if (!canSubmit.value || submitting.value) return
 
+  // 联系方式格式校验（选填，填写则校验）
+  const contact = formData.contact.trim()
+  if (contact) {
+    const isPhone = /^1[3-9]\d{9}$/.test(contact)
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact)
+    if (!isPhone && !isEmail) {
+      uni.showToast({ title: '联系方式需为手机号或邮箱', icon: 'none' })
+      return
+    }
+  }
+
   submitting.value = true
   try {
     await uni.request({

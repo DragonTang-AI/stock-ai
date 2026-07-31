@@ -211,6 +211,12 @@
       <text class="error-text">{{ error }}</text>
       <button class="btn-retry" @click="loadData">重试</button>
     </view>
+
+    <!-- 无数据兜底 -->
+    <view v-else-if="!loading && !quote" class="error-view">
+      <text class="error-text">暂无行情数据</text>
+      <button class="btn-retry" @click="loadData">重试</button>
+    </view>
   </view>
   <Disclaimer />
 </template>

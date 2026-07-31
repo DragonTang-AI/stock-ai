@@ -21,7 +21,7 @@
     <LoadingSkeleton v-if="isLoading" scene="market" fallbackType="card" :rows="3" />
 
     <!-- 交易员卡片列表 -->
-    <view class="agent-list">
+    <view class="agent-list" v-if="agents.length > 0">
       <view
         v-for="agent in agents"
         :key="agent.id"
@@ -81,6 +81,12 @@
           <view v-else class="hire-btn-disabled">已雇佣</view>
         </view>
       </view>
+    </view>
+
+    <!-- 空状态 -->
+    <view v-if="!isLoading && agents.length === 0" class="market-empty">
+      <text class="empty-text">暂无交易员</text>
+      <text class="empty-sub">交易员市场暂时为空，请稍后再来</text>
     </view>
 
     <!-- 底部导航：我的交易员 -->
@@ -223,6 +229,24 @@ onPullDownRefresh(() => {
   display: flex;
   flex-direction: column;
   gap: 24rpx;
+}
+.market-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 0;
+  color: #999;
+}
+.market-empty .empty-text {
+  font-size: 30rpx;
+  font-weight: 500;
+  color: #888;
+}
+.market-empty .empty-sub {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #bbb;
 }
 
 .agent-card {
