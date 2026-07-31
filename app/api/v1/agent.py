@@ -1,3 +1,4 @@
+import logging
 """app/api/v1/agent.py — 交易员市场接口"""
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +21,7 @@ from app.schemas.agent import (
 from app.api.v1.auth import get_current_user
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ── 市场列表 ──
@@ -196,6 +198,7 @@ async def hire_agent(
     )
     agent = agent_result.scalar_one_or_none()
     if not agent or not agent.is_active:
+        logger.warning(f"雇佣失败: 交易员不存在或已下架 user_id={current_user.id} agent_id={agent_id}")
         raise HTTPException(status_code=404, detail="交易员不存在或已下架")
 
     # 检查是否已雇佣
@@ -208,6 +211,7 @@ async def hire_agent(
     )
     existing = (await db.execute(hire_q)).scalar_one_or_none()
     if existing:
+        logger.warning(f"雇佣失败: 已雇佣 user_id={current_user.id} agent_id={agent_id}")
         raise HTTPException(status_code=400, detail="已雇佣该交易员，请在我的交易员中查看")
 
     # 查积分
@@ -222,6 +226,7 @@ async def hire_agent(
 
     cost = agent.hire_price_points
     if user_pts.balance < cost:
+        logger.warning(f"雇佣失败: 积分不足 user_id={current_user.id} agent_id={agent_id} need={cost} balance={user_pts.balance}")
         raise HTTPException(status_code=400, detail=f"积分不足，需要 {cost} 积分，当前余额 {user_pts.balance}")
 
     # 扣除积分
@@ -253,6 +258,7 @@ async def hire_agent(
     db.add(ua)
     await db.flush()
 
+    logger.info(f"雇佣交易员成功 user_id={current_user.id} agent_id={agent.id} cost={cost} balance_after={user_pts.balance}")
     return HireAgentResponse(
         user_agent_id=ua.id,
         agent_id=agent.id,
@@ -338,9 +344,11 @@ async def dismiss_agent(
     )
     ua = result.scalar_one_or_none()
     if not ua:
+        logger.warning(f"解雇失败: 交易员不存在 user_id={current_user.id} user_agent_id={user_agent_id}")
         raise HTTPException(status_code=404, detail="交易员不存在")
 
     ua.status = "expired"
+    logger.info(f"解雇交易员 user_id={current_user.id} user_agent_id={user_agent_id}")
     return {"success": True, "message": "已解雇该交易员"}
 
 # ── 暂停交易员 ──

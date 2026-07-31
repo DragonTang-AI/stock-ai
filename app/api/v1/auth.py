@@ -1,3 +1,4 @@
+import logging
 """
 app/api/v1/auth.py — 认证路由
 POST /api/v1/auth/login          登录
@@ -35,6 +36,7 @@ from app.schemas.auth import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -117,6 +119,7 @@ async def login(
     user = result.scalar_one_or_none()
 
     if user is None or not verify_password(body.password, user.hashed_password):
+        logger.warning(f"登录失败: 用户名或密码错误 username={body.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户名或密码错误",
@@ -124,11 +127,13 @@ async def login(
         )
 
     if not user.is_active:
+        logger.warning(f"登录失败: 账户禁用 user_id={user.id} username={body.username}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="账户已被禁用",
         )
 
+    logger.info(f"用户登录成功 user_id={user.id} username={user.username}")
     token_data = {"sub": str(user.id), "username": user.username}
     return TokenResponse(
         access_token=create_access_token(token_data),
@@ -150,6 +155,7 @@ async def register(
         )
     )
     if existing.scalar_one_or_none() is not None:
+        logger.warning(f"注册失败: 用户名或邮箱已存在 username={body.username} email={body.email}")
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="用户名或邮箱已被注册",
@@ -184,6 +190,7 @@ async def register(
     await db.commit()
 
     # 注册即登录：直接签发 token，前端无需二次登录
+    logger.info(f"用户注册成功 user_id={user.id} username={body.username} email={body.email}")
     token_data = {"sub": str(user.id), "username": user.username}
     return RegisterResponse(
         access_token=create_access_token(token_data),

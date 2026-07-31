@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
@@ -15,6 +16,7 @@ from app.schemas.trading import (
 from app.services import trading as trading_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/account", response_model=AccountResponse)
@@ -45,12 +47,14 @@ async def create_order(
     
     try:
         order_item = await trading_service.place_order(db, current_user, order)
+        logger.info(f"下单成功 user_id={current_user.id} symbol={order.symbol} side={order.side} qty={order.quantity} order_id={getattr(order_item, 'id', None)}")
         return {
             "success": True,
             "data": order_item,
             "message": "下单成功"
         }
     except AppException as e:
+        logger.warning(f"下单失败 user_id={current_user.id} symbol={order.symbol} side={order.side} qty={order.quantity} error={e.message}")
         return {
             "success": False,
             "data": None,
@@ -81,12 +85,14 @@ async def cancel_order_endpoint(
     """撤单"""
     try:
         order_item = await trading_service.cancel_order(db, current_user, order_id)
+        logger.info(f"撤单成功 user_id={current_user.id} order_id={order_id}")
         return {
             "success": True,
             "data": order_item,
             "message": "撤单成功"
         }
     except AppException as e:
+        logger.warning(f"撤单失败 user_id={current_user.id} order_id={order_id} error={e.message}")
         return {
             "success": False,
             "data": None,

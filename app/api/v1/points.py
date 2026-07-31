@@ -1,3 +1,4 @@
+import logging
 """app/api/v1/points.py — 积分系统接口"""
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +15,7 @@ from app.schemas.points import (
 from app.api.v1.auth import get_current_user
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/balance", response_model=PointsBalanceResponse)
@@ -97,6 +99,7 @@ async def daily_checkin(
     last_checkin = (await db.execute(check_q)).scalar_one_or_none()
 
     if last_checkin and last_checkin.created_at.date() == today:
+        logger.info(f"签到: 今日已签到 user_id={current_user.id} balance={points.balance}")
         return DailyCheckinResponse(
             success=False,
             points_earned=0,
@@ -143,6 +146,7 @@ async def daily_checkin(
     )
     db.add(tx)
 
+    logger.info(f"签到成功 user_id={current_user.id} earned={earn} consecutive={consecutive} balance={points.balance}")
     return DailyCheckinResponse(
         success=True,
         points_earned=earn,

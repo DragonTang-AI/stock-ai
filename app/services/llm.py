@@ -1,3 +1,4 @@
+import logging
 import os
 from dotenv import load_dotenv
 load_dotenv()
@@ -23,6 +24,9 @@ async def stream_text_sse(text: str) -> AsyncIterator[str]:
     yield "data: [DONE]\n\n"
 
 
+logger = logging.getLogger(__name__)
+
+
 async def chat_completion(
     messages: list[dict],
     model: Optional[str] = None,
@@ -46,10 +50,19 @@ async def chat_completion(
     }
     
     async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(url, headers=headers, json=payload)
-        response.raise_for_status()
-        data = response.json()
-        return data["choices"][0]["message"]["content"]
+        try:
+            response = await client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            logger.info("LLM调用成功 model=%s prompt_len=%d reply_len=%d", config["model"], len(str(messages)), len(content))
+            return content
+        except httpx.HTTPStatusError as e:
+            logger.error("LLM调用失败 status=%s body=%s", e.response.status_code, e.response.text[:200])
+            raise
+        except Exception as e:
+            logger.error("LLM调用异常: %s", e)
+            raise
 
 
 async def build_messages_for_advisor(question: str, portfolio_context: dict, market_temperature: dict) -> list[dict]:

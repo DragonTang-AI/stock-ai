@@ -1,3 +1,4 @@
+import logging
 """
 app/api/v1/portfolio.py — 交易路由（v1：纸面撮合）
 
@@ -49,6 +50,7 @@ from app.services.trading import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/account", response_model=AccountResponse)
@@ -112,19 +114,24 @@ async def create_order(
     from app.services.hosted_engine import engine as hosted_engine
     if hosted_engine.is_active(current_user.id):
         from app.core.exceptions import AppException
+        logger.warning(f"手动下单被拒: AI托管开启 user_id={current_user.id} symbol={req.symbol}")
         raise AppException(code="HOSTED_ACTIVE", message="AI托管已开启，手动交易已禁用。请先关闭AI托管再操作。", status_code=403)
 
     if not is_market_hours():
         from app.core.exceptions import AppException
+        logger.warning(f"手动下单被拒: 非交易时段 user_id={current_user.id} symbol={req.symbol}")
         raise AppException(code="NOT_TRADING_HOURS", message="当前非交易时段（A股：周一至周五 9:30-11:30, 13:00-15:00），无法下单", status_code=400)
 
     
     try:
         order = await place_order(db, current_user, req)
+        logger.info(f"下单成功 user_id={current_user.id} symbol={req.symbol} side={req.side} qty={req.quantity} order_id={order.get('id') if isinstance(order, dict) else getattr(order, 'id', None)}")
         return {"success": True, "data": order, "message": "下单成功"}
     except AppException:
+        logger.warning(f"下单失败 user_id={current_user.id} symbol={req.symbol} side={req.side}")
         raise  # 让全局异常处理器处理
     except Exception as e:
+        logger.error(f"下单异常 user_id={current_user.id} symbol={req.symbol} error={e}")
         raise AppException(code="ORDER_FAILED", message=str(e), status_code=400)
 
 
@@ -139,10 +146,13 @@ async def delete_order(
     """
     try:
         order = await cancel_order(db, current_user, order_id)
+        logger.info(f"撤单成功 user_id={current_user.id} order_id={order_id}")
         return {"success": True, "data": order, "message": "撤单成功"}
     except AppException:
+        logger.warning(f"撤单失败 user_id={current_user.id} order_id={order_id}")
         raise
     except Exception as e:
+        logger.error(f"撤单异常 user_id={current_user.id} order_id={order_id} error={e}")
         raise AppException(code="CANCEL_FAILED", message=str(e), status_code=400)
 
 

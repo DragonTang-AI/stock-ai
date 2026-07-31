@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
@@ -9,6 +10,7 @@ from app.services.llm import generate_advisor_response
 from app.services.advisor import get_portfolio_diagnosis, get_market_temperature
 
 router = APIRouter(prefix="/analysis", tags=["智能分析"])
+logger = logging.getLogger(__name__)
 
 @router.post("/chat")
 async def chat_with_advisor(
@@ -24,6 +26,7 @@ async def chat_with_advisor(
     - 调用 DeepSeek 生成自然语言回复
     """
     try:
+        logger.info(f"AI分析请求 user_id={current_user.id} question={str(question)[:100]}")
         # 获取诊断数据
         diagnosis = await get_portfolio_diagnosis(db, current_user.id)
         market_temp = await get_market_temperature()
@@ -49,6 +52,7 @@ async def chat_with_advisor(
             }
         }
     except Exception as e:
+        logger.error(f"AI分析异常 user_id={current_user.id} error={e}")
         return {
             "success": False,
             "data": None,

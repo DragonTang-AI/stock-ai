@@ -1,3 +1,4 @@
+import logging
 """
 app/api/v1/agent_console.py — 交易员控制台接口
 """
@@ -23,6 +24,7 @@ from app.core.exceptions import AppException
 from app.engine.market_hours import is_market_hours
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # ── 热门 A 股股票池 ──
 
@@ -207,12 +209,15 @@ async def confirm_signal(
     )
     signal = result.scalar_one_or_none()
     if not signal:
+        logger.warning(f"确认信号失败: 信号不存在 user_id={current_user.id} signal_id={signal_id}")
         raise HTTPException(status_code=404, detail="信号不存在")
     if signal.exec_status != "pending":
+        logger.warning(f"确认信号失败: 状态为{signal.exec_status} user_id={current_user.id} signal_id={signal_id}")
         raise HTTPException(status_code=400, detail=f"信号状态为 {signal.exec_status}，无法确认")
 
     # 非交易时段不允许确认
     if not is_market_hours():
+        logger.warning(f"确认信号失败: 非交易时段 user_id={current_user.id} signal_id={signal_id}")
         raise HTTPException(status_code=400, detail="当前非交易时段（A股：周一至周五 9:30-11:30, 13:00-15:00），无法确认信号")
 
     if req and req.quantity:
@@ -247,6 +252,7 @@ async def confirm_signal(
     signal.exec_status = "confirmed"
     signal.updated_at = datetime.now()
     await db.flush()
+    logger.info(f"确认信号成功 user_id={current_user.id} signal_id={signal_id} symbol={signal.symbol} action={signal.action} qty={lot_qty} order_ok={order_result is not None} error={trading_error}")
 
     if order_result is not None:
         actual_price = order_result.filled_price
@@ -413,13 +419,15 @@ async def ignore_signal(
     )
     signal = result.scalar_one_or_none()
     if not signal:
+        logger.warning(f"忽略信号失败: 信号不存在 user_id={current_user.id} signal_id={signal_id}")
         raise HTTPException(status_code=404, detail="信号不存在")
     if signal.exec_status != "pending":
+        logger.warning(f"忽略信号失败: 状态为{signal.exec_status} user_id={current_user.id} signal_id={signal_id}")
         raise HTTPException(status_code=400, detail=f"信号状态为 {signal.exec_status}，无法忽略")
 
     signal.exec_status = "ignored"
     signal.updated_at = datetime.now()
-
+    logger.info(f"忽略信号 user_id={current_user.id} signal_id={signal_id}")
     return {"success": True, "signal_id": signal_id, "message": "信号已忽略"}
 
 
