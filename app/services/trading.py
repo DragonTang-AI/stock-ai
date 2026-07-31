@@ -649,10 +649,10 @@ async def get_trades(
                 for oid, sid in sig_map.items():
                     tid = tid_by_sig.get(str(sid)) if sid else None
                     if tid and tid in name_by_tid:
-                        source_map[oid] = {source: agent, trader_name: name_by_tid[tid]}
+                        source_map[oid] = {"source": "agent", "trader_name": name_by_tid[tid]}
         for oid in order_ids:
             if oid not in source_map:
-                source_map[oid] = {source: user, trader_name: None}
+                source_map[oid] = {"source": "user", "trader_name": None}
 
     items = [
         TradeItem(
@@ -668,8 +668,8 @@ async def get_trades(
             tax=float(t.tax),
             trade_date=t.trade_date,
             created_at=t.created_at,
-            source=source_map.get(t.order_id, {}).get(source, user),
-            trader_name=source_map.get(t.order_id, {}).get(trader_name),
+            source=source_map.get(t.order_id, {}).get("source", "user"),
+            trader_name=source_map.get(t.order_id, {}).get("trader_name"),
         )
         for t in trades
     ]
