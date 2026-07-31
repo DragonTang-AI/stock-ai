@@ -399,7 +399,7 @@ class HostedEngine:
                 symbol_name=target_info.get("name", target_symbol),
                 target_price=price,
                 qty=quantity,
-                reason=f"选股推荐 {target_info.get("reason", "")} (得分 {combined_score:.1f})，涨幅 {quote.change_pct}%，市场温度 {temp_score}",
+                reason=f'选股推荐 {target_info.get("reason", "")} (得分 {combined_score:.1f})，涨幅 {quote.change_pct}%，市场温度 {temp_score}',
                 status="TRIGGERED",
             )
             self._increment_signal(user_id)
