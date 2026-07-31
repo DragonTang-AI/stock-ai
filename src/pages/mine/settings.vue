@@ -1,5 +1,10 @@
 <template>
   <view class="settings-page">
+    <!-- 骨架屏 -->
+    <SkeletonScreen v-if="isLoading" type="detail" />
+
+    <template v-else>
+    
     <!-- 偏好设置 -->
     <view class="section">
       <view class="section-title">偏好设置</view>
@@ -154,11 +159,13 @@
         <view class="picker-cancel" @click="showDataSourcePicker = false">取消</view>
       </view>
     </view>
+  </template>
   </view>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import SkeletonScreen from '@/components/common/SkeletonScreen.vue'
 import { getThemeState, setThemeMode, type ThemeMode } from '@/utils/theme'
 
 // ---- 弹层开关 ----
@@ -346,6 +353,7 @@ function showToast(msg: string) {
 onMounted(() => {
   loadSettings()
   getCacheSize()
+  isLoading.value = false
 })
 </script>
 

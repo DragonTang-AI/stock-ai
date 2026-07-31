@@ -5,3 +5,8 @@ dist/
 .env.local
 .env.*.local
 pnpm-lock.yaml
+dist.old.*/
+*.bak
+*.bak.*
+._*
+pages.json.bak*

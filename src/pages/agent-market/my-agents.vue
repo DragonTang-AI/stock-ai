@@ -1,8 +1,6 @@
 <template>
   <view class="my-agents-page">
-    <view v-if="loading" class="loading-box">
-      <text class="loading-text">加载中...</text>
-    </view>
+    <LoadingSkeleton v-if="loading" scene="default" fallbackType="card" :rows="3" />
 
     <template v-else>
       <!-- 空状态 -->
@@ -76,15 +74,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'; import { onShow } from '@dcloudio/uni-app'
+import { ref } from 'vue'; import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
+import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
 import { getMyAgents, updateManagementMode, dismissAgent, pauseAgent, resumeAgent, terminateAgent, type UserAgent } from '@/api/agent'
+import { formatPercent } from '@/utils/format'
+import { useShowRefresh, touchRefreshKey } from '@/utils/refresh-cache'
 
 const loading = ref(true)
 const myAgents = ref<UserAgent[]>([])
 
 const formatPct = (v: number | null | undefined) => {
   if (v == null) return '--'
-  return (v >= 0 ? '+' : '') + v.toFixed(1) + '%'
+  return formatPercent(v, 1)
 }
 
 const loadData = async () => {
@@ -201,9 +202,12 @@ const handleDismiss = (item: UserAgent) => {
     },
   })
 }
-
 onShow(() => {
-  loadData()
+  useShowRefresh('my-agents', () => loadData())
+})
+
+onPullDownRefresh(() => {
+  uni.stopPullDownRefresh()
 })
 </script>
 

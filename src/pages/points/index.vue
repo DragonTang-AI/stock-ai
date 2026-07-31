@@ -1,5 +1,9 @@
 <template>
   <view class="points-page">
+    <!-- 骨架屏 -->
+    <SkeletonScreen v-if="isLoading" type="list" />
+
+    <template v-else>
     <!-- 顶栏余额卡片 -->
     <view class="balance-card">
       <text class="balance-label">可用积分</text>
@@ -48,11 +52,14 @@
     <view class="empty-state" v-else>
       <text class="empty-text">暂无积分记录</text>
     </view>
+  </template>
   </view>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { onPullDownRefresh } from '@dcloudio/uni-app'
+import SkeletonScreen from '@/components/common/SkeletonScreen.vue'
 import { getPointsBalance, getPointsHistory } from '@/api/points'
 
 interface Transaction {
@@ -75,6 +82,7 @@ const tabs = [
 const balance = ref(0)
 const transactions = ref<Transaction[]>([])
 const activeTab = ref('all')
+const isLoading = ref(true)
 
 const filteredList = computed(() => {
   if (activeTab.value === 'all') return transactions.value
@@ -108,11 +116,18 @@ const loadData = async () => {
     transactions.value = (txRes as any).items ?? []
   } catch (e) {
     console.error('load points error', e)
+  } finally {
+    isLoading.value = false
   }
 }
 
 onMounted(() => {
   loadData()
+})
+
+onPullDownRefresh(() => {
+  loadData()
+  uni.stopPullDownRefresh()
 })
 </script>
 

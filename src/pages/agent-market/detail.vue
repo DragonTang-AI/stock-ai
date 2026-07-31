@@ -6,9 +6,7 @@
     </view>
 
     <!-- 加载中 -->
-    <view v-if="loading" class="loading-box">
-      <text class="loading-text">加载中...</text>
-    </view>
+    <SkeletonScreen v-if="loading" type="detail" />
 
     <template v-else-if="agent">
       <!-- 头像 + 名称 -->
@@ -177,8 +175,10 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue'
 import F2 from '@antv/f2'
+import SkeletonScreen from '@/components/common/SkeletonScreen.vue'
 import { getAgentDetail, hireAgent } from '@/api/agent'
 import { getPointsBalance } from '@/api/points'
+import { formatPercent } from '@/utils/format'
 
 const agent = ref<any>(null)
 const loading = ref(true)
@@ -410,7 +410,7 @@ const renderChart = () => {
 
 const formatPct = (v: number | null | undefined) => {
   if (v == null) return '--'
-  return v.toFixed(2) + '%'
+  return formatPercent(v, 2)
 }
 
 const formatDate = (d: string | null) => {

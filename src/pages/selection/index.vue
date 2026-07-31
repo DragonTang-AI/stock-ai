@@ -102,6 +102,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
 import { trackPageView, trackAction } from '@/utils/tracker'
+import { formatPercent } from '@/utils/format'
 import {
   fetchCommitteeResults,
   addToWatchlist,
@@ -145,7 +146,7 @@ function agentLabel(agent: string): string {
 }
 
 function formatPct(v: number): string {
-  return v.toFixed(0) + '%'
+  return formatPercent(v, 0)
 }
 
 function toggleExpand(idx: number) {
@@ -168,7 +169,8 @@ async function handleToggleWatch(symbol: string) {
       uni.showToast({ title: '已加入自选', icon: 'success' })
       trackAction('add_watchlist', { symbol })
     }
-  } catch {
+  } catch (e) {
+    console.error('[Selection] addToWatchlist 失败', e);
     uni.showToast({ title: '操作失败', icon: 'none' })
   }
 }

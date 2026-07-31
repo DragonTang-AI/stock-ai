@@ -285,7 +285,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
 import { trackPageView, trackAction } from '@/utils/tracker'
 import {
@@ -300,6 +300,7 @@ import {
   type HostedConfigRequest,
   RiskLevelLabel,
 } from '@/api/hosted'
+import { formatPercent } from '@/utils/format'
 
 const riskLevels = [
   { value: 'conservative' as RiskLevel, label: '保守' },
@@ -419,7 +420,7 @@ function fillConfigForm(s: HostedStatus) {
   configForm.max_single_trade_ratio = s.max_single_trade_ratio != null ? String(Math.round(s.max_single_trade_ratio * 100)) : '15'
   configForm.single_trade_limit = s.single_trade_limit != null ? String(s.single_trade_limit) : ''
   configForm.daily_trade_limit = s.daily_trade_limit != null ? String(s.daily_trade_limit) : ''
-  configForm.industry_concentration = s.industry_concentration != null ? String((s.industry_concentration * 100).toFixed(0)) : ''
+  configForm.industry_concentration = s.industry_concentration != null ? String(formatPercent(s.industry_concentration, 0)) : ''
   configForm.auto_stop_loss = s.auto_stop_loss ?? true
 }
 
@@ -515,6 +516,10 @@ onMounted(loadStatus)
 onShow(() => {
   if (!status.value) loadStatus()
   trackPageView('hosted')
+})
+onPullDownRefresh(() => {
+  loadStatus()
+  uni.stopPullDownRefresh()
 })
 </script>
 

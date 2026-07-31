@@ -57,12 +57,12 @@
               <text class="hot-name">{{ item.name }}</text>
               <text class="hot-code">{{ item.code }}</text>
             </view>
-            <text class="hot-price">{{ item.price != null ? item.price.toFixed(2) : '--' }}</text>
+            <text class="hot-price">{{ formatMoney(item.price, 2) }}</text>
             <text
               v-if="item.change_pct != null"
               class="hot-change"
               :class="item.change_pct >= 0 ? 'up' : 'down'"
-            >{{ item.change_pct >= 0 ? '+' : '' }}{{ item.change_pct.toFixed(2) }}%</text>
+            >{{ formatPercent(item.change_pct, 2) }}</text>
           </view>
         </view>
       </view>
@@ -94,12 +94,12 @@
             <text class="result-code">{{ item.code }}</text>
           </view>
           <view class="result-item-right">
-            <text class="result-price">{{ item.price != null ? item.price.toFixed(2) : '--' }}</text>
+            <text class="result-price">{{ formatMoney(item.price, 2) }}</text>
             <text
               v-if="item.change_pct != null"
               class="result-change"
               :class="item.change_pct >= 0 ? 'up' : 'down'"
-            >{{ item.change_pct >= 0 ? '+' : '' }}{{ item.change_pct.toFixed(2) }}%</text>
+            >{{ formatPercent(item.change_pct, 2) }}</text>
           </view>
         </view>
       </view>
@@ -117,6 +117,7 @@
 import { ref, onMounted } from 'vue'
 import { searchStocks, type SearchResult } from '@/api/market'
 import { fetchQuotes } from '@/api/market'
+import { formatMoney, formatPercent } from '@/utils/format'
 
 const HISTORY_KEY = 'ai-stock:search-history'
 const MAX_HISTORY = 10

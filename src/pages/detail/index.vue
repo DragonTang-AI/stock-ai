@@ -1,9 +1,7 @@
 <template>
   <view class="detail-page">
     <!-- 加载中 -->
-    <view v-if="loading" class="loading-view">
-      <text>加载中...</text>
-    </view>
+    <SkeletonScreen v-if="loading" type="detail" />
 
     <!-- 行情头部 -->
     <view v-else-if="quote && !isFullscreen" class="quote-header">
@@ -156,7 +154,7 @@
                 </text>
                 <text class="qty-info-text" v-else-if="maxTradeQty > 0">可买 {{ maxTradeQty }} 股</text>
                 <text class="qty-info-text dim" v-else>可买 0 股</text>
-                <text class="qty-info-text cash">可用 {{ accountCash.toFixed(2) }} 元</text>
+                <text class="qty-info-text cash">可用 {{ formatMoney(accountCash, 2) }} 元</text>
               </view>
               <view class="qty-shortcuts">
                 <view class="shortcut-btn" @click="fillQuarter()">1/4</view>
@@ -181,16 +179,16 @@
               </view>
               <view class="pos-item">
                 <text class="pos-item-label">成本</text>
-                <text class="pos-item-value">{{ currentPosition.avg_cost.toFixed(2) }}</text>
+                <text class="pos-item-value">{{ formatMoney(currentPosition.avg_cost, 2) }}</text>
               </view>
               <view class="pos-item">
                 <text class="pos-item-label">市值</text>
-                <text class="pos-item-value">{{ currentPosition.market_value.toFixed(2) }}</text>
+                <text class="pos-item-value">{{ formatMoney(currentPosition.market_value, 2) }}</text>
               </view>
             </view>
             <view class="pos-profit" :class="currentPosition.profit >= 0 ? 'up' : 'down'">
               <text>浮动盈亏</text>
-              <text class="pos-profit-val">{{ currentPosition.profit >= 0 ? '+' : '' }}{{ currentPosition.profit.toFixed(2) }}（{{ currentPosition.profit_pct >= 0 ? '+' : '' }}{{ currentPosition.profit_pct.toFixed(2) }}%）</text>
+              <text class="pos-profit-val">{{ formatSigned(currentPosition.profit, 2) }}（{{ formatPercent(currentPosition.profit_pct, 2) }}）</text>
             </view>
           </view>
 
@@ -220,12 +218,14 @@
 <script setup lang="ts">
 import Disclaimer from '@/components/compliance/Disclaimer.vue'
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
+import SkeletonScreen from '@/components/common/SkeletonScreen.vue'
 import KlineChart from '@/components/market/KlineChart.vue'
 import { fetchQuote, fetchKline, type QuoteSnapshot, type KlinePoint } from '@/api/market'
 import { placeOrder, fetchAccount, fetchSimulationPositions, type OrderSide, type SimPosition } from '@/api/trading'
 import { getTradeErrorMessage } from '@/utils/trade-errors'
 import { trackPageView } from '@/utils/tracker'
+import { formatMoney, formatPercent, formatSigned } from '@/utils/format'
 
 const code = ref('')
 const quote = ref<QuoteSnapshot | null>(null)
@@ -503,6 +503,9 @@ function formatPct(v: number): string {
 
 onShow(() => {
   trackPageView('trade_detail', { code: code.value })
+})
+onPullDownRefresh(() => {
+  uni.stopPullDownRefresh()
 })
 </script>
 

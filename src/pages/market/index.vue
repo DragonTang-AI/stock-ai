@@ -129,7 +129,7 @@
             </view>
             <text class="rank-price">{{ formatPrice(item.price) }}</text>
             <text class="rank-change" :class="item.change_pct >= 0 ? 'up' : 'down'">
-              {{ item.change_pct >= 0 ? '+' : '' }}{{ item.change_pct.toFixed(2) }}%
+              {{ formatPercent(item.change_pct, 2) }}
             </text>
           </view>
         </view>
@@ -149,6 +149,7 @@ import ErrorPage from '@/components/common/ErrorPage.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import Disclaimer from '@/components/compliance/Disclaimer.vue'
 import { fetchQuotes, fetchIndices, fetchRanking, type RankItem } from '@/api/market'
+import { formatPercent } from '@/utils/format'
 
 interface StockItem {
   code: string

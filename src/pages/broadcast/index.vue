@@ -7,9 +7,7 @@
     </view>
 
     <!-- 加载状态 -->
-    <view class="loading-state" v-if="isLoading">
-      <text class="loading-text">加载中...</text>
-    </view>
+    <SkeletonScreen v-if="isLoading" type="list" :count="4" />
 
     <!-- 无数据状态 -->
     <view class="empty-state" v-else-if="!broadcast">
@@ -126,7 +124,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
+import SkeletonScreen from '@/components/common/SkeletonScreen.vue'
 import BroadcastPlayer from '@/components/selection/BroadcastPlayer.vue'
 import Disclaimer from '@/components/compliance/Disclaimer.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
@@ -262,6 +261,11 @@ onMounted(loadToday)
 onShow(() => {
   if (!broadcast.value) loadToday()
   trackPageView('broadcast')
+})
+
+onPullDownRefresh(() => {
+  loadToday()
+  uni.stopPullDownRefresh()
 })
 </script>
 

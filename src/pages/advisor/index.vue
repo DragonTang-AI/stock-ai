@@ -7,23 +7,26 @@
         <text class="temp-emoji">{{ diagnosis.market_temperature.emoji }}</text>
         <text class="temp-text">{{ diagnosis.market_temperature.temperature_text }}</text>
         <text class="temp-value" :class="diagnosis.market_temperature.avg_change_pct >= 0 ? 'up' : 'down'">
-          {{ diagnosis.market_temperature.avg_change_pct >= 0 ? '+' : '' }}{{ diagnosis.market_temperature.avg_change_pct.toFixed(2) }}%
+          {{ formatPercent(diagnosis.market_temperature.avg_change_pct, 2) }}
         </text>
       </view>
       <view class="temp-indices" v-if="diagnosis.market_temperature.indices.length">
         <text v-for="idx in diagnosis.market_temperature.indices" :key="idx.name" class="temp-idx">
-          {{ idx.name }} {{ idx.price.toFixed(0) }}
-          <text :class="idx.change_pct >= 0 ? 'up' : 'down'">{{ idx.change_pct >= 0 ? '+' : '' }}{{ idx.change_pct.toFixed(2) }}%</text>
+          {{ idx.name }} {{ formatMoney(idx.price, 0) }}
+          <text :class="idx.change_pct >= 0 ? 'up' : 'down'">{{ formatPercent(idx.change_pct, 2) }}</text>
         </text>
       </view>
     </view>
 
+    <!-- 骨架屏 -->
+    <LoadingSkeleton v-if="isLoading" scene="portfolio" :rows="5" />
+
     <!-- 空仓 -->
-    <view v-if="!diagnosis" class="empty-state">
+    <view v-if="!isLoading && !diagnosis" class="empty-state">
       <text class="empty-icon">&#x1F916;</text>
       <text class="empty-text">加载中...</text>
     </view>
-    <view v-else-if="diagnosis.summary.position_count === 0" class="empty-state">
+    <view v-else-if="diagnosis && diagnosis.summary.position_count === 0" class="empty-state">
       <text class="empty-icon">&#x1F4ED;</text>
       <text class="empty-text">还没有持仓</text>
       <text class="empty-sub" @click="navigateTo('/pages/selection/index')">先去选股看看吧&#x1F449;</text>
@@ -42,13 +45,13 @@
             <text class="summary-label">总资产</text>
             <text class="summary-value">{{ formatMoney(diagnosis.summary.total_equity) }}</text>
             <text class="summary-pnl" :class="diagnosis.summary.total_profit >= 0 ? 'up' : 'down'">
-              {{ diagnosis.summary.total_profit >= 0 ? '+' : '' }}{{ diagnosis.summary.total_profit_pct.toFixed(2) }}%
+              {{ diagnosis.summary.total_profit >= 0 ? '+' : '' }}{{ formatPercent(diagnosis.summary.total_profit_pct, 2) }}
             </text>
           </view>
           <view class="summary-tags">
             <text class="tag">持仓 {{ diagnosis.summary.position_count }}只</text>
-            <text class="tag">胜率 {{ diagnosis.summary.win_rate.toFixed(0) }}%</text>
-            <text class="tag">现金 {{ diagnosis.summary.cash_ratio.toFixed(0) }}%</text>
+            <text class="tag">胜率 {{ formatPercent(diagnosis.summary.win_rate, 0) }}</text>
+            <text class="tag">现金 {{ formatPercent(diagnosis.summary.cash_ratio, 0) }}</text>
           </view>
         </view>
 
@@ -62,7 +65,7 @@
             <view class="pos-top">
               <text class="pos-name">{{ pos.name }}</text>
               <text class="pos-pnl" :class="pos.profit_pct >= 0 ? 'up' : 'down'">
-                {{ pos.profit_pct >= 0 ? '+' : '' }}{{ pos.profit_pct.toFixed(2) }}%
+                {{ formatPercent(pos.profit_pct, 2) }}
               </text>
               <view class="rating-tag" :class="pos.rating">
                 <text class="rating-icon">{{ ratingIcons[pos.rating] }}</text>
@@ -182,8 +185,11 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue'
 import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
+import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
 import { getDiagnosis, chatStream, type DiagnosisData } from '@/api/advisor'
+import { formatPercent } from '@/utils/format'
 
+const isLoading = ref(true)
 // ===== 诊断面板 =====
 const diagnosis = ref<DiagnosisData | null>(null)
 const tempLevel = ref('neutral')
@@ -211,12 +217,22 @@ function goDetail(symbol: string) { uni.navigateTo({ url: '/pages/detail/index?s
 
 async function loadDiagnosis() {
   try {
+    isLoading.value = true
+    const startTime = Date.now()
     const data = await getDiagnosis()
     diagnosis.value = data
     if (data.market_temperature?.temperature_text) {
       tempLevel.value = getTempLevel(data.market_temperature.temperature_text)
     }
-  } catch { /* no-op */ }
+    const elapsed = Date.now() - startTime
+    if (elapsed < 1500) {
+      await new Promise(r => setTimeout(r, 1500 - elapsed))
+    }
+  } catch (e) {
+    console.error('[Advisor] loadDiagnosis failed', e)
+  } finally {
+    isLoading.value = false
+  }
 }
 
 // ===== 对话弹窗 =====

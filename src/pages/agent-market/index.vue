@@ -17,6 +17,9 @@
       <text class="section-hint">雇佣AI交易员，为你自动操盘</text>
     </view>
 
+    <!-- 骨架屏 -->
+    <LoadingSkeleton v-if="isLoading" scene="market" fallbackType="card" :rows="3" />
+
     <!-- 交易员卡片列表 -->
     <view class="agent-list">
       <view
@@ -89,9 +92,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'; import { onShow } from '@dcloudio/uni-app'
+import { ref } from 'vue'; import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
+import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
 import { getAgentMarket, getMyAgents, type AgentTrader } from '@/api/agent'
 import { getPointsBalance, dailyCheckin } from '@/api/points'
+import { formatPercent } from '@/utils/format'
+import { useShowRefresh, touchRefreshKey } from '@/utils/refresh-cache'
 
 const agents = ref<AgentTrader[]>([])
 const pointsBalance = ref(0)
@@ -99,7 +105,7 @@ const hiredIds = ref(new Set<string>())
 
 const formatPct = (v: number | null | undefined) => {
   if (v == null) return '--'
-  return (v > 0 ? '+' : '') + v.toFixed(1) + '%'
+  return formatPercent(v, 1)
 }
 
 const truncate = (s: string, len: number) => {
@@ -149,9 +155,11 @@ const goDetail = (id: string) => {
 const goMyAgents = () => {
   uni.navigateTo({ url: '/pages/agent-market/my-agents' })
 }
-
 onShow(() => {
-  loadData()
+  useShowRefresh('agent-market', () => loadData())
+})
+onPullDownRefresh(() => {
+  uni.stopPullDownRefresh()
 })
 </script>
 

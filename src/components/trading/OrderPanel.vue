@@ -18,8 +18,8 @@
       <view class="position-header">
         <text class="position-title">我的持仓</text>
         <text class="position-pnl" :class="positionInfo.profit >= 0 ? 'up' : 'down'">
-          {{ positionInfo.profit >= 0 ? '+' : '' }}{{ positionInfo.profit.toFixed(2) }}
-          ({{ positionInfo.profit_pct >= 0 ? '+' : '' }}{{ positionInfo.profit_pct.toFixed(2) }}%)
+          {{ formatSigned(positionInfo.profit, 2) }}
+          ({{ formatPercent(positionInfo.profit_pct, 2) }})
         </text>
       </view>
       <view class="position-stats">
@@ -33,11 +33,11 @@
         </view>
         <view class="pos-stat-item">
           <text class="pos-stat-label">成本</text>
-          <text class="pos-stat-value">{{ positionInfo.avg_cost.toFixed(2) }}</text>
+          <text class="pos-stat-value">{{ formatMoney(positionInfo.avg_cost, 2) }}</text>
         </view>
         <view class="pos-stat-item">
           <text class="pos-stat-label">市值</text>
-          <text class="pos-stat-value">{{ positionInfo.market_value.toFixed(2) }}</text>
+          <text class="pos-stat-value">{{ formatMoney(positionInfo.market_value, 2) }}</text>
         </view>
       </view>
     </view>
@@ -181,6 +181,7 @@ import type {
 } from '@/api/trading'
 import { fetchSimulationPositions, type SimPosition } from '@/api/trading'
 import {
+import { formatMoney, formatPercent, formatSigned } from '@/utils/format'
   fetchTradingStockInfo,
   estimateFee,
   fetchAccount,

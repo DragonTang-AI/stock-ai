@@ -44,6 +44,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import Disclaimer from '@/components/compliance/Disclaimer.vue'
@@ -88,6 +89,11 @@ function goMarket() {
 
 onMounted(() => {
   fetchWatchlist()
+})
+
+onPullDownRefresh(() => {
+  fetchWatchlist()
+  uni.stopPullDownRefresh()
 })
 </script>
 

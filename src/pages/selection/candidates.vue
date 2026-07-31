@@ -190,6 +190,7 @@ import {
   type CandidateStock,
 } from '@/api/selection'
 import EmptyState from '@/components/common/EmptyState.vue'
+import { formatPercent } from '@/utils/format'
 
 // ---- 状态 ----
 const items = ref<CandidateStock[]>([])
@@ -258,7 +259,7 @@ function formatPrice(v: number): string {
 
 function formatChangePct(v: number): string {
   const sign = v >= 0 ? '+' : ''
-  return sign + v.toFixed(2) + '%'
+  return sign + formatPercent(v, 2)
 }
 
 // ---- 筛选处理 ----
@@ -342,7 +343,8 @@ async function loadCandidates(reset: boolean = false) {
 async function loadIndustries() {
   try {
     industryList.value = await fetchIndustries()
-  } catch {
+  } catch (e) {
+    console.error('[SelectionCandidates] loadIndustries 失败', e)
     industryList.value = []
   }
 }

@@ -1,16 +1,12 @@
 <template>
   <view class="detail-page">
     <!-- 加载中 -->
-    <view v-if="loading" class="state-view">
-      <text class="state-text">加载中...</text>
-    </view>
-
+    <SkeletonScreen v-if="loading" type="detail" />
     <!-- 错误 -->
     <view v-else-if="error" class="state-view">
       <text class="state-text error">{{ error }}</text>
       <button class="btn-retry" @click="loadData">重试</button>
     </view>
-
     <!-- 详情内容 -->
     <template v-else-if="detail">
       <!-- ====== 股票基本信息头部 ====== -->
@@ -25,7 +21,6 @@
             {{ actionLabel }}
           </view>
         </view>
-
         <view class="price-row">
           <text class="current-price">{{ formatPrice(detail.current_price) }}</text>
           <view class="change-info" :class="changeClass">
@@ -33,7 +28,6 @@
             <text class="change-pct">{{ formatChangePct(detail.change_pct) }}</text>
           </view>
         </view>
-
         <!-- 综合置信度 -->
         <view class="confidence-bar">
           <view class="confidence-track">
@@ -46,7 +40,6 @@
           <text class="confidence-num">{{ detail.confidence }}%</text>
         </view>
       </view>
-
       <!-- ====== 价格锚点（目标/止损/止盈） ====== -->
       <view v-if="hasPriceTargets" class="price-targets">
         <view class="target-card up">
@@ -62,7 +55,6 @@
           <text class="target-value">{{ formatPrice(detail.stop_loss!) }}</text>
         </view>
       </view>
-
       <!-- ====== 综合推荐理由 ====== -->
       <view class="reason-section">
         <view class="section-header">
@@ -78,13 +70,11 @@
         </view>
         <text class="reason-text">{{ detail.reasoning }}</text>
       </view>
-
       <!-- ====== 4-Agent 评分面板 ====== -->
       <view class="agents-section">
         <view class="section-header">
           <text class="section-title">分 Agent 评分</text>
         </view>
-
         <view
           v-for="agent in detail.agents"
           :key="agent.agent"
@@ -106,7 +96,6 @@
               />
             </view>
           </view>
-
           <!-- Agent 级 reason_codes -->
           <view v-if="agent.reason_codes.length" class="agent-tags">
             <text
@@ -116,11 +105,9 @@
               :class="reasonTagClass(code)"
             >{{ reasonCodeLabel(code) }}</text>
           </view>
-
           <text class="agent-reasoning">{{ agent.reasoning }}</text>
         </view>
       </view>
-
       <!-- ====== 操作按钮 ====== -->
       <view class="action-bar">
         <button
@@ -134,7 +121,6 @@
           快速买入
         </button>
       </view>
-
       <!-- 快速买入弹窗 -->
       <view v-if="showTradeModal" class="modal-overlay" @click="showTradeModal = false">
         <view class="trade-modal" @click.stop>
@@ -150,7 +136,6 @@
                 <view class="side-tab" :class="{ active: tradeSide === 'sell' }" @click="tradeSide = 'sell'">卖出</view>
               </view>
             </view>
-
             <!-- 价格输入（带 +/- 步进） -->
             <view class="trade-section">
               <text class="section-label">限价</text>
@@ -164,7 +149,6 @@
                 <text class="hint-text down">跌停 {{ formatPrice((detail?.current_price || 0) * 0.9) }}</text>
               </view>
             </view>
-
             <!-- 数量输入（带 +/- 步进） -->
             <view class="trade-section">
               <text class="section-label">数量（股）</text>
@@ -181,7 +165,7 @@
                   </text>
                   <text class="qty-info-text" v-else-if="maxTradeQty > 0">可买 {{ maxTradeQty }} 股</text>
                   <text class="qty-info-text dim" v-else>可买 0 股</text>
-                  <text class="qty-info-text cash">可用 {{ accountCash.toFixed(2) }} 元</text>
+                  <text class="qty-info-text cash">可用 {{ formatMoney(accountCash, 2) }} 元</text>
                 </view>
                 <view class="qty-shortcuts">
                   <view class="shortcut-btn" @click="fillQuarter()">1/4</view>
@@ -191,7 +175,6 @@
                 </view>
               </view>
             </view>
-
             <!-- 我的持仓（当前股票） -->
             <view class="position-card" v-if="currentPosition">
               <text class="section-label">我的持仓</text>
@@ -206,25 +189,23 @@
                 </view>
                 <view class="pos-item">
                   <text class="pos-item-label">成本</text>
-                  <text class="pos-item-value">{{ currentPosition.avg_cost.toFixed(2) }}</text>
+                  <text class="pos-item-value">{{ formatMoney(currentPosition.avg_cost, 2) }}</text>
                 </view>
                 <view class="pos-item">
                   <text class="pos-item-label">市值</text>
-                  <text class="pos-item-value">{{ currentPosition.market_value.toFixed(2) }}</text>
+                  <text class="pos-item-value">{{ formatMoney(currentPosition.market_value, 2) }}</text>
                 </view>
               </view>
               <view class="pos-profit" :class="currentPosition.profit >= 0 ? 'up' : 'down'">
                 <text>浮动盈亏</text>
-                <text class="pos-profit-val">{{ currentPosition.profit >= 0 ? '+' : '' }}{{ currentPosition.profit.toFixed(2) }}（{{ currentPosition.profit_pct >= 0 ? '+' : '' }}{{ currentPosition.profit_pct.toFixed(2) }}%）</text>
+                <text class="pos-profit-val">{{ formatSigned(currentPosition.profit, 2) }}（{{ formatPercent(currentPosition.profit_pct, 2) }}）</text>
               </view>
             </view>
-
             <!-- 预估金额 -->
             <view class="estimate-row" v-if="estimatedAmount !== '0.00'">
               <text class="estimate-label">预估金额</text>
               <text class="estimate-value">{{ estimatedAmount }} 元</text>
             </view>
-
             <view v-if="tradeError" class="trade-error">{{ tradeError }}</view>
             <button class="btn-confirm" :disabled="tradeSubmitting" @click="handlePlaceOrder">
               {{ tradeSide === 'buy' ? '买入' : '卖出' }}
@@ -232,7 +213,6 @@
           </view>
         </view>
       </view>
-
       <!-- 生成时间 -->
       <view v-if="detail.generated_at" class="footer">
         <text class="footer-text">分析生成于 {{ detail.generated_at }}</text>
@@ -242,10 +222,10 @@
   </view>
   <Disclaimer />
 </template>
-
 <script setup lang="ts">
 import Disclaimer from '@/components/compliance/Disclaimer.vue'
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import SkeletonScreen from '@/components/common/SkeletonScreen.vue'
 import {
   fetchStockDetail,
   addToWatchlist,
@@ -254,6 +234,7 @@ import {
 } from '@/api/selection'
 import { placeOrder, fetchAccount, fetchSimulationPositions, type OrderSide, type SimPosition } from '@/api/trading'
 import { getTradeErrorMessage } from '@/utils/trade-errors'
+import { formatMoney, formatPercent, formatSigned } from '@/utils/format'
 
 // ---- 状态 ----
 const detail = ref<StockAnalysisDetail | null>(null)
@@ -368,12 +349,15 @@ async function handleToggleWatch() {
       await removeFromWatchlist(symbol)
       isWatchlisted.value = false
       uni.showToast({ title: '已取消关注', icon: 'success' })
+      uni.vibrateShort({ type: 'light' })
     } else {
       await addToWatchlist(symbol)
       isWatchlisted.value = true
       uni.showToast({ title: '已加入自选', icon: 'success' })
+      uni.vibrateShort({ type: 'light' })
     }
-  } catch {
+  } catch (e) {
+    console.error('[SelectionDetail] handleToggleWatch 失败', e);
     uni.showToast({ title: '操作失败', icon: 'none' })
   }
 }
@@ -398,7 +382,8 @@ watch(showTradeModal, async (open) => {
     accountCash.value = account.cash
     const positions = posResult.data || []
     currentPosition.value = positions.find((p: SimPosition) => p.symbol === detail.value?.symbol) || null
-  } catch {
+  } catch (e) {
+    console.error('[SelectionDetail] loadAccount 失败', e);
     accountCash.value = 0
     currentPosition.value = null
   } finally {
@@ -452,8 +437,25 @@ const estimatedAmount = computed(() => {
   return (price * qty).toFixed(2)
 })
 
+/**
+ * A股交易时段检查：周一至周五 9:30-11:30, 13:00-15:00（UTC+8）
+ */
+function isMarketHours(): boolean {
+  const now = new Date()
+  const bj = new Date(now.getTime() + 8 * 60 * 60 * 1000)
+  const dow = bj.getUTCDay()
+  if (dow === 0 || dow === 6) return false
+  const h = bj.getUTCHours(), m = bj.getUTCMinutes()
+  const t = h * 100 + m
+  return (t >= 930 && t <= 1130) || (t >= 1300 && t <= 1500)
+}
+
 async function handlePlaceOrder() {
   tradeError.value = ''
+  if (!isMarketHours()) {
+    tradeError.value = '当前非交易时段（A股：周一至周五 9:30-11:30, 13:00-15:00），无法下单'
+    return
+  }
   const quantity = parseInt(tradeQty.value)
   const price = parseFloat(tradePrice.value)
   if (!quantity || quantity < 100) { tradeError.value = '数量不能少于100股'; return }
@@ -468,6 +470,7 @@ async function handlePlaceOrder() {
     await placeOrder({ symbol: detail.value!.symbol, action: tradeSide.value, order_type: 'LIMIT', quantity, price })
     showTradeModal.value = false
     uni.showToast({ title: '下单成功', icon: 'success' })
+    uni.vibrateShort({ type: 'medium' })
   } catch (e: any) {
     const msg = getTradeErrorMessage(e)
     tradeError.value = msg

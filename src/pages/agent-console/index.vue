@@ -1,5 +1,9 @@
 <template>
   <view class="console-page">
+    <!-- 骨架屏 -->
+    <SkeletonScreen v-if="isLoading" type="table" :count="5" />
+
+    <template v-else>
     <!-- 调度器运行状态 -->
     <view class="scheduler-bar" :class="{ active: schedulerRunning }">
       <view class="sched-dot" :class="{ pulse: schedulerRunning }"></view>
@@ -94,7 +98,7 @@
         <view class="sig-body">
           <view class="sig-item">
             <text class="sig-label">建议价</text>
-            <text class="sig-val mono">¥{{ sig.price.toFixed(2) }}</text>
+            <text class="sig-val mono">¥{{ formatMoney(sig.price, 2) }}</text>
           </view>
           <view class="sig-item">
             <text class="sig-label">数量</text>
@@ -163,11 +167,11 @@
           </view>
           <view class="pos-item">
             <text class="pos-label">成本</text>
-            <text class="pos-val mono">¥{{ (pos.avg_cost || 0).toFixed(2) }}</text>
+            <text class="pos-val mono">¥{{ formatMoney(pos.avg_cost, 2) }}</text>
           </view>
           <view class="pos-item">
             <text class="pos-label">现价</text>
-            <text class="pos-val mono">¥{{ (pos.current_price || 0).toFixed(2) }}</text>
+            <text class="pos-val mono">¥{{ formatMoney(pos.current_price, 2) }}</text>
           </view>
           <view class="pos-item">
             <text class="pos-label">市值</text>
@@ -195,18 +199,20 @@
           </view>
         </view>
         <view class="trade-right">
-          <text class="trade-price mono">¥{{ trade.price.toFixed(2) }}</text>
+          <text class="trade-price mono">¥{{ formatMoney(trade.price, 2) }}</text>
           <text class="trade-qty mono">{{ trade.quantity }} 股</text>
           <text class="trade-time">{{ formatTime(trade.executed_at) }}</text>
         </view>
       </view>
     </view>
+    </template>
   </view>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue"
-import { onShow } from '@dcloudio/uni-app'
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
+import SkeletonScreen from '@/components/common/SkeletonScreen.vue'
 import {
   getConsoleOverview,
   getSignals,
@@ -220,7 +226,10 @@ import {
   type ConsoleTrade,
 } from '@/api/agent'
 import { request } from '@/utils/request'
+import { formatMoney } from '@/utils/format'
+import { useShowRefresh, touchRefreshKey } from '@/utils/refresh-cache'
 
+const isLoading = ref(true)
 const hireId = ref<number>(0)
 const activeTab = ref<'signals' | 'portfolio' | 'trades'>('signals')
 
@@ -263,13 +272,12 @@ onMounted(() => {
   const pages = getCurrentPages()
   const page = pages[pages.length - 1] as any
   hireId.value = parseInt(page.options?.hire_id || '0')
-  loadAll()
+  loadAll().finally(() => { isLoading.value = false })
   startPolling()
   checkScheduler()
 })
-
 onShow(() => {
-  if (hireId.value) loadAll()
+  if (hireId.value) useShowRefresh('agent-console', () => loadAll())
 })
 
 onUnmounted(() => {
@@ -280,7 +288,10 @@ const startPolling = () => {
   // 每 30 秒自动刷新
   pollTimer = setInterval(() => {
     if (hireId.value) loadAll()
-  }, 30000) as unknown as number
+  }, 30000)
+onPullDownRefresh(() => {
+  uni.stopPullDownRefresh()
+}) as unknown as number
 
   // 每 10 秒检查调度器状态
   schedTimer = setInterval(() => {
@@ -343,6 +354,7 @@ const handleConfirm = async (sig: ConsoleSignal) => {
     await confirmSignal(sig.id)
     uni.hideLoading()
     uni.showToast({ title: '已采纳', icon: 'success' })
+    uni.vibrateShort({ type: 'medium' })
     await loadAll()
   } catch (e: any) {
     uni.hideLoading()
@@ -371,9 +383,22 @@ const formatPct = (v: number) => {
   return (v >= 0 ? '+' : '') + v.toFixed(2) + '%'
 }
 
+const toBJTime = (t: string) => {
+  const d = new Date(t)
+  if (isNaN(d.getTime())) return null
+  return new Date(d.getTime() + 8 * 3600 * 1000)
+}
+
 const formatTime = (t: string | null) => {
   if (!t) return ''
-  return t.slice(0, 16).replace('T', ' ')
+  const bj = toBJTime(t)
+  if (!bj) return t.slice(0, 16).replace('T', ' ')
+  const y = bj.getUTCFullYear()
+  const m = String(bj.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(bj.getUTCDate()).padStart(2, '0')
+  const h = String(bj.getUTCHours()).padStart(2, '0')
+  const min = String(bj.getUTCMinutes()).padStart(2, '0')
+  return `${y}-${m}-${day} ${h}:${min}`
 }
 
 const formatRelative = (t: string | null) => {

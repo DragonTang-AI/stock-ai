@@ -115,7 +115,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import LineChart from '@/components/charts/LineChart.vue'
 import BarChart from '@/components/charts/BarChart.vue'
 import Disclaimer from '@/components/compliance/Disclaimer.vue'
@@ -132,6 +132,7 @@ import {
   type AttributionItem,
 } from '@/api/analysis'
 import { fetchPositions, type Position } from '@/api/trading'
+import { formatMoney, formatPercent } from '@/utils/format'
 
 const periodOptions = [
   { label: '1D', value: '1D' },
@@ -163,7 +164,7 @@ const summaryItems = computed(() => {
     { label: '跑赢大盘', display: formatPercentDisplay(s.beatBenchmark), rawValue: s.beatBenchmark * 100, precision: 2, prefix: s.beatBenchmark >= 0 ? '+' : '', suffix: '%', isNumber: true, colorClass: s.beatBenchmark >= 0 ? 'val-positive' : 'val-negative' },
     { label: '夏普比率', display: s.sharpeRatio.toFixed(2), rawValue: s.sharpeRatio, precision: 2, prefix: '', suffix: '', isNumber: true, colorClass: s.sharpeRatio >= 0 ? 'val-positive' : 'val-negative' },
     { label: '最大回撤', display: formatPercentDisplay(s.maxDrawdown), rawValue: s.maxDrawdown * 100, precision: 2, prefix: '', suffix: '%', isNumber: true, colorClass: 'val-negative' },
-    { label: '胜率', display: `${(s.winRate * 100).toFixed(1)}%`, rawValue: 0, precision: 0, prefix: '', suffix: '', isNumber: false, colorClass: s.winRate >= 0.5 ? 'val-positive' : 'val-negative' },
+    { label: '胜率', display: `${formatPercent(s.winRate, 1)}%`, rawValue: 0, precision: 0, prefix: '', suffix: '', isNumber: false, colorClass: s.winRate >= 0.5 ? 'val-positive' : 'val-negative' },
   ]
 })
 
@@ -185,13 +186,13 @@ const equityLegendSecondary = '基准'
 const positiveColor = '#34C759'
 const negativeColor = '#E25C5C'
 
-function formatPercent(val: number): string { return `${val >= 0 ? '+' : ''}${(val * 100).toFixed(2)}%` }
-function formatPercentDisplay(val: number): string { return `${val >= 0 ? '+' : ''}${(val * 100).toFixed(2)}%` }
+function formatPercent(val: number): string { return `${val >= 0 ? '+' : ''}${formatPercent(val, 2)}%` }
+function formatPercentDisplay(val: number): string { return `${val >= 0 ? '+' : ''}${formatPercent(val, 2)}%` }
 function formatSymbol(symbol: string): string { return symbol.replace(/\.[A-Z]{2,4}$/, '') }
 function formatMoney(val: number | null, market: string): string {
   if (val === null) return '--'
   const currency = market === 'HK' ? 'HK$' : '¥'
-  return `${currency}${val.toFixed(2)}`
+  return `${currency}\${formatMoney(val, 2)}`
 }
 function formatPnl(val: number, market: string): string {
   const sign = val >= 0 ? '+' : ''
@@ -220,6 +221,10 @@ onMounted(async () => {
 
 onShow(() => {
   trackPageView('dashboard')
+})
+
+onPullDownRefresh(() => {
+  uni.stopPullDownRefresh()
 })
 </script>
 

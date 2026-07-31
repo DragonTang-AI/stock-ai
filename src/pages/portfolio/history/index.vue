@@ -72,6 +72,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { onPullDownRefresh } from '@dcloudio/uni-app'
 import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import Disclaimer from '@/components/compliance/Disclaimer.vue'
@@ -101,8 +102,8 @@ async function fetchHistory() {
     // TODO: 对接交易记录 API
     records.value = []
     stats.value = { totalTrades: 0, winRate: 0, totalPnl: 0 }
-  } catch {
-    // 忽略
+  } catch (e) {
+    console.error('[PortfolioHistory] loadRecords 失败', e);
   } finally {
     loading.value = false
   }
@@ -110,6 +111,11 @@ async function fetchHistory() {
 
 onMounted(() => {
   fetchHistory()
+})
+
+onPullDownRefresh(() => {
+  fetchHistory()
+  uni.stopPullDownRefresh()
 })
 </script>
 

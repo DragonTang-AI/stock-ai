@@ -26,6 +26,7 @@ echarts.use([BarChart, TooltipComponent, GridComponent, SVGRenderer])
 
 import { getThemeState, onThemeChange } from '@/utils/theme'
 import { getChartColors } from '@/utils/chart-theme'
+import { formatPercent } from '@/utils/format'
 
 export interface BarDataItem {
   label: string
@@ -74,7 +75,7 @@ function buildOption() {
       formatter(params: any) {
         const p = Array.isArray(params) ? params[0] : params
         const item = props.data[p.dataIndex]
-        const pct = item?.percentage !== undefined ? ` (${item.percentage > 0 ? '+' : ''}${item.percentage.toFixed(2)}%)` : ''
+        const pct = item?.percentage !== undefined ? ` (${item.percentage > 0 ? '+' : ''}\${formatPercent(item.percentage, 2)})` : ''
         return `${p.name}: ${p.value > 0 ? '+' : ''}${p.value.toLocaleString()}${pct}`
       },
     },
@@ -97,7 +98,7 @@ function buildOption() {
           formatter(params: any) {
             const item = props.data[params.dataIndex]
             return item?.percentage !== undefined
-              ? `${item.percentage > 0 ? '+' : ''}${item.percentage.toFixed(2)}%`
+              ? `${item.percentage > 0 ? '+' : ''}\${formatPercent(item.percentage, 2)}`
               : `${params.value > 0 ? '+' : ''}${params.value.toLocaleString()}`
           },
         },

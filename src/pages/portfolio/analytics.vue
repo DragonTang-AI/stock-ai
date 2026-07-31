@@ -38,31 +38,31 @@
         <view class="dash-item">
           <text class="dash-label">总收益率</text>
           <text class="dash-value" :class="dashboard.totalReturn >= 0 ? 'up' : 'down'">
-            {{ dashboard.totalReturn >= 0 ? '+' : '' }}{{ dashboard.totalReturn.toFixed(2) }}%
+            {{ formatPercent(dashboard.totalReturn, 2) }}
           </text>
         </view>
         <view class="dash-item">
           <text class="dash-label">年化收益</text>
           <text class="dash-value" :class="dashboard.annualizedReturn >= 0 ? 'up' : 'down'">
-            {{ dashboard.annualizedReturn >= 0 ? '+' : '' }}{{ dashboard.annualizedReturn.toFixed(2) }}%
+            {{ formatPercent(dashboard.annualizedReturn, 2) }}
           </text>
         </view>
         <view class="dash-item">
           <text class="dash-label">夏普比率</text>
-          <text class="dash-value neutral">{{ dashboard.sharpeRatio.toFixed(2) }}</text>
+          <text class="dash-value neutral">{{ formatMoney(dashboard.sharpeRatio, 2) }}</text>
         </view>
         <view class="dash-item">
           <text class="dash-label">最大回撤</text>
-          <text class="dash-value down">{{ dashboard.maxDrawdown.toFixed(2) }}%</text>
+          <text class="dash-value down">{{ formatPercent(dashboard.maxDrawdown, 2) }}</text>
         </view>
         <view class="dash-item">
           <text class="dash-label">胜率</text>
-          <text class="dash-value neutral">{{ dashboard.winRate.toFixed(1) }}%</text>
+          <text class="dash-value neutral">{{ formatPercent(dashboard.winRate, 1) }}</text>
         </view>
         <view class="dash-item" v-if="dashboard.beatBenchmark !== undefined">
           <text class="dash-label">超额收益</text>
           <text class="dash-value" :class="dashboard.beatBenchmark >= 0 ? 'up' : 'down'">
-            {{ dashboard.beatBenchmark >= 0 ? '+' : '' }}{{ dashboard.beatBenchmark.toFixed(2) }}%
+            {{ formatPercent(dashboard.beatBenchmark, 2) }}
           </text>
         </view>
       </view>
@@ -100,27 +100,27 @@
       <view class="stats-list">
         <view class="stat-row">
           <text class="stat-label">胜率</text>
-          <text class="stat-value neutral">{{ statistics.winRate.toFixed(1) }}%</text>
+          <text class="stat-value neutral">{{ formatPercent(statistics.winRate, 1) }}</text>
         </view>
         <view class="stat-row">
           <text class="stat-label">盈亏比</text>
-          <text class="stat-value neutral">{{ statistics.profitLossRatio.toFixed(2) }}</text>
+          <text class="stat-value neutral">{{ formatMoney(statistics.profitLossRatio, 2) }}</text>
         </view>
         <view class="stat-row">
           <text class="stat-label">最大单笔盈利</text>
-          <text class="stat-value up">+{{ statistics.maxSingleProfit.toFixed(2) }}</text>
+          <text class="stat-value up">+{{ formatMoney(statistics.maxSingleProfit, 2) }}</text>
         </view>
         <view class="stat-row">
           <text class="stat-label">最大单笔亏损</text>
-          <text class="stat-value down">{{ statistics.maxSingleLoss.toFixed(2) }}</text>
+          <text class="stat-value down">{{ formatMoney(statistics.maxSingleLoss, 2) }}</text>
         </view>
         <view class="stat-row">
           <text class="stat-label">夏普比率</text>
-          <text class="stat-value neutral">{{ statistics.sharpeRatio.toFixed(2) }}</text>
+          <text class="stat-value neutral">{{ formatMoney(statistics.sharpeRatio, 2) }}</text>
         </view>
         <view class="stat-row">
           <text class="stat-label">最大回撤</text>
-          <text class="stat-value down">{{ statistics.maxDrawdown.toFixed(2) }}%</text>
+          <text class="stat-value down">{{ formatPercent(statistics.maxDrawdown, 2) }}</text>
         </view>
       </view>
     </view>
@@ -133,7 +133,7 @@
           <view class="attr-header">
             <text class="attr-name">{{ item.label }}</text>
             <text class="attr-pct" :class="item.contribution >= 0 ? 'up' : 'down'">
-              {{ item.contribution >= 0 ? '+' : '' }}{{ item.contribution.toFixed(2) }}%
+              {{ formatPercent(item.contribution, 2) }}
             </text>
           </view>
           <view class="attr-bar-bg">
@@ -165,7 +165,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import LineChart from '@/components/charts/LineChart.vue'
 import PieChart from '@/components/charts/PieChart.vue'
 import Disclaimer from '@/components/compliance/Disclaimer.vue'
@@ -241,7 +241,8 @@ async function loadAnalytics() {
     equityCurve.value = curve
     assetOverview.value = overview
     positionDist.value = dist
-  } catch {
+  } catch (e) {
+    console.error('[PortfolioAnalytics] loadAnalytics 部分失败', e)
     /* handled individually */
   } finally {
     isLoading.value = false
@@ -257,11 +258,12 @@ async function switchPeriod(period: string) {
     ])
     equityCurve.value = curve
     attribution.value = attr
-  } catch { /* ignore */ }
+  } catch (e) { console.error('[Analytics] switchPeriod 失败', e); }
 }
 
 // 监听周期变化（LineChart v-model 驱动）
 import { watch } from 'vue'
+import { formatPercent } from '@/utils/format'
 watch(equityPeriod, (newVal, oldVal) => {
   if (newVal !== oldVal) switchPeriod(newVal)
 })

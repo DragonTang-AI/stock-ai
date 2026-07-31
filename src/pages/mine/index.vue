@@ -1,5 +1,10 @@
 <template>
   <view class="mine-page">
+    <!-- 骨架屏 -->
+    <SkeletonScreen v-if="isLoading" type="card" :count="4" />
+
+    <view v-else class="mine-content">
+    
     <!-- 用户信息卡片 -->
     <view class="user-card">
       <view class="user-info">
@@ -85,16 +90,19 @@
       <text>AI-Stock v0.1.0</text>
       <text class="disclaimer-mini">模拟收益仅供参考，不构成投资建议</text>
     </view>
+    </view>
   </view>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import SkeletonScreen from '@/components/common/SkeletonScreen.vue'
 import { useAuthStore } from '@/stores/auth'
 import { getCurrentUser } from '@/api/auth'
 import { fetchNotifications } from '@/api/notifications'
 import { getMyAgents } from '@/api/agent'
+import { useShowRefresh, touchRefreshKey } from '@/utils/refresh-cache'
 
 const authStore = useAuthStore()
 
@@ -125,19 +133,22 @@ onMounted(() => {
   fetchAgentCount()
 })
 
-// uni-app 页面生命周期
-onShow(() => {
-  fetchUserInfo()
-  fetchUnreadCount()
-  fetchAgentCount()
+onShow(async () => {
+  useShowRefresh('mine', async () => {
+    await Promise.all([
+      fetchUserInfo(),
+      fetchUnreadCount(),
+      fetchAgentCount(),
+    ])
+    isLoading.value = false
+  })
 })
-
 async function fetchUnreadCount() {
   try {
     const res = await fetchNotifications({ limit: 1, offset: 0 })
     unreadCount.value = res.unread_count
-  } catch {
-    // 静默失败
+  } catch (e) {
+    console.error('[Mine] fetchUnreadCount 失败', e)
   }
 }
 
@@ -145,8 +156,8 @@ async function fetchAgentCount() {
   try {
     const agents = await getMyAgents()
     agentCount.value = agents.length
-  } catch {
-    // 静默失败
+  } catch (e) {
+    console.error('[Mine] fetchAgentCount 失败', e)
   }
 }
 
