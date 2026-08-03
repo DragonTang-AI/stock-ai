@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from datetime import datetime, time as dt_time
+from datetime import datetime, time as dt_time, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import and_, select, func
@@ -104,8 +104,8 @@ async def _process_single_hire(hire: dict) -> dict[str, Any]:
                 )
             )
             last_time = result.scalar()
-            now = datetime.utcnow()
-            if last_time and (now - last_time.replace(tzinfo=None)).total_seconds() < MIN_HIRE_INTERVAL:
+            now = datetime.now(timezone.utc)
+            if last_time and (now - last_time).total_seconds() < MIN_HIRE_INTERVAL:
                 return {
                     "hire_id": hire_id,
                     "trader_name": trader_name,
@@ -195,12 +195,37 @@ async def _process_single_hire(hire: dict) -> dict[str, Any]:
             }
 
 
+async def _expire_stale_pending():
+    """将超过 24h 的 pending 信号自动标记为 expired，防止无限堆积"""
+    try:
+        async with get_db_context() as db:
+            from sqlalchemy import update as sa_update
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+            result = await db.execute(
+                sa_update(AgentSignal)
+                .where(
+                    AgentSignal.exec_status == "pending",
+                    AgentSignal.created_at < cutoff,
+                )
+                .values(exec_status="expired", updated_at=datetime.now(timezone.utc))
+            )
+            await db.commit()
+            if result.rowcount:
+                logger.info("自动过期 %d 条超过24h的pending信号", result.rowcount)
+    except Exception as e:
+        logger.error("过期清理失败: %s", str(e))
+
+
 async def _run_one_cycle():
     """执行一次完整的调度周期"""
     global _scheduler_status
 
     _scheduler_status["current_phase"] = "running"
     start_time = time.time()
+
+    # 过期清理：超过 24h 的 pending 信号自动标 expired（不依赖交易时段）
+    await _expire_stale_pending()
+
     # 非交易时段跳过
     if not is_market_hours():
         logger.info("非交易时段，跳过本次调度")
@@ -215,7 +240,7 @@ async def _run_one_cycle():
 
         if not hires:
             logger.info("调度: 无活跃雇佣关系")
-            _scheduler_status["last_run_at"] = datetime.utcnow().isoformat()
+            _scheduler_status["last_run_at"] = datetime.now(timezone.utc).isoformat()
             _scheduler_status["last_run_result"] = {"total": 0, "items": []}
             _scheduler_status["current_phase"] = "idle"
             return
@@ -249,7 +274,7 @@ async def _run_one_cycle():
         )
 
         _scheduler_status.update({
-            "last_run_at": datetime.utcnow().isoformat(),
+            "last_run_at": datetime.now(timezone.utc).isoformat(),
             "last_run_result": {
                 "total_hires": len(hires),
                 "total_signals": total_signals,

@@ -7,7 +7,7 @@ auto_executor.py — 信号自动执行引擎
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import and_, select
@@ -115,7 +115,7 @@ async def _auto_execute(
             await db.execute(
                 sa_update(AgentSignal)
                 .where(AgentSignal.id.in_(exec_ids))
-                .values(exec_status="auto_executed", updated_at=datetime.utcnow())
+                .values(exec_status="auto_executed", updated_at=datetime.now(timezone.utc))
             )
 
     pending = [s for s in signals if s not in executable]
@@ -152,7 +152,7 @@ async def _execute_single_signal(
         user_stub = type("User", (), {"id": user_id})()
         # 构造与 hosted_engine 一致的 signal_id 格式，保证落款可正确关联交易员
         sig_id = (
-            f"sig_{user_id}_{trading_symbol}_{int(datetime.now().timestamp())}"
+            f"sig_{user_id}_{trading_symbol}_{int(datetime.now(timezone.utc).timestamp())}"
             if signal.get("id") else None
         )
         order_result = await trading_service.place_order(
@@ -172,7 +172,7 @@ async def _execute_single_signal(
             s = await db.get(AgentSignal, signal["id"])
             if s:
                 s.exec_status = "auto_executed"
-                s.updated_at = datetime.utcnow()
+                s.updated_at = datetime.now(timezone.utc)
 
         await db.commit()
         return {
@@ -188,7 +188,7 @@ async def _execute_single_signal(
             s = await db.get(AgentSignal, signal["id"])
             if s:
                 s.exec_status = "failed"
-                s.updated_at = datetime.utcnow()
+                s.updated_at = datetime.now(timezone.utc)
                 await db.commit()
         return {"success": False, "error": str(e.message)}
     except Exception as e:
@@ -197,7 +197,7 @@ async def _execute_single_signal(
             s = await db.get(AgentSignal, signal["id"])
             if s:
                 s.exec_status = "failed"
-                s.updated_at = datetime.utcnow()
+                s.updated_at = datetime.now(timezone.utc)
                 await db.commit()
         return {"success": False, "error": str(e)}
 
@@ -219,7 +219,7 @@ async def _simulate_execution(
         s = await db.get(AgentSignal, signal["id"])
         if s:
             s.exec_status = "failed"
-            s.updated_at = datetime.utcnow()
+            s.updated_at = datetime.now(timezone.utc)
 
     await db.commit()
 

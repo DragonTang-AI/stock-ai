@@ -231,7 +231,7 @@ async def place_order(db: AsyncSession, user: User, req: OrderRequest, fallback_
                 status_code=400,
             )
     else:  # sell
-        # T+1 校验：检查持仓可用数量
+        # 持仓检查：无持仓不可卖；模拟盘不启用 T+1（买入时 available 即赋满），故不再校验 available
         pos_stmt = select(Position).where(
             Position.user_id == user.id,
             Position.symbol == symbol,
@@ -240,10 +240,10 @@ async def place_order(db: AsyncSession, user: User, req: OrderRequest, fallback_
         position = pos_result.scalar_one_or_none()
         if position is None:
             raise AppException(code="NO_POSITION", message=f"未持有 {symbol}，无法卖出", status_code=400)
-        if position.available < quantity:
+        if position.quantity < quantity:
             raise AppException(
-                code="INSUFFICIENT_AVAILABLE",
-                message=f"可卖数量不足：需要 {quantity}，可用 {position.available}（T+1 限制：今日买入的股票下一交易日才能卖）",
+                code="INSUFFICIENT_POSITION",
+                message=f"持仓不足：需要卖出 {quantity}，持有 {position.quantity}",
                 status_code=400,
             )
 

@@ -116,15 +116,9 @@ async def _log_hosted(
 ):
     """记录托管日志"""
     reason_escaped = reason.replace("'", "''")[:500]
-    # Convert string signal_id to UUID
-    sid_uuid = None
-    if signal_id:
-        try:
-            import uuid as _uuid
-            sid_uuid = str(_uuid.UUID(signal_id))
-        except (ValueError, TypeError):
-            sid_uuid = str(_uuid.uuid5(_uuid.NAMESPACE_DNS, signal_id))
-    
+    # signal_id 直接存原始字符串（sig_xxx / sell_xxx），不再 uuid5 哈希，保证与 orders.signal_id 可关联
+    sid_raw = signal_id if signal_id else None
+
     await db.execute(
         _text(
             "INSERT INTO public.hosted_logs "
@@ -132,7 +126,7 @@ async def _log_hosted(
             "VALUES (:uid, :sid, :oid, :act, :sym, :tp, :qty, :reason, :st)"
         ),
         {
-            "uid": user_id, "sid": sid_uuid, "oid": order_id,
+            "uid": user_id, "sid": sid_raw, "oid": order_id,
             "act": action, "sym": symbol, "tp": target_price,
             "qty": qty, "reason": reason_escaped, "st": status,
         },

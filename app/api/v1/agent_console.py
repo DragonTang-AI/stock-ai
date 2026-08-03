@@ -236,7 +236,7 @@ async def confirm_signal(
             price=float(signal.price),
             order_type="market",
         )
-        sig_id = f"sig_{current_user.id}_{signal.symbol}_{int(datetime.now().timestamp())}"
+        sig_id = f"sig_{current_user.id}_{signal.symbol}_{int(datetime.now(timezone.utc).timestamp())}"
         order_result = await trading_service.place_order(
             db=db,
             user=current_user,
@@ -253,14 +253,14 @@ async def confirm_signal(
 
     if trading_error:
         signal.exec_status = "failed"
-        signal.updated_at = datetime.now()
+        signal.updated_at = datetime.now(timezone.utc)
         await db.flush()
         logger.warning(f"确认信号失败 user_id={current_user.id} signal_id={signal_id} symbol={signal.symbol} action={signal.action} error={trading_error}")
         await _update_trader_stats(db, signal.trader_id)
         return {"success": False, "signal_id": signal_id, "message": "下单失败，信号已标记为失败", "error": trading_error}
 
     signal.exec_status = "confirmed"
-    signal.updated_at = datetime.now()
+    signal.updated_at = datetime.now(timezone.utc)
     await db.flush()
     logger.info(f"确认信号成功 user_id={current_user.id} signal_id={signal_id} symbol={signal.symbol} action={signal.action} qty={lot_qty} order_ok={order_result is not None}")
 
@@ -399,7 +399,7 @@ async def ignore_signal(
         raise HTTPException(status_code=400, detail=f"信号状态为 {signal.exec_status}，无法忽略")
 
     signal.exec_status = "ignored"
-    signal.updated_at = datetime.now()
+    signal.updated_at = datetime.now(timezone.utc)
     logger.info(f"忽略信号 user_id={current_user.id} signal_id={signal_id}")
     return {"success": True, "signal_id": signal_id, "message": "信号已忽略"}
 
