@@ -244,8 +244,8 @@ class HostedEngine:
                     symbol=symbol, side="sell", quantity=sell_qty, order_type="market",
                 )
                 fallback = float(position.market_price) if position.market_price > 0 else None
-                order_result = await place_order(db, user, order_req, fallback_price=fallback)
                 signal_id = f"sig_{user_id}_{symbol}_{int(datetime.now().timestamp())}"
+                order_result = await place_order(db, user, order_req, fallback_price=fallback, signal_id=signal_id)
 
                 self._add_trade_log(
                     user_id,
@@ -387,8 +387,8 @@ class HostedEngine:
             order_req = OrderRequest(
                 symbol=target_symbol, side="buy", quantity=quantity, order_type="market",
             )
-            order_result = await place_order(db, user, order_req)
             signal_id = f"sig_{user_id}_{target_symbol}_{int(datetime.now().timestamp())}"
+            order_result = await place_order(db, user, order_req, signal_id=signal_id)
 
             self._add_trade_log(
                 user_id,
