@@ -241,6 +241,7 @@ async def confirm_signal(
             user=current_user,
             req=order_req,
             fallback_price=float(signal.price),
+            signal_id=str(signal.id),
         )
     except AppException as e:
         trading_error = {"code": e.code, "message": e.message}
