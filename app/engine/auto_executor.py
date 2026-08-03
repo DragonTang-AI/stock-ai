@@ -137,7 +137,8 @@ async def _execute_single_signal(
 ) -> dict[str, Any]:
     """执行单条信号：下单 + 更新持仓"""
     trading_symbol = _normalize_to_trading_symbol(signal["symbol"])
-    lot_qty = _round_to_lot(signal.get("quantity", 100))
+    qty = signal.get("quantity", 100)
+    lot_qty = qty if signal["action"] == "sell" else _round_to_lot(qty)
 
     try:
         order_req = OrderRequest(
