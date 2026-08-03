@@ -370,6 +370,7 @@ async def run_hosted_signal_processor():
                             action="BUY",
                             confidence=signal.confidence,
                             target_price=signal.target_price or 0.0,
+                            quantity=qty,
                             reasoning=signal.reasoning or f"委员会选股置信度{signal.confidence}",
                         )
                         buy_executed += 1

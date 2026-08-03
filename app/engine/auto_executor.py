@@ -171,7 +171,7 @@ async def _execute_single_signal(
         if signal.get("id"):
             s = await db.get(AgentSignal, signal["id"])
             if s:
-                s.exec_status = "failed"
+                s.exec_status = "auto_executed"
                 s.updated_at = datetime.utcnow()
 
         await db.commit()

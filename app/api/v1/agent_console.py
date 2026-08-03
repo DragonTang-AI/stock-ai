@@ -236,12 +236,13 @@ async def confirm_signal(
             price=float(signal.price),
             order_type="market",
         )
+        sig_id = f"sig_{current_user.id}_{signal.symbol}_{int(datetime.now().timestamp())}"
         order_result = await trading_service.place_order(
             db=db,
             user=current_user,
             req=order_req,
             fallback_price=float(signal.price),
-            signal_id=str(signal.id),
+            signal_id=sig_id,
         )
     except AppException as e:
         trading_error = {"code": e.code, "message": e.message}
@@ -250,10 +251,18 @@ async def confirm_signal(
     except Exception as e:
         trading_error = {"code": "TRADING_FAILED", "message": str(e)}
 
+    if trading_error:
+        signal.exec_status = "failed"
+        signal.updated_at = datetime.now()
+        await db.flush()
+        logger.warning(f"确认信号失败 user_id={current_user.id} signal_id={signal_id} symbol={signal.symbol} action={signal.action} error={trading_error}")
+        await _update_trader_stats(db, signal.trader_id)
+        return {"success": False, "signal_id": signal_id, "message": "下单失败，信号已标记为失败", "error": trading_error}
+
     signal.exec_status = "confirmed"
     signal.updated_at = datetime.now()
     await db.flush()
-    logger.info(f"确认信号成功 user_id={current_user.id} signal_id={signal_id} symbol={signal.symbol} action={signal.action} qty={lot_qty} order_ok={order_result is not None} error={trading_error}")
+    logger.info(f"确认信号成功 user_id={current_user.id} signal_id={signal_id} symbol={signal.symbol} action={signal.action} qty={lot_qty} order_ok={order_result is not None}")
 
     if order_result is not None:
         actual_price = order_result.filled_price
@@ -299,50 +308,13 @@ async def confirm_signal(
                     portfolio.market_value = actual_price * portfolio.quantity
                     portfolio.unrealized_pnl = portfolio.market_value - float(portfolio.avg_cost) * portfolio.quantity
     else:
-        pf_result = await db.execute(
-            select(AgentPortfolio).where(
-                and_(
-                    AgentPortfolio.hire_id == signal.hire_id,
-                    AgentPortfolio.symbol == signal.symbol,
-                )
-            )
-        )
-        portfolio = pf_result.scalar_one_or_none()
-        if signal.action == "buy":
-            if portfolio:
-                total_cost = float(portfolio.avg_cost) * portfolio.quantity + float(signal.price) * signal.quantity
-                portfolio.quantity += signal.quantity
-                portfolio.avg_cost = total_cost / portfolio.quantity
-            else:
-                portfolio = AgentPortfolio(
-                    hire_id=signal.hire_id,
-                    trader_id=signal.trader_id,
-                    user_id=signal.user_id,
-                    symbol=signal.symbol,
-                    symbol_name=signal.symbol_name,
-                    quantity=signal.quantity,
-                    avg_cost=signal.price,
-                    current_price=signal.price,
-                    market_value=float(signal.price) * signal.quantity,
-                    unrealized_pnl=0,
-                )
-                db.add(portfolio)
-        elif signal.action == "sell" and portfolio:
-            if portfolio.quantity >= signal.quantity:
-                portfolio.quantity -= signal.quantity
-                if portfolio.quantity == 0:
-                    await db.delete(portfolio)
-                else:
-                    portfolio.market_value = float(portfolio.current_price or signal.price) * portfolio.quantity
-                    portfolio.unrealized_pnl = portfolio.market_value - float(portfolio.avg_cost) * portfolio.quantity
+        logger.warning(f"确认信号无成交结果 user_id={current_user.id} signal_id={signal_id} symbol={signal.symbol}，不更新纸面持仓")
 
     response_data = {"success": True, "signal_id": signal_id, "message": "已确认执行"}
     if order_result is not None:
         response_data["order_id"] = order_result.id
         response_data["filled_price"] = order_result.filled_price
         response_data["filled_quantity"] = order_result.filled_quantity
-    if trading_error:
-        response_data["trading_warning"] = trading_error
     # 更新交易员统计数据
     await _update_trader_stats(db, signal.trader_id)
 
