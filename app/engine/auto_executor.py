@@ -138,7 +138,7 @@ async def _execute_single_signal(
     """执行单条信号：下单 + 更新持仓"""
     trading_symbol = _normalize_to_trading_symbol(signal["symbol"])
     qty = signal.get("quantity", 100)
-    lot_qty = qty if signal["action"] == "sell" else _round_to_lot(qty)
+    lot_qty = qty  # 买入卖出统一使用信号原始数量，不再强制取整
 
     try:
         order_req = OrderRequest(

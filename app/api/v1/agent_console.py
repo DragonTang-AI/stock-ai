@@ -224,7 +224,7 @@ async def confirm_signal(
         signal.quantity = req.quantity
 
     trading_symbol = _normalize_to_trading_symbol(signal.symbol)
-    lot_qty = signal.quantity if signal.action == "sell" else _round_to_lot(signal.quantity)
+    lot_qty = signal.quantity  # 买入卖出统一使用信号原始数量，不再强制取整
     order_result = None
     trading_error = None
 
