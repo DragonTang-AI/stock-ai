@@ -18,6 +18,7 @@ from sqlalchemy import select, func, and_
 
 from app.core.database import get_session_factory
 from app.models.user import User
+from app.models.agent import UserAgent
 from app.models.trading import Position, Trade
 from app.services.advisor import diagnose_portfolio
 from app.services.trading import place_order, get_or_create_account
@@ -139,6 +140,21 @@ class HostedEngine:
                 user = result.scalar_one_or_none()
                 if user is None:
                     self._sessions.pop(user_id, None)
+                    return
+
+                # P1-9: 若该用户存在 active 的 full_managed hire，由 scheduler_v2 统一调度，跳过双调度
+                hire_stmt = (
+                    select(UserAgent.id)
+                    .where(UserAgent.user_id == user_id)
+                    .where(UserAgent.status == "active")
+                    .where(UserAgent.management_mode == "full_managed")
+                    .limit(1)
+                )
+                hire_result = await db.execute(hire_stmt)
+                if hire_result.scalar_one_or_none() is not None:
+                    logger.info(
+                        f"HostedEngine _scan_user({user_id}) 跳过：存在 full_managed 托管，由 scheduler_v2 调度"
+                    )
                     return
 
                 diagnosis = await diagnose_portfolio(db, user)
