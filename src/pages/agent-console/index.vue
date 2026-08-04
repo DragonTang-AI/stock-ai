@@ -404,7 +404,9 @@ const formatTime = (t: string | null) => {
 const formatRelative = (t: string | null) => {
   if (!t) return ''
   try {
-    const d = new Date(t.replace(' ', 'T') + (t.includes('Z') ? '' : 'Z'))
+    // P2-14: 直接解析 ISO 字符串（支持 +00:00 与 Z），不再手动补 Z，避免 Invalid Date
+    const d = new Date(t.replace(' ', 'T'))
+    if (isNaN(d.getTime())) return formatTime(t)
     const now = Date.now()
     const diff = now - d.getTime()
     if (diff < 60000) return '刚刚'
