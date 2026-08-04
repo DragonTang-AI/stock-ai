@@ -47,6 +47,10 @@ PER_HIRE_TIMEOUT = 180
 # 同一 hire 最小间隔（秒）—— 避免短时间内重复生成
 MIN_HIRE_INTERVAL = 3 * 60
 
+# 并发控制：同时最多处理 N 个 hire，防止并行打爆 LLM API 导致全员超时
+MAX_CONCURRENT_HIRES = 4
+_hire_semaphore = asyncio.Semaphore(MAX_CONCURRENT_HIRES)
+
 # ── 调度器状态 ──
 
 _scheduler_running = False
@@ -87,6 +91,12 @@ async def _get_active_hires(db: AsyncSession) -> list[dict]:
 
 
 async def _process_single_hire(hire: dict) -> dict[str, Any]:
+    """并发受限入口：同时最多 MAX_CONCURRENT_HIRES 个 hire 在处理"""
+    async with _hire_semaphore:
+        return await _process_single_hire_impl(hire)
+
+
+async def _process_single_hire_impl(hire: dict) -> dict[str, Any]:
     """
     处理单个活跃雇佣关系：生成信号 + 自动执行
     使用独立的 DB session，避免并发冲突
