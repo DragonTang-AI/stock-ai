@@ -35,10 +35,6 @@ def _normalize_to_trading_symbol(raw_symbol: str) -> str:
     return s.upper()
 
 
-def _round_to_lot(quantity: int) -> int:
-    return max(100, (quantity // 100) * 100)
-
-
 # 全托管模式下自动执行的置信度阈值
 AUTO_EXEC_CONFIDENCE_THRESHOLD = 50
 # 每次最多自动执行的信号数
@@ -200,28 +196,6 @@ async def _execute_single_signal(
                 s.updated_at = datetime.now(timezone.utc)
                 await db.commit()
         return {"success": False, "error": str(e)}
-
-
-async def _simulate_execution(
-    db: AsyncSession,
-    hire_id: int,
-    user_id: int,
-    signal: dict,
-):
-    """模拟执行：直接更新持仓"""
-    price = float(signal.get("price", 0))
-    quantity = signal.get("quantity", 100)
-    trader_id = signal.get("trader_id", "")
-
-    await _update_portfolio(db, hire_id, user_id, signal, trader_id, price, quantity)
-
-    if signal.get("id"):
-        s = await db.get(AgentSignal, signal["id"])
-        if s:
-            s.exec_status = "failed"
-            s.updated_at = datetime.now(timezone.utc)
-
-    await db.commit()
 
 
 async def _update_portfolio(

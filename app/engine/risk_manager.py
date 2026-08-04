@@ -9,13 +9,18 @@ risk_manager.py — 风控规则
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone, timedelta
 from typing import Any
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import AgentPortfolio, AgentSignal
+
+
+def _beijing_today() -> date:
+    """P2-15: 显式按北京时间计算"今日"，避免与 PG UTC 边界错位"""
+    return (datetime.now(timezone.utc) + timedelta(hours=8)).date()
 
 
 # ── 风控参数 ──
@@ -51,7 +56,7 @@ async def check_risk(
     passed = []
     rejected = []
 
-    today = date.today()
+    today = _beijing_today()
 
     # 1. 检查单日亏损熔断
     circuit_broken = await _check_daily_loss_circuit(db, hire_id, today)
@@ -181,12 +186,16 @@ async def _get_today_bought_symbols(
 ) -> set[str]:
     """获取今日买入的股票代码集合（T+1 规则）"""
     try:
+        # P2-15: 用北京时间对应的 UTC 时间范围过滤，避免 func.date 与 UTC 边界错位
+        start_utc = datetime(today.year, today.month, today.day, tzinfo=timezone.utc) - timedelta(hours=8)
+        end_utc = start_utc + timedelta(days=1)
         result = await db.execute(
             select(AgentSignal.symbol).where(
                 and_(
                     AgentSignal.hire_id == hire_id,
                     AgentSignal.action == "buy",
-                    func.date(AgentSignal.created_at) == today,
+                    AgentSignal.created_at >= start_utc,
+                    AgentSignal.created_at < end_utc,
                     AgentSignal.exec_status.in_(["confirmed", "auto_executed"]),
                 )
             ).distinct()

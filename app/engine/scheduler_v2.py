@@ -111,7 +111,7 @@ async def _process_single_hire(hire: dict) -> dict[str, Any]:
                     "trader_name": trader_name,
                     "mode": management_mode,
                     "status": "skipped",
-                    "reason": f"距上次生成仅 {(now - last_time.replace(tzinfo=None)).total_seconds():.0f}s",
+                    "reason": f"距上次生成仅 {(now - last_time).total_seconds():.0f}s",
                 }
 
             # 生成信号（带超时）
@@ -127,10 +127,11 @@ async def _process_single_hire(hire: dict) -> dict[str, Any]:
             signals = gen_result.get("signals", [])
             source = gen_result.get("source", "unknown")
             rejected = gen_result.get("rejected_count", 0)
+            demo_mode = gen_result.get("demo_mode", False)
 
             logger.info(
-                "调度 #%d [%s] %s: 生成 %d 条信号 (source=%s, rejected=%d)",
-                hire_id, trader_name, management_mode, len(signals), source, rejected,
+                "调度 #%d [%s] %s: 生成 %d 条信号 (source=%s, rejected=%d, demo=%s)",
+                hire_id, trader_name, management_mode, len(signals), source, rejected, demo_mode,
             )
 
             if not signals:
@@ -141,6 +142,25 @@ async def _process_single_hire(hire: dict) -> dict[str, Any]:
                     "source": source,
                     "signals_count": 0,
                     "status": "no_signals",
+                }
+
+            # P2-11: mock 演示模式禁止 full_managed 自动执行，只保留为 pending 供前端展示
+            if management_mode == "full_managed" and demo_mode:
+                logger.warning(
+                    "调度 #%d [%s] full_managed 收到演示模式信号，禁止自动下单（source=mock）",
+                    hire_id, trader_name,
+                )
+                return {
+                    "hire_id": hire_id,
+                    "trader_name": trader_name,
+                    "mode": management_mode,
+                    "source": source,
+                    "demo_mode": True,
+                    "signals_count": len(signals),
+                    "executed_count": 0,
+                    "pending_count": len(signals),
+                    "failed_count": 0,
+                    "status": "demo_mode_skipped",
                 }
 
             # 自动执行
@@ -195,6 +215,28 @@ async def _process_single_hire(hire: dict) -> dict[str, Any]:
             }
 
 
+async def _expire_stale_hires():
+    """P2-13: 将已到期的 active hire 自动标为 expired，停止调度"""
+    try:
+        async with get_db_context() as db:
+            from sqlalchemy import update as sa_update
+            now = datetime.now(timezone.utc)
+            result = await db.execute(
+                sa_update(UserAgent)
+                .where(
+                    UserAgent.status == "active",
+                    UserAgent.expires_at.is_not(None),
+                    UserAgent.expires_at < now,
+                )
+                .values(status="expired", updated_at=now)
+            )
+            await db.commit()
+            if result.rowcount:
+                logger.info("自动过期 %d 个已到期雇佣关系", result.rowcount)
+    except Exception as e:
+        logger.error("到期清理失败: %s", str(e))
+
+
 async def _expire_stale_pending():
     """将超过 24h 的 pending 信号自动标记为 expired，防止无限堆积"""
     try:
@@ -223,6 +265,9 @@ async def _run_one_cycle():
     _scheduler_status["current_phase"] = "running"
     start_time = time.time()
 
+    # 到期清理：自动过期到期的雇佣关系（不依赖交易时段）
+    await _expire_stale_hires()
+
     # 过期清理：超过 24h 的 pending 信号自动标 expired（不依赖交易时段）
     await _expire_stale_pending()
 
@@ -240,7 +285,7 @@ async def _run_one_cycle():
 
         if not hires:
             logger.info("调度: 无活跃雇佣关系")
-            _scheduler_status["last_run_at"] = datetime.now(timezone.utc).isoformat()
+            _scheduler_status["last_run_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
             _scheduler_status["last_run_result"] = {"total": 0, "items": []}
             _scheduler_status["current_phase"] = "idle"
             return
@@ -274,7 +319,7 @@ async def _run_one_cycle():
         )
 
         _scheduler_status.update({
-            "last_run_at": datetime.now(timezone.utc).isoformat(),
+            "last_run_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "last_run_result": {
                 "total_hires": len(hires),
                 "total_signals": total_signals,

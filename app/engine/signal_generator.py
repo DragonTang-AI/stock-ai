@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any
 
 from sqlalchemy import and_, select
@@ -94,20 +94,22 @@ async def generate_signals(
     tickers = [s["symbol"] for s in stock_list[:5]]   # 最多分析 5 只（Yahoo Finance 限流）
     ticker_map = {s["symbol"]: s["name"] for s in stock_list}
 
+    # P2-15: 风控总资金从 hire.allocated_capital 读取，缺省 500000
+    total_capital = float(hire.allocated_capital) if hire.allocated_capital else 500000
+
     # 4. 判断使用真实引擎还是 mock
     use_real = force_real or await hedge_fund_client.is_available()
 
-    print(f'[DEBUG] use_real={use_real} tickers={tickers}', flush=True)
-    print(f"[DEBUG] use_real={use_real} tickers={tickers}", flush=True)
+    logger.info("信号生成 use_real=%s tickers=%s", use_real, tickers)
     if use_real:
         logger.info("使用 ai-hedge-fund 真实引擎，策略=%s agents=%s", strategy, agents)
         return await _generate_real_signals(
-            db, hire_id, user_id, trader.id, tickers, agents, ticker_map
+            db, hire_id, user_id, trader.id, tickers, agents, ticker_map, total_capital
         )
     else:
-        logger.info("使用 mock 模拟信号，策略=%s", strategy)
+        logger.info("使用 mock 模拟信号（演示模式），策略=%s", strategy)
         return await _generate_mock_signals(
-            db, hire_id, user_id, trader.id, tickers, ticker_map
+            db, hire_id, user_id, trader.id, tickers, ticker_map, total_capital
         )
 
 
@@ -119,6 +121,7 @@ async def _generate_real_signals(
     tickers: list[str],
     agents: list[str],
     ticker_map: dict[str, str],
+    total_capital: float = 500000,
 ) -> dict[str, Any]:
     """使用 ai-hedge-fund 真实引擎生成信号"""
     errors = []
@@ -133,13 +136,13 @@ async def _generate_real_signals(
         if not result["success"]:
             # 真实引擎失败，fallback 到 mock
             logger.warning("ai-hedge-fund 分析失败: %s，切换到 mock", result.get("error"))
-            return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map)
+            return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map, total_capital)
 
         decisions = result.get("decisions", {})
         logger.info("DEBUG decisions type=%s len=%s value=%s", type(decisions).__name__, len(decisions) if hasattr(decisions, "__len__") else "N/A", str(decisions)[:500])
         if not decisions:
             logger.info("ai-hedge-fund 未产生交易决策，切换 mock")
-            return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map)
+            return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map, total_capital)
 
         # 解析 decisions → 信号
         # decisions 格式：{"ticker": {"action": "buy", "quantity": 100, ...}, ...}
@@ -160,7 +163,7 @@ async def _generate_real_signals(
 
         logger.info("DEBUG candidate_signals count=%s", len(candidate_signals))
         if not candidate_signals:
-            return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map)
+            return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map, total_capital)
 
         # 补充实时价格
         prices = await market_data.get_batch_prices([s["symbol"] for s in candidate_signals])
@@ -168,8 +171,8 @@ async def _generate_real_signals(
             if sig["symbol"] in prices:
                 sig["price"] = prices[sig["symbol"]]["price"]
 
-        # 风控过滤
-        passed, rejected = await risk_manager.check_risk(db, hire_id, candidate_signals, total_capital=500000)
+        # 风控过滤（P2-15: total_capital 从 hire 配置读取）
+        passed, rejected = await risk_manager.check_risk(db, hire_id, candidate_signals, total_capital=total_capital)
 
         # 写入信号
         today = date.today()
@@ -222,7 +225,7 @@ async def _generate_real_signals(
 
     except Exception as e:
         logger.exception("真实引擎信号生成异常")
-        return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map)
+        return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map, total_capital)
 
 
 async def _generate_mock_signals(
@@ -232,12 +235,11 @@ async def _generate_mock_signals(
     trader_id: str,
     tickers: list[str],
     ticker_map: dict[str, str],
+    total_capital: float = 500000,
 ) -> dict[str, Any]:
-    """使用模拟信号（Phase 2 兼容）"""
+    """使用模拟信号（Phase 2 兼容，P2-11: 标记为演示模式，禁止 full_managed 自动执行）"""
     count = random.randint(1, 3)
     num_stocks = min(count, len(tickers))
-    print(f"[MOCK] tickers={tickers} num_stocks={num_stocks}", flush=True)
-    print(f'[MOCK] tickers={tickers}', flush=True)
     if num_stocks == 0:
         return {"signals": [], "source": "mock", "rejected_count": 0, "error": None}
 
@@ -275,12 +277,13 @@ async def _generate_mock_signals(
     except Exception:
         pass
 
-    # 风控过滤
-    passed, rejected = await risk_manager.check_risk(db, hire_id, candidate_signals, total_capital=500000)
+    # 风控过滤（P2-15: total_capital 从 hire 配置读取）
+    passed, rejected = await risk_manager.check_risk(db, hire_id, candidate_signals, total_capital=total_capital)
 
     # 写入信号
     saved_orm = []
     for sig in passed:
+        # P2-11: mock 演示模式信号强制 pending，禁止 full_managed 自动执行
         db_signal = AgentSignal(
             hire_id=hire_id,
             trader_id=trader_id,
@@ -292,7 +295,7 @@ async def _generate_mock_signals(
             quantity=sig["quantity"],
             confidence=sig["confidence"],
             reasoning=sig.get("reasoning", ""),
-            exec_status="pending",  # advisory 默认 pending；full_managed 在端点层自动执行
+            exec_status="pending",  # mock 演示模式始终 pending；advisory 前端可确认，full_managed 由 auto_executor 拦截
             created_at=datetime.now(timezone.utc),
         )
         db.add(db_signal)
@@ -322,6 +325,7 @@ async def _generate_mock_signals(
     return {
         "signals": saved_signals,
         "source": "mock",
+        "demo_mode": True,
         "rejected_count": len(rejected),
         "error": None,
     }

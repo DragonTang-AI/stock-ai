@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from app.core.database import get_db
 from app.models.user import User
-from app.models.agent import AgentTrader, UserAgent, AgentPerformance
+from app.models.agent import AgentTrader, UserAgent, AgentPerformance, AgentPortfolio
 from app.models.points import UserPoints, PointsTransaction
 from app.schemas.agent import (
     AgentTraderResponse,
@@ -244,9 +244,9 @@ async def hire_agent(
     )
     db.add(tx)
 
-    # 创建 user_agent
-    from datetime import datetime, timedelta
-    expires_at = datetime.now() + timedelta(days=30)
+    # 创建 user_agent（P2-13: expires_at 使用 aware UTC，避免 8h 偏移）
+    from datetime import datetime, timedelta, timezone
+    expires_at = datetime.now(timezone.utc) + timedelta(days=30)
 
     ua = UserAgent(
         user_id=current_user.id,
@@ -276,20 +276,35 @@ async def list_my_agents(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """获取我雇佣的交易员列表"""
+    """获取我雇佣的交易员列表（P2-17: join 一次取回 AgentTrader，消除 N+1）"""
     q = (
-        select(UserAgent)
+        select(UserAgent, AgentTrader)
+        .outerjoin(AgentTrader, AgentTrader.id == UserAgent.agent_id)
         .where(UserAgent.user_id == current_user.id)
         .order_by(UserAgent.hired_at.desc())
     )
-    rows = (await db.execute(q)).scalars().all()
+    rows = (await db.execute(q)).all()
+
+    # P2-12: 实时计算 hire 维度 current_pnl（agent_portfolios 未实现盈亏汇总）
+    hire_ids = [ua.id for ua, _ in rows]
+    pnl_by_hire: dict[int, float] = {}
+    if hire_ids:
+        from sqlalchemy import func as sqfunc
+        pnl_rows = await db.execute(
+            select(AgentPortfolio.hire_id, sqfunc.coalesce(sqfunc.sum(AgentPortfolio.unrealized_pnl), 0))
+            .where(AgentPortfolio.hire_id.in_(hire_ids))
+            .group_by(AgentPortfolio.hire_id)
+        )
+        pnl_by_hire = {hid: float(pnl) for hid, pnl in pnl_rows.all()}
+        # 回写 UserAgent.current_pnl
+        for ua, _ in rows:
+            calc = pnl_by_hire.get(ua.id, 0.0)
+            if ua.current_pnl is None or abs(float(ua.current_pnl) - calc) > 0.01:
+                ua.current_pnl = calc
+        await db.commit()
 
     items = []
-    for ua in rows:
-        agent_result = await db.execute(
-            select(AgentTrader).where(AgentTrader.id == ua.agent_id)
-        )
-        agent = agent_result.scalar_one_or_none()
+    for ua, agent in rows:
         items.append(UserAgentResponse(
             id=ua.id,
             agent_id=ua.agent_id,
@@ -297,7 +312,7 @@ async def list_my_agents(
             status=ua.status,
             management_mode=ua.management_mode,
             allocated_capital=float(ua.allocated_capital) if ua.allocated_capital else None,
-            current_pnl=float(ua.current_pnl) if ua.current_pnl else None,
+            current_pnl=pnl_by_hire.get(ua.id, float(ua.current_pnl) if ua.current_pnl else 0.0),
             hired_at=ua.hired_at,
             expires_at=ua.expires_at,
         ))
@@ -325,6 +340,10 @@ async def update_management_mode(
 
     ua.management_mode = req.management_mode
     mode_label = "完全托管" if req.management_mode == "full_managed" else "建议模式"
+    # P2-21: 切换到 full_managed 时提示自动下单风险
+    if req.management_mode == "full_managed":
+        return {"success": True, "user_agent_id": ua.id, "management_mode": req.management_mode,
+                "message": f"已切换为{mode_label}：下一轮调度将自动执行交易信号，请注意风险"}
     return {"success": True, "user_agent_id": ua.id, "management_mode": req.management_mode, "message": f"已切换为{mode_label}"}
 
 

@@ -65,9 +65,6 @@ def _normalize_to_trading_symbol(raw_symbol: str) -> str:
         return f'{s}.BJ'
     return s.upper()
 
-def _round_to_lot(quantity: int) -> int:
-    return max(100, (quantity // 100) * 100)
-
 
 async def _get_hire_or_404(db: AsyncSession, hire_id: int, user_id: int) -> UserAgent:
     result = await db.execute(
