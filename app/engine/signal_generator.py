@@ -113,6 +113,14 @@ async def generate_signals(
         )
 
 
+def _round_lot_quantity(action: str, qty: int) -> int:
+    """A股交易单位：数量取整到整手(100股)。买入向上取整，卖出向下取整，最少1手。"""
+    qty = int(qty or 100)
+    if action == "sell":
+        return max(100, (qty // 100) * 100)
+    return max(100, ((qty + 99) // 100) * 100)
+
+
 async def _generate_real_signals(
     db: AsyncSession,
     hire_id: int,
@@ -186,7 +194,7 @@ async def _generate_real_signals(
                 symbol_name=sig.get("name", sig["symbol"]),
                 action=sig["action"],
                 price=sig["price"],
-                quantity=sig["quantity"],
+                quantity=_round_lot_quantity(sig["action"], sig["quantity"]),
                 confidence=sig["confidence"],
                 reasoning=sig.get("reasoning", ""),
                 exec_status="pending",  # advisory 默认 pending；full_managed 在端点层自动执行
@@ -250,7 +258,7 @@ async def _generate_mock_signals(
         action = random.choice(["buy", "sell"])
         base_price = random.uniform(10, 500)
         price = round(base_price, 2)
-        quantity = random.choice([5, 10, 20, 50])
+        quantity = random.choice([100, 200, 300, 500])
         confidence = random.randint(40, 95)
 
         if action == "buy":
