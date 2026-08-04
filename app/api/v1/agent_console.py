@@ -221,7 +221,12 @@ async def confirm_signal(
         signal.quantity = req.quantity
 
     trading_symbol = _normalize_to_trading_symbol(signal.symbol)
-    lot_qty = signal.quantity  # 买入卖出统一使用信号原始数量，不再强制取整
+    # A股交易单位：买入向上取整到整手(100股)，卖出向下取整到整手，最少1手（与 auto_executor 一致）
+    raw_qty = int(signal.quantity)
+    if signal.action == "sell":
+        lot_qty = max(100, (raw_qty // 100) * 100)
+    else:
+        lot_qty = max(100, ((raw_qty + 99) // 100) * 100)
     order_result = None
     trading_error = None
 
