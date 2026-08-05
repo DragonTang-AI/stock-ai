@@ -85,7 +85,7 @@ async def place_simulation_order(
             price=price if price > 0 else None,
         )
         order = await place_order(db, current_user, req)
-        logger.info(f"Place order: user={current_user.id} symbol={request.symbol} side={request.side.value} qty={request.quantity}")
+        logger.info(f"Place order: user={current_user.id} symbol={req.symbol} side={req.side.value} qty={req.quantity}")
         return {"success": True, "data": order, "message": "下单成功"}
     except AppException:
         raise
