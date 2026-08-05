@@ -625,31 +625,93 @@ async def get_trades(
     trades = result.scalars().all()
 
     # 关联订单 -> 信号 -> 交易员，识别成交来源
-    from sqlalchemy import select as sa_select
+    from sqlalchemy import select as sa_select, and_, or_, text as sa_text
     from app.models.agent import AgentSignal, AgentTrader
     order_ids = [t.order_id for t in trades]
     source_map: dict[int, dict] = {}
     if order_ids:
         orders_res = await db.execute(
-            sa_select(Order.id, Order.signal_id).where(Order.id.in_(order_ids))
+            sa_select(Order.id, Order.user_id, Order.signal_id).where(Order.id.in_(order_ids))
         )
-        sig_map = {oid: sid for oid, sid in orders_res.all()}
-        sig_ids = [sid for sid in sig_map.values() if sid and str(sid).isdigit()]
-        if sig_ids:
+        order_rows = orders_res.all()
+        sig_map = {oid: {"user_id": uid, "signal_id": sid} for oid, uid, sid in order_rows}
+        tid_by_order: dict[int, str] = {}
+
+        # 1) 纯数字 signal_id = agent_signals.id（手动确认/历史路径）
+        num_sig_ids = [
+            info["signal_id"] for info in sig_map.values()
+            if info["signal_id"] and str(info["signal_id"]).isdigit()
+        ]
+        if num_sig_ids:
             sigs_res = await db.execute(
-                sa_select(AgentSignal.id, AgentSignal.trader_id).where(AgentSignal.id.in_([int(s) for s in sig_ids]))
+                sa_select(AgentSignal.id, AgentSignal.trader_id).where(AgentSignal.id.in_([int(s) for s in num_sig_ids]))
             )
             tid_by_sig = {str(sid): tid for sid, tid in sigs_res.all()}
-            trader_ids = list({tid for tid in tid_by_sig.values() if tid})
-            if trader_ids:
-                traders_res = await db.execute(
-                    sa_select(AgentTrader.id, AgentTrader.code_name).where(AgentTrader.id.in_(trader_ids))
-                )
-                name_by_tid = {tid: cname for tid, cname in traders_res.all()}
-                for oid, sid in sig_map.items():
-                    tid = tid_by_sig.get(str(sid)) if sid else None
-                    if tid and tid in name_by_tid:
-                        source_map[oid] = {"source": "agent", "trader_name": name_by_tid[tid]}
+            for oid, info in sig_map.items():
+                if info["signal_id"] and str(info["signal_id"]).isdigit():
+                    tid = tid_by_sig.get(str(info["signal_id"]))
+                    if tid:
+                        tid_by_order[oid] = tid
+
+        # 2) sig_{user}_{symbol}_{ts}（全托管自动执行/confirm 落款）→ 按 user+裸symbol 关联最近 agent 信号
+        import re
+        sig_str_re = re.compile(r"^sig_(\d+)_(.+?)_\d+$")
+        str_candidates: list[tuple[int, int, str]] = []
+        for oid, info in sig_map.items():
+            sid = info["signal_id"]
+            if not sid or str(sid).isdigit():
+                continue
+            m = sig_str_re.match(str(sid))
+            if m:
+                str_candidates.append((oid, int(m.group(1)), m.group(2).split(".")[0].upper()))
+        if str_candidates:
+            pair_conds = [
+                and_(AgentSignal.user_id == uid, AgentSignal.symbol == sym)
+                for uid, sym in {(uid, sym) for _, uid, sym in str_candidates}
+            ]
+            sigs_res2 = await db.execute(
+                sa_select(AgentSignal.user_id, AgentSignal.symbol, AgentSignal.trader_id, AgentSignal.created_at)
+                .where(or_(*pair_conds))
+                .order_by(AgentSignal.created_at.desc())
+            )
+            latest_tid: dict[tuple[int, str], str] = {}
+            for uid, sym, tid, ts in sigs_res2.all():
+                key = (uid, sym)
+                if key not in latest_tid and tid:
+                    latest_tid[key] = tid
+            for oid, uid, sym in str_candidates:
+                tid = latest_tid.get((uid, sym))
+                if tid:
+                    tid_by_order[oid] = tid
+
+        # 3) sell_{symbol}_{ts}（AI_HOSTED 托管路径）→ 匹配 hosted_logs 标记托管来源
+        sell_str_re = re.compile(r"^sell_(.+?)_\d+$")
+        hosted_sig_ids = [
+            str(info["signal_id"]) for oid, info in sig_map.items()
+            if info["signal_id"] and sell_str_re.match(str(info["signal_id"]))
+        ]
+        if hosted_sig_ids:
+            hosted_res = await db.execute(
+                sa_text(
+                    "SELECT DISTINCT signal_id FROM hosted_logs "
+                    "WHERE signal_id = ANY(:sids)"
+                ).bindparams(sids=hosted_sig_ids)
+            )
+            hosted_sids = {row[0] for row in hosted_res.all()}
+            for oid, info in sig_map.items():
+                if info["signal_id"] in hosted_sids:
+                    source_map[oid] = {"source": "hosted", "trader_name": None}
+
+        # 汇总交易员名称
+        trader_ids = list({tid for tid in tid_by_order.values() if tid})
+        if trader_ids:
+            traders_res = await db.execute(
+                sa_select(AgentTrader.id, AgentTrader.code_name).where(AgentTrader.id.in_(trader_ids))
+            )
+            name_by_tid = {tid: cname for tid, cname in traders_res.all()}
+            for oid, tid in tid_by_order.items():
+                if tid and tid in name_by_tid:
+                    source_map[oid] = {"source": "agent", "trader_name": name_by_tid[tid]}
         for oid in order_ids:
             if oid not in source_map:
                 source_map[oid] = {"source": "user", "trader_name": None}
