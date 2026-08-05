@@ -259,6 +259,7 @@
         </view>
         <view class="trade-source">
           <text v-if="trade.source === 'agent'" class="src-tag src-agent">{{ trade.trader_name }} 手笔</text>
+          <text v-else-if="trade.source === 'hosted'" class="src-tag src-hosted">AI托管</text>
           <text v-else class="src-tag src-user">用户自己</text>
         </view>
       </view>
@@ -1333,6 +1334,7 @@ onShow(() => {
 .trade-source { margin-top: 8rpx; display: flex; align-items: center; }
 .src-tag { display: inline-flex; align-items: center; padding: 2rpx 14rpx; border-radius: 8rpx; font-size: 20rpx; line-height: 1.6; }
 .src-agent { background: var(--color-primary, #4A90E2); color: #FFFFFF; }
+.src-hosted { background: rgba(74, 144, 226, 0.15); color: var(--color-primary, #4A90E2); }
 .src-user { background: rgba(153, 153, 153, 0.15); color: var(--text-hint, #999999); }
 .order-time, .trade-time { color: $text-hint; }
 .trade-top .up { color: $color-up; }
