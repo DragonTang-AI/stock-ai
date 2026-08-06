@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from app.core.database import get_db
 from app.models.user import User
-from app.models.agent import AgentTrader, UserAgent, AgentPerformance, AgentPortfolio
+from app.models.agent import AgentTrader, UserAgent, AgentPerformance, AgentPortfolio, AgentConfig
 from app.models.points import UserPoints, PointsTransaction
 from app.schemas.agent import (
     AgentTraderResponse,
@@ -17,6 +17,10 @@ from app.schemas.agent import (
     HireAgentResponse,
     UserAgentResponse,
     UpdateManagementModeRequest,
+    AgentConfigRequest,
+    AgentConfigResponse,
+    ActivateAgentResponse,
+    DeactivateAgentResponse,
 )
 from app.api.v1.auth import get_current_user
 
@@ -251,12 +255,18 @@ async def hire_agent(
     ua = UserAgent(
         user_id=current_user.id,
         agent_id=agent.id,
-        status="active",
+        status="configuring",
         management_mode=req.management_mode,
         expires_at=expires_at,
     )
     db.add(ua)
     await db.flush()
+
+    # P0: 写入默认保守配置（status=configuring，待用户配置后激活）
+    default_config = AgentConfig(hire_id=ua.id)
+    db.add(default_config)
+    await db.flush()
+    logger.info(f"默认配置已写入 hire_id={ua.id}")
 
     logger.info(f"雇佣交易员成功 user_id={current_user.id} agent_id={agent.id} cost={cost} balance_after={user_pts.balance}")
     return HireAgentResponse(
@@ -450,3 +460,123 @@ async def terminate_agent(
     ua.status = 'expired'
     ua.updated_at = dt.now()
     return {'success': True, 'user_agent_id': ua.id, 'status': 'expired', 'message': '已终止雇佣，持仓已清理'}
+
+
+# ── 启用交易员（configuring/dormant → active） ──
+
+@router.post("/my-agents/{user_agent_id}/activate", response_model=ActivateAgentResponse)
+async def activate_agent(
+    user_agent_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """激活交易员: 从 configuring 或 dormant 状态恢复为 active"""
+    result = await db.execute(
+        select(UserAgent).where(
+            and_(UserAgent.id == user_agent_id, UserAgent.user_id == current_user.id)
+        )
+    )
+    ua = result.scalar_one_or_none()
+    if not ua:
+        raise HTTPException(status_code=404, detail="交易员不存在")
+    if ua.status not in ("configuring", "dormant"):
+        raise HTTPException(status_code=400, detail=f"当前状态 {ua.status} 不可激活, 仅 configuring/dormant 可激活")
+    ua.status = "active"
+    logger.info(f"激活交易员 user_id={current_user.id} user_agent_id={user_agent_id}")
+    return ActivateAgentResponse(
+        user_agent_id=ua.id,
+        status="active",
+        message="交易员已激活, 将在下一轮调度中开始工作",
+    )
+
+
+# ── 停用交易员（active/paused → dormant） ──
+
+@router.post("/my-agents/{user_agent_id}/deactivate", response_model=DeactivateAgentResponse)
+async def deactivate_agent(
+    user_agent_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """停用交易员: 从 active/paused 进入强制休眠（dormant）, 需手动 reactivate"""
+    result = await db.execute(
+        select(UserAgent).where(
+            and_(UserAgent.id == user_agent_id, UserAgent.user_id == current_user.id)
+        )
+    )
+    ua = result.scalar_one_or_none()
+    if not ua:
+        raise HTTPException(status_code=404, detail="交易员不存在")
+    if ua.status not in ("active", "paused"):
+        raise HTTPException(status_code=400, detail=f"当前状态 {ua.status} 不可停用, 仅 active/paused 可停用")
+    ua.status = "dormant"
+    logger.info(f"停用交易员 user_id={current_user.id} user_agent_id={user_agent_id}")
+    return DeactivateAgentResponse(
+        user_agent_id=ua.id,
+        status="dormant",
+        message="交易员已停用（dormant）, 需要时可手动激活",
+    )
+
+
+# ── 获取交易员配置 ──
+
+@router.get("/my-agents/{user_agent_id}/config", response_model=AgentConfigResponse)
+async def get_agent_config(
+    user_agent_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """获取交易员详细配置"""
+    result = await db.execute(
+        select(UserAgent).where(
+            and_(UserAgent.id == user_agent_id, UserAgent.user_id == current_user.id)
+        )
+    )
+    ua = result.scalar_one_or_none()
+    if not ua:
+        raise HTTPException(status_code=404, detail="交易员不存在")
+
+    cfg_result = await db.execute(
+        select(AgentConfig).where(AgentConfig.hire_id == user_agent_id)
+    )
+    cfg = cfg_result.scalar_one_or_none()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="配置不存在")
+    return AgentConfigResponse.model_validate(cfg)
+
+
+# ── 更新交易员配置 ──
+
+@router.patch("/my-agents/{user_agent_id}/config", response_model=AgentConfigResponse)
+async def update_agent_config(
+    user_agent_id: int,
+    req: AgentConfigRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """更新交易员配置（仅传要修改的字段）"""
+    result = await db.execute(
+        select(UserAgent).where(
+            and_(UserAgent.id == user_agent_id, UserAgent.user_id == current_user.id)
+        )
+    )
+    ua = result.scalar_one_or_none()
+    if not ua:
+        raise HTTPException(status_code=404, detail="交易员不存在")
+
+    cfg_result = await db.execute(
+        select(AgentConfig).where(AgentConfig.hire_id == user_agent_id)
+    )
+    cfg = cfg_result.scalar_one_or_none()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="配置不存在")
+
+    update_data = req.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        if hasattr(cfg, field):
+            setattr(cfg, field, value)
+
+    await db.flush()
+    await db.refresh(cfg)
+    logger.info(f"配置已更新 hire_id={user_agent_id} fields={list(update_data.keys())}")
+    return AgentConfigResponse.model_validate(cfg)

@@ -165,3 +165,87 @@ class EquityCurvePoint(BaseModel):
 
 
 AgentTraderDetail.model_rebuild()
+
+
+# ── Agent 配置 Schemas ──
+
+class AgentConfigRequest(BaseModel):
+    """配置请求（所有字段均可选，只传要修改的）"""
+    markets: list[str] | None = None
+    trade_hours_pref: str | None = None
+    dormant_off_hours: bool | None = None
+    sectors: list[str] | None = None
+    market_cap_min: float | None = None
+    market_cap_max: float | None = None
+    min_avg_amount: float | None = None
+    exclude_st: bool | None = None
+    exclude_new_listing_days: int | None = None
+    exclude_limit_near: bool | None = None
+    allocated_capital: float | None = None
+    max_order_pct: float | None = None
+    max_position_pct: float | None = None
+    max_position_count: int | None = None
+    trading_style: str | None = None
+    signal_interval_min: int | None = None
+    daily_max_signals: int | None = None
+    daily_max_executions: int | None = None
+    daily_max_amount_pct: float | None = None
+    loss_stop_pct: float | None = None
+    loss_stop_amount: float | None = None
+    risk_trigger_action: str | None = None
+    risk_enabled: bool | None = None
+    t1_enabled: bool | None = None
+    auto_exec_confidence: int | None = None
+    max_auto_exec_per_round: int | None = None
+    notify_channels: list[str] | None = None
+
+
+class AgentConfigResponse(BaseModel):
+    """配置响应"""
+    hire_id: int
+    markets: list[str]
+    trade_hours_pref: str
+    dormant_off_hours: bool
+    sectors: list[str]
+    market_cap_min: float | None = None
+    market_cap_max: float | None = None
+    min_avg_amount: float
+    exclude_st: bool
+    exclude_new_listing_days: int
+    exclude_limit_near: bool
+    allocated_capital: float
+    max_order_pct: float
+    max_position_pct: float
+    max_position_count: int
+    trading_style: str
+    signal_interval_min: int
+    daily_max_signals: int
+    daily_max_executions: int
+    daily_max_amount_pct: float
+    loss_stop_pct: float
+    loss_stop_amount: float | None = None
+    risk_trigger_action: str
+    risk_enabled: bool
+    t1_enabled: bool
+    auto_exec_confidence: int
+    max_auto_exec_per_round: int
+    notify_channels: list[str]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ActivateAgentResponse(BaseModel):
+    """启用交易员响应"""
+    user_agent_id: int
+    status: str
+    message: str
+
+
+class DeactivateAgentResponse(BaseModel):
+    """停用交易员响应"""
+    user_agent_id: int
+    status: str
+    message: str

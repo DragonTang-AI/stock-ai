@@ -140,3 +140,46 @@ class AgentPortfolio(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+class AgentConfig(Base):
+    """交易员配置（P0: 参数化支撑）"""
+    __tablename__ = "agent_configs"
+    __table_args__ = {"schema": "agent"}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hire_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("agent.user_agents.id", ondelete="CASCADE"), nullable=False
+    )
+    markets: Mapped[dict] = mapped_column(JSON, nullable=False, default=lambda: ["A股"])
+    trade_hours_pref: Mapped[str] = mapped_column(String(16), nullable=False, default="follow_market")
+    dormant_off_hours: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    sectors: Mapped[dict] = mapped_column(JSON, nullable=False, default=list)
+    market_cap_min: Mapped[float | None] = mapped_column(Numeric, nullable=True)
+    market_cap_max: Mapped[float | None] = mapped_column(Numeric, nullable=True)
+    min_avg_amount: Mapped[float] = mapped_column(Numeric, nullable=False, default=5000)
+    exclude_st: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    exclude_new_listing_days: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    exclude_limit_near: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    allocated_capital: Mapped[float] = mapped_column(Numeric(16, 2), nullable=False, default=100000)
+    max_order_pct: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=20)
+    max_position_pct: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=30)
+    max_position_count: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    trading_style: Mapped[str] = mapped_column(String(16), nullable=False, default="steady")
+    signal_interval_min: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    daily_max_signals: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    daily_max_executions: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    daily_max_amount_pct: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=30)
+    loss_stop_pct: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=5)
+    loss_stop_amount: Mapped[float | None] = mapped_column(Numeric(16, 2), nullable=True)
+    risk_trigger_action: Mapped[str] = mapped_column(String(16), nullable=False, default="dormant")
+    risk_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    t1_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    auto_exec_confidence: Mapped[int] = mapped_column(Integer, nullable=False, default=70)
+    max_auto_exec_per_round: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    notify_channels: Mapped[dict] = mapped_column(JSON, nullable=False, default=lambda: ["inbox"])
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
