@@ -21,10 +21,11 @@ from sqlalchemy import and_, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_scheduler_db_context as get_db_context
-from app.models.agent import UserAgent, AgentTrader, AgentSignal
+from app.models.agent import UserAgent, AgentTrader, AgentSignal, AgentConfig
 from app.engine import signal_generator
 from app.engine.auto_executor import auto_execute_signals
 from app.engine.market_hours import is_market_hours
+from app.services.agent_config_service import get_agent_config, DEFAULTS as CONFIG_DEFAULTS
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +44,6 @@ POST_MARKET_TIME = dt_time(15, 30)
 
 # 单个 hire 信号生成超时（秒）
 PER_HIRE_TIMEOUT = 180
-
-# 同一 hire 最小间隔（秒）—— 避免短时间内重复生成
-MIN_HIRE_INTERVAL = 3 * 60
 
 # 并发控制：同时最多处理 N 个 hire，防止并行打爆 LLM API 导致全员超时
 MAX_CONCURRENT_HIRES = 4
@@ -107,6 +105,14 @@ async def _process_single_hire_impl(hire: dict) -> dict[str, Any]:
 
     async with get_db_context() as db:
         try:
+            # P1: 读取配置，信号间隔从 agent_configs 获取
+            agent_config = await get_agent_config(db, hire_id)
+            min_interval_seconds = (
+                agent_config.signal_interval_min * 60
+                if agent_config and agent_config.signal_interval_min
+                else CONFIG_DEFAULTS["signal_interval_min"] * 60
+            )
+
             # 检查最小间隔
             result = await db.execute(
                 select(func.max(AgentSignal.created_at)).where(
@@ -115,7 +121,7 @@ async def _process_single_hire_impl(hire: dict) -> dict[str, Any]:
             )
             last_time = result.scalar()
             now = datetime.now(timezone.utc)
-            if last_time and (now - last_time).total_seconds() < MIN_HIRE_INTERVAL:
+            if last_time and (now - last_time).total_seconds() < min_interval_seconds:
                 return {
                     "hire_id": hire_id,
                     "trader_name": trader_name,
@@ -180,6 +186,7 @@ async def _process_single_hire_impl(hire: dict) -> dict[str, Any]:
                 user_id=hire["user_id"],
                 signals=signals,
                 management_mode=management_mode,
+                config=agent_config,
             )
 
             executed = exec_result.get("executed", [])

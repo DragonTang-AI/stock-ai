@@ -13,11 +13,12 @@ from typing import Any
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.agent import AgentSignal, AgentPortfolio, UserAgent, AgentTrader
+from app.models.agent import AgentSignal, AgentPortfolio, UserAgent, AgentTrader, AgentConfig
 from app.services import trading as trading_service
 from app.schemas.trading import OrderRequest
 from app.core.exceptions import AppException
 from app.engine.market_hours import is_market_hours
+from app.services.agent_config_service import DEFAULTS as CONFIG_DEFAULTS
 
 logger = logging.getLogger(__name__)
 
@@ -35,18 +36,13 @@ def _normalize_to_trading_symbol(raw_symbol: str) -> str:
     return s.upper()
 
 
-# 全托管模式下自动执行的置信度阈值
-AUTO_EXEC_CONFIDENCE_THRESHOLD = 50
-# 每次最多自动执行的信号数
-MAX_AUTO_EXEC_SIGNALS = 2
-
-
 async def auto_execute_signals(
     db: AsyncSession,
     hire_id: int,
     user_id: int,
     signals: list[dict],
     management_mode: str,
+    config: AgentConfig | None = None,
 ) -> dict[str, Any]:
     """
     自动执行信号
@@ -60,7 +56,7 @@ async def auto_execute_signals(
         return {"executed": [], "failed": [], "pending": signals, "mode": "full_managed", "skipped_reason": "非交易时段"}
 
     if management_mode == "full_managed":
-        return await _auto_execute(db, hire_id, user_id, signals)
+        return await _auto_execute(db, hire_id, user_id, signals, config)
     else:
         # 建议模式：全部保持 pending，等待用户确认
         return {"executed": [], "failed": [], "pending": signals, "mode": "advisory"}
@@ -71,19 +67,24 @@ async def _auto_execute(
     hire_id: int,
     user_id: int,
     signals: list[dict],
+    config: AgentConfig | None = None,
 ) -> dict[str, Any]:
     """全托管模式：自动执行高置信度信号"""
     if not signals:
         return {"executed": [], "failed": [], "pending": [], "mode": "full_managed"}
 
+    # P1: 从配置读取置信度阈值和最大执行数
+    confidence_threshold = config.auto_exec_confidence if config and config.auto_exec_confidence else CONFIG_DEFAULTS["auto_exec_confidence"]
+    max_exec = config.max_auto_exec_per_round if config and config.max_auto_exec_per_round else CONFIG_DEFAULTS["max_auto_exec_per_round"]
+
     # 按置信度降序排列
     executable = [
         s for s in signals
         if s["action"] in ("buy", "sell")
-        and s.get("confidence", 0) >= AUTO_EXEC_CONFIDENCE_THRESHOLD
+        and s.get("confidence", 0) >= confidence_threshold
     ]
     executable.sort(key=lambda x: x.get("confidence", 0), reverse=True)
-    executable = executable[:MAX_AUTO_EXEC_SIGNALS]
+    executable = executable[:max_exec]
 
     executed = []
     failed = []

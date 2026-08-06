@@ -15,7 +15,8 @@ from typing import Any
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.agent import AgentPortfolio, AgentSignal
+from app.models.agent import AgentPortfolio, AgentSignal, AgentConfig
+from app.services.agent_config_service import DEFAULTS as CONFIG_DEFAULTS
 
 
 def _beijing_today() -> date:
@@ -23,20 +24,12 @@ def _beijing_today() -> date:
     return (datetime.now(timezone.utc) + timedelta(hours=8)).date()
 
 
-# ── 风控参数 ──
-
-MAX_POSITION_PCT = 0.30         # 单票仓位上限 30%
-DAILY_LOSS_CIRCUIT_PCT = 0.05   # 单日亏损熔断线 5%
-MAX_POSITION_COUNT = 5          # 最大持仓数
-T1_ENABLED = True               # T+1 规则
-TOTAL_CAPITAL = 100000.0        # 默认总资金（从 hire 配置读取）
-
-
 async def check_risk(
     db: AsyncSession,
     hire_id: int,
     candidate_signals: list[dict],
     total_capital: float | None = None,
+    config: AgentConfig | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """
     对候选信号执行风控过滤
@@ -52,14 +45,24 @@ async def check_risk(
         passed_signals: 通过风控的信号
         rejected_signals: 被拒绝的信号（含拒绝原因）
     """
-    capital = total_capital or TOTAL_CAPITAL
+    capital = total_capital or (
+        float(config.allocated_capital)
+        if config and config.allocated_capital
+        else CONFIG_DEFAULTS["allocated_capital"]
+    )
     passed = []
     rejected = []
 
     today = _beijing_today()
 
+    # P1: 从配置读取风控参数
+    max_position_pct = (config.max_position_pct / 100.0) if config and config.max_position_pct else CONFIG_DEFAULTS["max_position_pct"] / 100.0
+    loss_stop_pct = (config.loss_stop_pct / 100.0) if config and config.loss_stop_pct else CONFIG_DEFAULTS["loss_stop_pct"] / 100.0
+    max_position_count = config.max_position_count if config and config.max_position_count else CONFIG_DEFAULTS["max_position_count"]
+    t1_enabled = config.t1_enabled if config is not None else CONFIG_DEFAULTS["t1_enabled"]
+
     # 1. 检查单日亏损熔断
-    circuit_broken = await _check_daily_loss_circuit(db, hire_id, today)
+    circuit_broken = await _check_daily_loss_circuit(db, hire_id, today, loss_stop_pct)
     if circuit_broken:
         for sig in candidate_signals:
             rejected.append({**sig, "reject_reason": "单日亏损超过 5%，已触发熔断"})
@@ -79,7 +82,7 @@ async def check_risk(
         price = sig.get("price", 0) or 10.0  # 兜底价格
 
         # ── T+1 规则：当日买入的股票不可卖出 ──
-        if T1_ENABLED and action == "sell" and symbol in today_bought:
+        if t1_enabled and action == "sell" and symbol in today_bought:
             rejected.append({
                 **sig,
                 "reject_reason": "T+1 规则：当日买入的股票不可卖出（{}）".format(symbol),
@@ -91,21 +94,22 @@ async def check_risk(
             current_count = len(positions)
             # 新买入的不算重复计数
             if symbol not in positions:
-                if current_count >= MAX_POSITION_COUNT:
+                if current_count >= max_position_count:
                     rejected.append({
                         **sig,
-                        "reject_reason": "持仓数已达上限 {} 只".format(MAX_POSITION_COUNT),
+                        "reject_reason": "持仓数已达上限 {} 只".format(max_position_count),
                     })
                     continue
 
         # ── 单票仓位上限检查（仅买入时）──
         if action == "buy":
             estimated_value = quantity * price
-            if capital > 0 and (estimated_value / capital) > MAX_POSITION_PCT:
+            if capital > 0 and (estimated_value / capital) > max_position_pct:
                 rejected.append({
                     **sig,
-                    "reject_reason": "单票仓位 {}% 超过上限 30%".format(
-                        round(estimated_value / capital * 100, 1)
+                    "reject_reason": "单票仓位 {}% 超过上限 {:.0f}%".format(
+                        round(estimated_value / capital * 100, 1),
+                        max_position_pct * 100,
                     ),
                 })
                 continue
@@ -134,7 +138,7 @@ async def check_risk(
 
 
 async def _check_daily_loss_circuit(
-    db: AsyncSession, hire_id: int, today: date
+    db: AsyncSession, hire_id: int, today: date, loss_stop_pct: float = 0.05
 ) -> bool:
     """检查是否触发单日亏损熔断"""
     try:
@@ -154,7 +158,7 @@ async def _check_daily_loss_circuit(
             return False
 
         loss_pct = abs(total_pnl) / total_value if total_pnl < 0 else 0
-        return loss_pct >= DAILY_LOSS_CIRCUIT_PCT
+        return loss_pct >= loss_stop_pct
     except Exception:
         return False
 

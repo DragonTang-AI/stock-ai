@@ -94,8 +94,15 @@ async def generate_signals(
     tickers = [s["symbol"] for s in stock_list[:5]]   # 最多分析 5 只（Yahoo Finance 限流）
     ticker_map = {s["symbol"]: s["name"] for s in stock_list}
 
-    # P2-15: 风控总资金从 hire.allocated_capital 读取，缺省 500000
-    total_capital = float(hire.allocated_capital) if hire.allocated_capital else 500000
+    # P1: 风控总资金从 agent_configs 读取，缺省 100000
+    from app.services.agent_config_service import get_agent_config, DEFAULTS as CONFIG_DEFAULTS
+    agent_config = await get_agent_config(db, hire_id)
+    total_capital = (
+        float(agent_config.allocated_capital)
+        if agent_config and agent_config.allocated_capital
+        else float(hire.allocated_capital) if hire.allocated_capital
+        else CONFIG_DEFAULTS["allocated_capital"]
+    )
 
     # 4. 判断使用真实引擎还是 mock
     use_real = force_real or await hedge_fund_client.is_available()
@@ -129,7 +136,7 @@ async def _generate_real_signals(
     tickers: list[str],
     agents: list[str],
     ticker_map: dict[str, str],
-    total_capital: float = 500000,
+    total_capital: float = 100000,
 ) -> dict[str, Any]:
     """使用 ai-hedge-fund 真实引擎生成信号"""
     errors = []
@@ -179,8 +186,8 @@ async def _generate_real_signals(
             if sig["symbol"] in prices:
                 sig["price"] = prices[sig["symbol"]]["price"]
 
-        # 风控过滤（P2-15: total_capital 从 hire 配置读取）
-        passed, rejected = await risk_manager.check_risk(db, hire_id, candidate_signals, total_capital=total_capital)
+        # 风控过滤（P1: total_capital + config 从 agent_configs 读取）
+        passed, rejected = await risk_manager.check_risk(db, hire_id, candidate_signals, total_capital=total_capital, config=agent_config)
 
         # 写入信号
         today = date.today()
@@ -243,7 +250,7 @@ async def _generate_mock_signals(
     trader_id: str,
     tickers: list[str],
     ticker_map: dict[str, str],
-    total_capital: float = 500000,
+    total_capital: float = 100000,
 ) -> dict[str, Any]:
     """使用模拟信号（Phase 2 兼容，P2-11: 标记为演示模式，禁止 full_managed 自动执行）"""
     count = random.randint(1, 3)
@@ -285,8 +292,8 @@ async def _generate_mock_signals(
     except Exception:
         pass
 
-    # 风控过滤（P2-15: total_capital 从 hire 配置读取）
-    passed, rejected = await risk_manager.check_risk(db, hire_id, candidate_signals, total_capital=total_capital)
+    # 风控过滤（P1: total_capital + config 从 agent_configs 读取）
+    passed, rejected = await risk_manager.check_risk(db, hire_id, candidate_signals, total_capital=total_capital, config=agent_config)
 
     # 写入信号
     saved_orm = []
