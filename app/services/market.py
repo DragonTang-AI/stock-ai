@@ -341,6 +341,69 @@ def _compute_bollinger(
     return upper, mid, lower
 
 
+# ============== 港股 K 线（东方财富） ==============
+async def _get_hk_kline_from_eastmoney(
+    symbol: str,
+    period: str = "daily",
+    count: int = 100,
+) -> List[KLineItem]:
+    """从东方财富获取港股 K 线数据"""
+    import httpx as _httpx
+
+    code = symbol.replace(".HK", "")
+    period_map = {"daily": 101, "weekly": 102, "monthly": 103}
+    klt = period_map.get(period, 101)
+
+    url = (
+        f"https://push2his.eastmoney.com/api/qt/stock/kline/get"
+        f"?secid=116.{code}"
+        f"&fields1=f1,f2,f3,f4,f5,f6"
+        f"&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"
+        f"&klt={klt}&fqt=1&end=20500101&lmt={count}"
+    )
+
+    try:
+        async with _httpx.AsyncClient(timeout=10.0) as _client:
+            _resp = await _client.get(url)
+            _resp.raise_for_status()
+            _data = _resp.json()
+    except Exception as e:
+        logger.error(f"港股 {symbol} K线请求失败: {e}")
+        return []
+
+    if _data.get("rc") != 0 or not _data.get("data"):
+        logger.warning(f"港股 {symbol} K线数据为空")
+        return []
+
+    _klines_raw = _data["data"].get("klines", [])
+    if not _klines_raw:
+        return []
+
+    _items = []
+    for _line in _klines_raw:
+        _parts = _line.split(",")
+        if len(_parts) < 11:
+            continue
+        _items.append(KLineItem(
+            date=_parts[0],
+            open=float(_parts[1]),
+            close=float(_parts[2]),
+            high=float(_parts[3]),
+            low=float(_parts[4]),
+            volume=int(float(_parts[5])),
+            amount=float(_parts[6]),
+            amplitude=float(_parts[7]) if _parts[7] != "-" else None,
+            change_pct=float(_parts[8]) if _parts[8] != "-" else None,
+            change=float(_parts[9]) if _parts[9] != "-" else None,
+            turnover_rate=float(_parts[10]) if _parts[10] != "-" else None,
+        ))
+
+    _items.reverse()  # 东方财富最新在前，反转为最早在前
+    logger.info(f"港股 {symbol} 获取到 {len(_items)} 条 K线")
+    return _items
+
+
+
 async def fetch_kline(
     symbol: str,
     period: str = "daily",
@@ -366,10 +429,10 @@ async def fetch_kline(
     }
     ak_period = period_map.get(period, Period.DAILY)
 
-    # 港股 K 线暂未接入数据源，返回空列表（避免路由到新浪导致解析异常）
+    # 港股 K 线使用东方财富 API
     if symbol.upper().endswith(".HK"):
-        logger.info(f"港股 {symbol} K线暂不支持，返回空列表")
-        return []
+        logger.info(f"港股 {symbol} 使用东方财富 K线 API")
+        return await _get_hk_kline_from_eastmoney(symbol, period, count)
 
     adapter = get_market_data_adapter()
     logger.debug(f"使用 {adapter.name} adapter 获取 {symbol} K线 ({period}, {count}条)")
