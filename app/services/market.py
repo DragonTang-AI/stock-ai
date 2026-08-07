@@ -11,6 +11,8 @@ app.services.market — 行情数据服务（v2：使用 adapter 架构）
 - 通过环境变量 MARKET_DATA_SOURCE=sina/akshare/mock 显式指定
 - 服务器目前无法用 akshare（Python 3.12 兼容性问题），所以默认会走到 sina
 """
+import json
+import os
 import logging
 from typing import List
 
@@ -339,68 +341,55 @@ def _compute_bollinger(
     lower = round(ma - num_std * std, 2)
 
     return upper, mid, lower
+# ============== 港股 K 线（本地缓存） ==============
+HK_KLINE_CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "hk_klines")
 
-
-# ============== 港股 K 线（东方财富） ==============
 async def _get_hk_kline_from_eastmoney(
     symbol: str,
     period: str = "daily",
     count: int = 100,
 ) -> List[KLineItem]:
-    """从东方财富获取港股 K 线数据"""
-    import httpx as _httpx
-
+    """从本地缓存读取港股 K 线数据（数据由定时任务从东方财富拉取）"""
     code = symbol.replace(".HK", "")
-    period_map = {"daily": 101, "weekly": 102, "monthly": 103}
-    klt = period_map.get(period, 101)
+    cache_path = os.path.join(HK_KLINE_CACHE_DIR, f"{code}.json")
 
-    url = (
-        f"https://push2his.eastmoney.com/api/qt/stock/kline/get"
-        f"?secid=116.{code}"
-        f"&fields1=f1,f2,f3,f4,f5,f6"
-        f"&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"
-        f"&klt={klt}&fqt=1&end=20500101&lmt={count}"
-    )
+    if not os.path.exists(cache_path):
+        logger.warning(f"港股 {symbol} K线缓存不存在: {cache_path}")
+        return []
 
     try:
-        async with _httpx.AsyncClient(timeout=10.0) as _client:
-            _resp = await _client.get(url)
-            _resp.raise_for_status()
-            _data = _resp.json()
+        with open(cache_path, "r") as _f:
+            cache = json.loads(_f.read())
     except Exception as e:
-        logger.error(f"港股 {symbol} K线请求失败: {e}")
+        logger.error(f"港股 {symbol} K线缓存读取失败: {e}")
         return []
 
-    if _data.get("rc") != 0 or not _data.get("data"):
-        logger.warning(f"港股 {symbol} K线数据为空")
+    lines = cache.get(period, [])
+    if not lines:
         return []
 
-    _klines_raw = _data["data"].get("klines", [])
-    if not _klines_raw:
-        return []
-
-    _items = []
-    for _line in _klines_raw:
-        _parts = _line.split(",")
-        if len(_parts) < 11:
+    items = []
+    for line in lines[:count]:
+        parts = line.split(",")
+        if len(parts) < 11:
             continue
-        _items.append(KLineItem(
-            date=_parts[0],
-            open=float(_parts[1]),
-            close=float(_parts[2]),
-            high=float(_parts[3]),
-            low=float(_parts[4]),
-            volume=int(float(_parts[5])),
-            amount=float(_parts[6]),
-            amplitude=float(_parts[7]) if _parts[7] != "-" else None,
-            change_pct=float(_parts[8]) if _parts[8] != "-" else None,
-            change=float(_parts[9]) if _parts[9] != "-" else None,
-            turnover_rate=float(_parts[10]) if _parts[10] != "-" else None,
+        items.append(KLineItem(
+            date=parts[0],
+            open=float(parts[1]),
+            close=float(parts[2]),
+            high=float(parts[3]),
+            low=float(parts[4]),
+            volume=int(float(parts[5])),
+            amount=float(parts[6]),
+            amplitude=float(parts[7]) if parts[7] != "-" else None,
+            change_pct=float(parts[8]) if parts[8] != "-" else None,
+            change=float(parts[9]) if parts[9] != "-" else None,
+            turnover_rate=float(parts[10]) if parts[10] != "-" else None,
         ))
 
-    _items.reverse()  # 东方财富最新在前，反转为最早在前
-    logger.info(f"港股 {symbol} 获取到 {len(_items)} 条 K线")
-    return _items
+    items.reverse()  # 缓存中最新在前，反转为最早在前
+    logger.info(f"港股 {symbol} 缓存读取 {len(items)} 条 {period} K线")
+    return items
 
 
 
