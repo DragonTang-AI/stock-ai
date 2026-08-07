@@ -56,8 +56,8 @@ async def check_risk(
     today = _beijing_today()
 
     # P1: 从配置读取风控参数
-    max_position_pct = (config.max_position_pct / 100.0) if config and config.max_position_pct else CONFIG_DEFAULTS["max_position_pct"] / 100.0
-    loss_stop_pct = (config.loss_stop_pct / 100.0) if config and config.loss_stop_pct else CONFIG_DEFAULTS["loss_stop_pct"] / 100.0
+    max_position_pct = (float(config.max_position_pct) / 100.0) if config and config.max_position_pct else float(CONFIG_DEFAULTS["max_position_pct"]) / 100.0
+    loss_stop_pct = (float(config.loss_stop_pct) / 100.0) if config and config.loss_stop_pct else float(CONFIG_DEFAULTS["loss_stop_pct"]) / 100.0
     max_position_count = config.max_position_count if config and config.max_position_count else CONFIG_DEFAULTS["max_position_count"]
     t1_enabled = config.t1_enabled if config is not None else CONFIG_DEFAULTS["t1_enabled"]
 
