@@ -369,7 +369,7 @@ async def _get_hk_kline_from_eastmoney(
         return []
 
     items = []
-    for line in lines[:count]:
+    for line in lines[-count:]:
         parts = line.split(",")
         if len(parts) < 11:
             continue
