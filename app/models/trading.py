@@ -71,6 +71,7 @@ class Order(Base):
     account_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False
     )
+    market: Mapped[str] = mapped_column(String(10), default="A", nullable=False, comment="市场：A / HK")
 
     symbol: Mapped[str] = mapped_column(String(20), nullable=False, index=True, comment="股票代码，如 600519.SH")
     name: Mapped[str] = mapped_column(String(50), default="", nullable=False)
@@ -117,6 +118,7 @@ class Trade(Base):
         Integer, ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False
     )
     symbol: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    market: Mapped[str] = mapped_column(String(10), default="A", nullable=False, comment="市场：A / HK")
     name: Mapped[str] = mapped_column(String(50), default="", nullable=False)
     side: Mapped[str] = mapped_column(String(10), nullable=False, comment="buy / sell")
     price: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False, comment="成交价")
