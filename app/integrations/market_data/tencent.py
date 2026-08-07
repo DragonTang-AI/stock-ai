@@ -282,6 +282,12 @@ def parse_tencent_qt(raw: str) -> List[StockQuote]:
             cc_str = fields[46] if len(fields) > 45 else ""
             circul_cap = float(cc_str) * 1e8 if cc_str and cc_str not in ("", "0.00") else None
 
+            # 计算换手率: 成交量 / (流通市值 / 当前价) * 100
+            if circul_cap and circul_cap > 0 and price > 0:
+                turnover_rate = round(volume / (circul_cap / price) * 100, 2)
+            else:
+                turnover_rate = None
+
             results.append(StockQuote(
                 symbol=_to_symbol(code, market),
                 code=code,
@@ -405,13 +411,8 @@ def parse_hk_qt(raw: str) -> List[StockQuote]:
             low = float(fields[34])
             amount = float(fields[37]) if fields[37] else 0.0  # 元
 
-            # 计算振幅: (最高-最低) / 昨收 * 100
+            # 计算振幅
             amplitude = round((high - low) / prev_close * 100, 2) if prev_close > 0 else None
-            # 计算换手率: 成交量 / (流通市值 / 当前价) * 100
-            if circul_cap and circul_cap > 0 and price > 0:
-                turnover_rate = round(volume / (circul_cap / price) * 100, 2)
-            else:
-                turnover_rate = None
             pe_str = fields[39] if len(fields) > 39 else ""
             pe_ratio = float(pe_str) if pe_str and pe_str not in ("", "0.00") else None
 
@@ -420,6 +421,12 @@ def parse_hk_qt(raw: str) -> List[StockQuote]:
 
             cc_str = fields[45] if len(fields) > 45 else ""
             circul_cap = float(cc_str) * 1e8 if cc_str and cc_str not in ("", "0.00") else None
+
+            # 计算换手率: 成交量 / (流通市值 / 当前价) * 100
+            if circul_cap and circul_cap > 0 and price > 0:
+                turnover_rate = round(volume / (circul_cap / price) * 100, 2)
+            else:
+                turnover_rate = None
 
             results.append(StockQuote(
                 symbol=_to_symbol(code, market),
