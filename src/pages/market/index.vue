@@ -256,7 +256,7 @@ async function fetchMarketData(market: Market = 'A') {
     }
 
     hotStocks.value = (hotData.length > 0 ? hotData : (quotes as any[]).slice(0, 20)).map((s: any) => ({
-      code: s.code || s.symbol,
+      code: s.symbol || s.code,
       name: s.name,
       price: typeof s.price === 'number' ? s.price.toFixed(2) : '--',
       change: Number((s.change_pct ?? s.change ?? 0).toFixed(2)),
