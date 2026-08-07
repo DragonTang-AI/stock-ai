@@ -88,8 +88,8 @@ async def get_agent_detail(
             UserAgent.agent_id == agent_id,
             UserAgent.status != "expired",
         )
-    )
-    hire = (await db.execute(hire_q)).scalar_one_or_none()
+        ).order_by(UserAgent.hired_at.desc()).limit(1)
+    hire = (await db.execute(hire_q)).scalars().first()
     if hire:
         detail.is_hired = True
         detail.management_mode = hire.management_mode
