@@ -240,6 +240,15 @@ async def search_stocks(
 
     raw = raw_bytes.decode("utf-8", errors="ignore")
 
+    # smartbox 名称字段可能是 unicode 转义（如 \u8d35\u5dde...），需还原为中文
+    def _unescape(s: str) -> str:
+        if "\\u" in s:
+            try:
+                return json_mod.loads(f'"{s}"')
+            except Exception:
+                pass
+        return s
+
     # smartbox 返回: v_hint="sh~000847~腾讯济安~txja~ZS^hk~00700~腾讯控股~txkg~GP^..."
     # 条目以 ^ 分隔，字段以 ~ 分隔：[0]=市场(sh/sz/hk) [1]=代码 [2]=名称 [3]=拼音 [4]=类型(GP股票/ZS指数/QZ权证)
     results = []
@@ -252,11 +261,11 @@ async def search_stocks(
                     continue
                 market_prefix = parts[0].lower()
                 code = parts[1]
-                name = parts[2]
+                name = _unescape(parts[2])
                 item_type = parts[4].upper()
 
-                # 只保留股票类型（GP），指数(ZS)不纳入股票搜索结果
-                if item_type != "GP":
+                # 只保留股票类型（GP / GP-A 等带市场后缀），指数(ZS)不纳入股票搜索结果
+                if not item_type.startswith("GP"):
                     continue
                 # 仅 A 股 + 港股，过滤美股
                 if market_prefix not in ("sh", "sz", "hk"):
