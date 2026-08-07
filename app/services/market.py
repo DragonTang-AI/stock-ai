@@ -42,6 +42,7 @@ def _quote_to_item(q: AdapterQuoteData) -> QuoteItem:
         volume=q.volume,
         amount=q.amount,
         turnover_rate=q.turnover_rate,
+        amplitude=getattr(q, "amplitude", None),
         pe_ratio=q.pe_ratio,
         market_cap=q.market_cap,
     )
@@ -129,6 +130,7 @@ async def fetch_hk_quotes(symbols: List[str]) -> List[QuoteItem]:
             volume=q.volume,
             amount=q.amount,
             turnover_rate=q.turnover_rate,
+            amplitude=q.amplitude,
             pe_ratio=q.pe_ratio,
             market_cap=q.market_cap,
         ))
