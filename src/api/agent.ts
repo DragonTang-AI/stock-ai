@@ -251,18 +251,18 @@ export interface AgentConfig {
 
 /** 获取交易员配置 */
 export function getAgentConfig(hireId: number): Promise<AgentConfig> {
-  return request<AgentConfig>('/agent/' + hireId + '/config')
+  return request<AgentConfig>('/agent/my-agents/' + hireId + '/config')
 }
 
 /** 更新交易员配置 */
 export function updateAgentConfig(hireId: number, data: Partial<AgentConfig>): Promise<AgentConfig> {
-  return request<AgentConfig>('/agent/' + hireId + '/config', {
-    method: 'PUT',
+  return request<AgentConfig>('/agent/my-agents/' + hireId + '/config', {
+    method: 'PATCH',
     data,
   })
 }
 
 /** 启用交易员 */
 export function activateAgent(hireId: number): Promise<any> {
-  return request('/agent/' + hireId + '/activate', { method: 'POST' })
+  return request('/agent/my-agents/' + hireId + '/activate', { method: 'POST' })
 }
