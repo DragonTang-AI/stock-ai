@@ -64,6 +64,7 @@ export interface UserAgent {
   current_pnl: number | null
   hired_at: string
   expires_at: string | null
+  config_source?: string
 }
 
 /** 获取交易员市场列表 */

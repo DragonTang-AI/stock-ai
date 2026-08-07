@@ -21,9 +21,12 @@
               <text class="agent-name">{{ item.agent.code_name }}</text>
               <text class="agent-tag">{{ item.agent.tag }}</text>
             </view>
-            <text :class="statusClass(item)">
-              {{ statusText(item) }}
-            </text>
+            <view class="status-group">
+              <text v-if="isUnconfigured(item)" class="alert-icon">⚠</text>
+              <text :class="statusClass(item)">
+                {{ statusText(item) }}
+              </text>
+            </view>
           </view>
 
           <view class="card-metrics">
@@ -45,6 +48,11 @@
             </view>
           </view>
 
+          <view v-if="isUnconfigured(item)" class="config-warning">
+            <text class="warning-icon">⚠</text>
+            <text class="warning-text">启动交易员前必须完成配置，否则无法启动</text>
+          </view>
+
           <view class="card-footer">
             <view class="footer-row">
               <view class="ft-btn console-btn" @click="goConsole(item)">
@@ -56,18 +64,33 @@
               </view>
             </view>
             <view class="footer-row footer-actions">
-              <view v-if="item.status === 'active'" class="ft-btn pause-btn" @click="handlePause(item)">
-                <text>暂停</text>
-              </view>
-              <view v-if="item.status === 'paused'" class="ft-btn resume-btn" @click="handleResume(item)">
-                <text>恢复</text>
-              </view>
-              <view v-if="item.status === 'configuring'" class="ft-btn config-btn" @click="goConfig(item)">
-                <text>继续配置</text>
-              </view>
-              <view class="ft-btn terminate-btn" @click="handleTerminate(item)">
-                <text>终止</text>
-              </view>
+              <!-- 未配置：仅显示去配置 + 终止 -->
+              <template v-if="isUnconfigured(item)">
+                <view class="ft-btn config-urgent-btn" @click="goConfig(item)">
+                  <text>⚠ 去配置</text>
+                </view>
+                <view class="ft-btn terminate-btn" @click="handleTerminate(item)">
+                  <text>终止</text>
+                </view>
+              </template>
+              <!-- 已配置 -->
+              <template v-else>
+                <view v-if="item.status === 'active'" class="ft-btn pause-btn" @click="handlePause(item)">
+                  <text>暂停</text>
+                </view>
+                <view v-if="item.status === 'paused'" class="ft-btn resume-btn" @click="handleResume(item)">
+                  <text>恢复</text>
+                </view>
+                <view v-if="item.status === 'configuring'" class="ft-btn config-btn" @click="goConfig(item)">
+                  <text>继续配置</text>
+                </view>
+                <view v-if="item.status === 'active' || item.status === 'paused'" class="ft-btn config-btn" @click="goConfig(item)">
+                  <text>配置</text>
+                </view>
+                <view class="ft-btn terminate-btn" @click="handleTerminate(item)">
+                  <text>终止</text>
+                </view>
+              </template>
             </view>
           </view>
         </view>
@@ -91,15 +114,27 @@ const formatPct = (v: number | null | undefined) => {
   return formatPercent(v, 1)
 }
 
+const isUnconfigured = (item: UserAgent) => {
+  return item.config_source === 'default' || (!item.config_source && item.status !== 'configuring')
+}
+
 const statusClass = (item: UserAgent) => {
   if (item.status === 'active') return 'status-active'
   if (item.status === 'configuring') return 'status-configuring'
+  if (item.status === 'paused') {
+    if (isUnconfigured(item)) return 'status-unconfigured'
+    return 'status-paused'
+  }
   return 'status-expired'
 }
 
 const statusText = (item: UserAgent) => {
   if (item.status === 'active') return '运行中'
   if (item.status === 'configuring') return '待配置'
+  if (item.status === 'paused') {
+    if (isUnconfigured(item)) return '未配置'
+    return '已暂停'
+  }
   return '已停用'
 }
 
@@ -326,12 +361,35 @@ onPullDownRefresh(() => {
     padding: 6rpx 16rpx;
     border-radius: 12rpx;
   }
+  .status-paused {
+    font-size: 22rpx;
+    color: #667788;
+    background: rgba(255, 255, 255, 0.06);
+    padding: 6rpx 16rpx;
+    border-radius: 12rpx;
+  }
+  .status-unconfigured {
+    font-size: 22rpx;
+    color: #e74c3c;
+    background: rgba(231, 76, 60, 0.12);
+    padding: 6rpx 16rpx;
+    border-radius: 12rpx;
+  }
   .status-expired {
     font-size: 22rpx;
     color: #667788;
     background: rgba(255, 255, 255, 0.06);
     padding: 6rpx 16rpx;
     border-radius: 12rpx;
+  }
+  .status-group {
+    display: flex;
+    align-items: center;
+    gap: 6rpx;
+  }
+  .alert-icon {
+    font-size: 28rpx;
+    color: #e74c3c;
   }
 }
 
@@ -423,8 +481,34 @@ onPullDownRefresh(() => {
     background: rgba(240, 192, 96, 0.15);
     color: #f0c060;
   }
+  .config-urgent-btn {
+    background: rgba(231, 76, 60, 0.15);
+    color: #e74c3c;
+    border: 1rpx solid rgba(231, 76, 60, 0.3);
+    flex: 1;
+    text-align: center;
+  }
   .terminate-btn {
     background: rgba(231, 76, 60, 0.15);
+    color: #e74c3c;
+  }
+
+  .config-warning {
+    background: rgba(231, 76, 60, 0.08);
+    border: 1rpx solid rgba(231, 76, 60, 0.2);
+    border-radius: 10rpx;
+    padding: 14rpx 20rpx;
+    margin-bottom: 16rpx;
+    display: flex;
+    align-items: center;
+    gap: 8rpx;
+  }
+  .warning-icon {
+    font-size: 24rpx;
+    color: #e74c3c;
+  }
+  .warning-text {
+    font-size: 22rpx;
     color: #e74c3c;
   }
 

@@ -270,7 +270,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, reactive } from 'vue'
-import { getAgentConfig, updateAgentConfig, activateAgent } from '@/api/agent'
+import { getAgentConfig, updateAgentConfig, activateAgent, resumeAgent } from '@/api/agent'
 
 interface Step {
   title: string
@@ -395,7 +395,17 @@ const handleSubmit = async () => {
       signal_interval_min: config.signal_interval_min,
       trading_style: config.trading_style,
     })
-    await activateAgent(hireId.value)
+    // P3: paused 状态走 resume，configuring/dormant 走 activate
+    try {
+      await activateAgent(hireId.value)
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail || e?.message || ''
+      if (detail.includes('不可激活') || detail.includes('paused')) {
+        await resumeAgent(hireId.value)
+      } else {
+        throw e
+      }
+    }
     uni.showToast({ title: '配置成功，交易员已启用', icon: 'success' })
     setTimeout(() => uni.navigateBack(), 1200)
   } catch (e: any) {
