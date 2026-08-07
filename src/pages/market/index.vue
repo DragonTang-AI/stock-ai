@@ -10,8 +10,25 @@
         <text class="search-entry-text">搜索股票代码或名称</text>
       </view>
 
+      <!-- ========== 市场切换 Tab ========== -->
+      <view class="market-tabs">
+        <view
+          class="market-tab"
+          :class="{ active: activeMarket === 'A' }"
+          @click="switchMarket('A')"
+        >
+          <text>A股</text>
+        </view>
+        <view
+          class="market-tab"
+          :class="{ active: activeMarket === 'HK' }"
+          @click="switchMarket('HK')"
+        >
+          <text>港股</text>
+        </view>
+      </view>
 
-<!-- ========== 大盘指数 Hero ========== -->
+      <!-- ========== 大盘指数 Hero ========== -->
       <view class="index-hero">
         <scroll-view scroll-x class="index-scroll" :show-scrollbar="false">
           <view class="index-row">
@@ -151,12 +168,15 @@ import Disclaimer from '@/components/compliance/Disclaimer.vue'
 import { fetchQuotes, fetchIndices, fetchRanking, type RankItem } from '@/api/market'
 import { formatPercent } from '@/utils/format'
 
+type Market = 'A' | 'HK'
+
 interface StockItem {
   code: string
   name: string
   price: string
   change: number
   changePct?: string
+  amount?: number
 }
 
 
@@ -167,6 +187,7 @@ function goSearch() {
 
 const loading = ref(true)
 const error = ref('')
+const activeMarket = ref<Market>('A')
 const indices = ref<StockItem[]>([])
 const hotStocks = ref<StockItem[]>([])
 
@@ -178,14 +199,10 @@ const losers = ref<RankItem[]>([])
 // 涨跌榜展示数据
 const rankList = computed(() => (rankTab.value === 'gainers' ? gainers.value : losers.value))
 
-// 市场脉动（基于全市场排行数据）
+// 市场脉动
 const pulse = computed(() => {
-  const all = [...gainers.value, ...losers.value]
-  // 从两个榜各取10只，得到20只（涨跌两端）
-  // 实际市场脉动需要全市场数据，这里用涨跌榜的统计作为参考
   const up = gainers.value.length
   const down = losers.value.length
-  // 总成交 = hot榜前 10 的成交额合计
   const totalAmount = hotStocks.value.reduce((sum, s) => sum + (s.amount || 0), 0)
   return {
     up,
@@ -195,19 +212,19 @@ const pulse = computed(() => {
   }
 })
 
-// 缓存上一次拉取时间，避免重复请求
+// 缓存
 let gainersFetchedAt = 0
 let losersFetchedAt = 0
-const CACHE_TTL = 30_000  // 30s 缓存
+const CACHE_TTL = 30_000
 
 // ─────────── 数据拉取 ───────────
-async function fetchMarketData() {
+async function fetchMarketData(market: Market = 'A') {
   loading.value = true
   error.value = ''
   try {
     // 大盘指数
     try {
-      const indexData = await fetchIndices()
+      const indexData = await fetchIndices(market)
       if (indexData.length) {
         indices.value = indexData.map((d: any) => ({
           code: d.symbol,
@@ -217,24 +234,23 @@ async function fetchMarketData() {
           changePct: d.change_pct != null ? d.change_pct.toFixed(2) : '0.00',
         }))
       } else {
-        indices.value = fallbackIndices()
+        indices.value = fallbackIndices(market)
       }
     } catch {
-      indices.value = fallbackIndices()
+      indices.value = fallbackIndices(market)
     }
 
-    // 热门股票（按成交额） + 涨跌榜（按真实涨幅排序）
-    // 三路并发
+    // 热门股票 + 涨跌榜并发
     const [quotes, gainerList, loserList] = await Promise.all([
       fetchQuotes().catch(() => []),
-      fetchRanking('gainers', 20).catch(() => []),
-      fetchRanking('losers', 20).catch(() => []),
+      fetchRanking('gainers', 20, market).catch(() => []),
+      fetchRanking('losers', 20, market).catch(() => []),
     ])
 
-    // 热门股票：优先用 hot 榜，无则回退到 quotes
+    // 热门股票：优先用 hot 榜
     let hotData: RankItem[] = []
     try {
-      hotData = await fetchRanking('hot', 20)
+      hotData = await fetchRanking('hot', 20, market)
     } catch {
       hotData = []
     }
@@ -257,9 +273,16 @@ async function fetchMarketData() {
   }
 }
 
+function switchMarket(market: Market) {
+  if (market === activeMarket.value) return
+  activeMarket.value = market
+  // 清空缓存，重新拉取
+  gainersFetchedAt = losersFetchedAt = 0
+  fetchMarketData(market)
+}
+
 async function switchTab(tab: 'gainers' | 'losers') {
   rankTab.value = tab
-  // 简单缓存策略：30s 内复用
   const now = Date.now()
   if (tab === 'gainers' && now - gainersFetchedAt > CACHE_TTL) {
     await refreshRanking('gainers')
@@ -271,7 +294,7 @@ async function switchTab(tab: 'gainers' | 'losers') {
 async function refreshRanking(type: 'gainers' | 'losers') {
   rankLoading.value = true
   try {
-    const data = await fetchRanking(type, 20)
+    const data = await fetchRanking(type, 20, activeMarket.value)
     if (type === 'gainers') {
       gainers.value = data
       gainersFetchedAt = Date.now()
@@ -280,7 +303,7 @@ async function refreshRanking(type: 'gainers' | 'losers') {
       losersFetchedAt = Date.now()
     }
   } catch {
-    // 静默失败，保留旧数据
+    // 静默
   } finally {
     rankLoading.value = false
   }
@@ -298,7 +321,14 @@ function formatAmount(amount: number): string {
   return amount.toFixed(0)
 }
 
-function fallbackIndices(): StockItem[] {
+function fallbackIndices(market: Market): StockItem[] {
+  if (market === 'HK') {
+    return [
+      { code: 'HSI', name: '恒生指数', price: '--', change: 0, changePct: '0.00' },
+      { code: 'HSCEI', name: '国企指数', price: '--', change: 0, changePct: '0.00' },
+      { code: 'HSTECH', name: '恒生科技', price: '--', change: 0, changePct: '0.00' },
+    ]
+  }
   return [
     { code: '000001', name: '上证指数', price: '--', change: 0, changePct: '0.00' },
     { code: '399001', name: '深证成指', price: '--', change: 0, changePct: '0.00' },
@@ -311,7 +341,7 @@ function goDetail(code: string) {
 }
 
 onMounted(() => {
-  fetchMarketData()
+  fetchMarketData('A')
 })
 </script>
 
@@ -323,6 +353,33 @@ onMounted(() => {
 
 .market-content {
   padding-bottom: 24rpx;
+}
+
+/* ========== 市场切换 Tab ========== */
+.market-tabs {
+  display: flex;
+  gap: 12rpx;
+  margin: 0 24rpx 8rpx;
+}
+
+.market-tab {
+  flex: 1;
+  text-align: center;
+  padding: 16rpx 0;
+  font-size: 28rpx;
+  font-weight: 500;
+  color: var(--text-secondary, #666);
+  background: #fff;
+  border-radius: 14rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.03);
+  transition: all 0.2s ease;
+
+  &.active {
+    color: #fff;
+    background: var(--color-primary, #4a90e2);
+    font-weight: 700;
+    box-shadow: 0 4rpx 12rpx rgba(74, 144, 226, 0.3);
+  }
 }
 
 /* ========== 大盘指数 Hero ========== */

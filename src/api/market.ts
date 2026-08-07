@@ -251,7 +251,7 @@ export async function fetchKline(params: {
   }
 }
 
-/** 大盘指数 → /market/indices */
+/** 大盘指数 → /market/indices?market=A|HK */
 export interface IndexItem {
   symbol: string
   name: string
@@ -259,8 +259,8 @@ export interface IndexItem {
   change_pct: number
 }
 
-export function fetchIndices(): Promise<IndexItem[]> {
-  return request<any>('/market/indices', { method: 'GET' })
+export function fetchIndices(market: 'A' | 'HK' = 'A'): Promise<IndexItem[]> {
+  return request<any>('/market/indices', { method: 'GET', params: { market } })
     .then(res => {
       const data = res?.data || res || []
       if (Array.isArray(data)) return data
@@ -299,17 +299,19 @@ export interface RankItem {
 }
 
 /**
- * 获取全市场排行榜
- * 后端路由: GET /api/v1/market/ranking?type=gainers|losers|hot&limit=20
- * 数据源：东方财富，覆盖全部 A 股
+ * 获取市场排行榜
+ * 后端路由: GET /api/v1/market/ranking?type=gainers|losers|hot&limit=20&market=A|HK
+ * A 股：全市场（东方财富/腾讯公开 HTTP API）
+ * 港股：腾讯 API 热门池（恒指+国企+科技+热门中概）
  */
 export async function fetchRanking(
   type: RankType = 'gainers',
-  limit = 20
+  limit = 20,
+  market: 'A' | 'HK' = 'A'
 ): Promise<RankItem[]> {
   const response = await request<any>('/market/ranking', {
     method: 'GET',
-    params: { type, limit },
+    params: { type, limit, market },
   })
   return Array.isArray(response?.data) ? response.data : []
 }

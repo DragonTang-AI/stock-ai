@@ -85,12 +85,22 @@
           @click="selectStock(item)"
         >
           <view class="result-item-left">
-            <text class="result-name">
-              <template v-for="(seg, si) in highlightMatch(item.name, query)" :key="si">
-                <text v-if="seg.highlight" class="result-highlight">{{ seg.text }}</text>
-                <text v-else>{{ seg.text }}</text>
-              </template>
-            </text>
+            <view class="result-name-row">
+              <text
+                v-if="item.market === 'HK'"
+                class="result-market-tag hk"
+              >港</text>
+              <text
+                v-if="item.market === 'A'"
+                class="result-market-tag a"
+              >A</text>
+              <text class="result-name">
+                <template v-for="(seg, si) in highlightMatch(item.name, query)" :key="si">
+                  <text v-if="seg.highlight" class="result-highlight">{{ seg.text }}</text>
+                  <text v-else>{{ seg.text }}</text>
+                </template>
+              </text>
+            </view>
             <text class="result-code">{{ item.code }}</text>
           </view>
           <view class="result-item-right">
@@ -501,6 +511,31 @@ onMounted(async () => {
   gap: 4rpx;
   min-width: 0;
   flex: 1;
+}
+
+.result-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  min-width: 0;
+}
+
+.result-market-tag {
+  flex-shrink: 0;
+  font-size: 18rpx;
+  font-weight: 700;
+  line-height: 1;
+  padding: 6rpx 8rpx;
+  border-radius: 6rpx;
+
+  &.a {
+    color: var(--color-up, #E25C5C);
+    background: rgba(226, 92, 92, 0.1);
+  }
+  &.hk {
+    color: var(--color-primary, #4A90E2);
+    background: rgba(74, 144, 226, 0.1);
+  }
 }
 
 .result-name {
