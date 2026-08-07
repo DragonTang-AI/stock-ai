@@ -387,7 +387,7 @@ async def _get_hk_kline_from_eastmoney(
             turnover_rate=float(parts[10]) if parts[10] != "-" else None,
         ))
 
-    items.reverse()  # 缓存中最新在前，反转为最早在前
+
     logger.info(f"港股 {symbol} 缓存读取 {len(items)} 条 {period} K线")
     return items
 
