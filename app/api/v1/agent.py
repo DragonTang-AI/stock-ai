@@ -86,7 +86,7 @@ async def get_agent_detail(
         and_(
             UserAgent.user_id == current_user.id,
             UserAgent.agent_id == agent_id,
-            UserAgent.status == "active",
+            UserAgent.status != "expired",
         )
     )
     hire = (await db.execute(hire_q)).scalar_one_or_none()
@@ -210,7 +210,7 @@ async def hire_agent(
         and_(
             UserAgent.user_id == current_user.id,
             UserAgent.agent_id == agent_id,
-            UserAgent.status == "active",
+            UserAgent.status != "expired",
         )
     )
     existing = (await db.execute(hire_q)).scalar_one_or_none()
