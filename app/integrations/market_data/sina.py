@@ -11,6 +11,7 @@ API 文档参考（无需鉴权、无频率限制声明）：
 3. 实时行情的字段顺序是固定的，参考 base.py 中的 from_sina() 注释
 4. 新浪的 volume 单位是"手"（1手=100股），amount 单位是"元"
 """
+import json
 import logging
 from typing import List
 import httpx
@@ -319,8 +320,6 @@ class SinaAdapter(MarketDataAdapter):
             start = text.index("[")
             end = text.rindex("]") + 1
             json_str = text[start:end]
-            import json
-
             raw_data = json.loads(json_str)
         except (ValueError, json.JSONDecodeError) as e:
             logger.warning(f"[{self.name}] K线 JSONP 解析失败: {text[:100]}")

@@ -366,6 +366,11 @@ async def fetch_kline(
     }
     ak_period = period_map.get(period, Period.DAILY)
 
+    # 港股 K 线暂未接入数据源，返回空列表（避免路由到新浪导致解析异常）
+    if symbol.upper().endswith(".HK"):
+        logger.info(f"港股 {symbol} K线暂不支持，返回空列表")
+        return []
+
     adapter = get_market_data_adapter()
     logger.debug(f"使用 {adapter.name} adapter 获取 {symbol} K线 ({period}, {count}条)")
 
