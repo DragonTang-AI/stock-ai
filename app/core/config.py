@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     jwt_secret: str = Field(default="CHANGE_ME", description="生产环境必须修改")
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
-    refresh_token_expire_days: int = 7
+    refresh_token_expire_days: int = 30
 
     # ── LLM ──────────────────────────────────────────────
     llm_enabled: bool = False  # V1 默认关闭，走确定性 fallback
