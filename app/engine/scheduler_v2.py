@@ -24,7 +24,7 @@ from app.core.database import get_scheduler_db_context as get_db_context
 from app.models.agent import UserAgent, AgentTrader, AgentSignal, AgentConfig
 from app.engine import signal_generator
 from app.engine.auto_executor import auto_execute_signals
-from app.engine.market_hours import is_market_hours
+from app.engine.market_hours import is_any_market_hours
 from app.services.agent_config_service import get_agent_config, DEFAULTS as CONFIG_DEFAULTS
 
 logger = logging.getLogger(__name__)
@@ -288,8 +288,8 @@ async def _run_one_cycle():
     # 过期清理：超过 24h 的 pending 信号自动标 expired（不依赖交易时段）
     await _expire_stale_pending()
 
-    # 非交易时段跳过
-    if not is_market_hours():
+    # 非交易时段跳过（A 股或港股任一交易时段均允许运行）
+    if not is_any_market_hours():
         logger.info("非交易时段，跳过本次调度")
         _scheduler_status["current_phase"] = "idle"
         return

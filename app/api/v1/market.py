@@ -19,17 +19,19 @@ router = APIRouter()
 def _normalize_symbol(symbol: str) -> str:
     """
     标准化股票代码格式。
-    支持: sh600519 / sz000001 / 600519.SH / 000001.SZ → 600519.SH / 000001.SZ
+    支持: sh600519 / sz000001 / 600519.SH / 000001.SZ / hk00700 / 00700.HK → 600519.SH / 000001.SZ / 00700.HK
     """
     s = symbol.strip().upper()
-    # 如果已经是标准格式 (如 600519.SH)，直接返回
+    # 如果已经是标准格式 (如 600519.SH / 00700.HK)，直接返回
     if "." in s:
         return s
-    # 处理 sh600519 / sz000001 格式
+    # 处理 sh600519 / sz000001 / hk00700 格式
     if s.startswith("SH"):
         return s[2:] + ".SH"
     if s.startswith("SZ"):
         return s[2:] + ".SZ"
+    if s.startswith("HK"):
+        return s[2:] + ".HK"
     # 6 开头默认上海，其他默认深圳
     if s.startswith("6"):
         return s + ".SH"
@@ -129,9 +131,13 @@ async def get_stock_detail(
 
 
 @router.get("/indices")
-async def get_indices():
-    """大盘指数（占位桩）"""
-    return {"success": True, "data": [
+async def get_indices(market: str = Query("A", description="市场：A=沪深指数 / HK=港股指数")):
+    """大盘指数"""
+    if market.upper() == "HK":
+        from app.services.market import fetch_hk_indices
+        data = await fetch_hk_indices()
+        return {"success": True, "market": "HK", "data": data}
+    return {"success": True, "market": "A", "data": [
         {"symbol": "000001.SH", "name": "上证指数", "price": 3350.53, "change_pct": 0.51},
         {"symbol": "399001.SZ", "name": "深证成指", "price": 10823.17, "change_pct": 0.83},
         {"symbol": "399006.SZ", "name": "创业板指", "price": 2215.39, "change_pct": 1.26},
@@ -140,8 +146,25 @@ async def get_indices():
 @router.get("/rules/{market}")
 async def get_market_rules(market: str):
     """市场交易规则"""
+    m = market.upper()
+    if m == "HK":
+        return {"success": True, "data": {
+            "market": "HK",
+            "lot_size": None,  # 港股每手股数因股而异
+            "price_limit_pct": None,  # 港股无涨跌停限制
+            "commission_rate": 0.0003,
+            "min_commission": 15,
+            "stamp_tax_rate": 0.0013,
+            "stamp_tax_side": "BOTH",  # 买卖双向征收
+            "settlement": "T+2",
+            "trading_hours": {
+                "morning": "09:30-12:00",
+                "afternoon": "13:00-16:00",
+            },
+            "trading_currency": "HKD",
+        }}
     return {"success": True, "data": {
-        "market": market.upper(),
+        "market": "A",
         "lot_size": 100,
         "price_limit_pct": 10,
         "commission_rate": 0.00025,
@@ -149,6 +172,11 @@ async def get_market_rules(market: str):
         "stamp_tax_rate": 0.001,
         "stamp_tax_side": "SELL",
         "settlement": "T+1",
+        "trading_hours": {
+            "morning": "09:30-11:30",
+            "afternoon": "13:00-15:00",
+        },
+        "trading_currency": "CNY",
     }}
 
 from app.schemas.market import RankResponse
@@ -161,21 +189,23 @@ import re as re_mod
 async def get_ranking(
     type: str = Query("gainers", description="排行类型: gainers(涨幅榜) / losers(跌幅榜) / hot(热门榜)"),
     limit: int = Query(20, ge=5, le=50, description="返回条数"),
+    market: str = Query("A", description="市场：A=A股 / HK=港股"),
 ):
     """
-    获取全市场 A 股排行榜（公开接口，无需登录）。
+    获取市场排行榜（公开接口，无需登录）。
 
-    数据源：东方财富公开 HTTP API，覆盖全部 A 股。
+    - A 股：全市场（东方财富/腾讯公开 HTTP API）
+    - 港股：腾讯 API 热门池（恒指+国企+科技+热门中概）
     """
     from app.services.market import fetch_ranking
 
-    data = await fetch_ranking(rank_type=type, limit=limit)
-    return {"success": True, "type": type, "data": data, "meta": {}}
+    data = await fetch_ranking(rank_type=type, limit=limit, market=market)
+    return {"success": True, "type": type, "market": market.upper(), "data": data, "meta": {}}
 
 
-# ─────────── 股票搜索 API（新浪财经） ───────────
+# ─────────── 股票搜索 API（腾讯 smartbox，支持 A 股 + 港股） ───────────
 
-SEARCH_URL = "https://suggest3.sinajs.cn/suggest/"
+SMARTBOX_URL = "https://smartbox.gtimg.cn/s3/"
 
 
 @router.get("/search")
@@ -186,65 +216,67 @@ async def search_stocks(
     """
     搜索股票（公开接口，无需登录）。
 
-    调用新浪财经搜索 API，按名称或代码模糊匹配。
+    调用腾讯 smartbox 搜索 API，按名称或代码模糊匹配，覆盖 A 股 + 港股。
     返回: [{code, symbol, name, market, price, change_pct}]
     """
     import urllib.parse
+    import json as json_mod
 
     if not q or not q.strip():
         return {"success": True, "data": [], "query": q}
 
     try:
         encoded = urllib.parse.quote(q.strip())
-        url = f"{SEARCH_URL}type=11,12,13,14,15&key={encoded}"
+        url = f"{SMARTBOX_URL}?v=2&q={encoded}&t=all"
         timeout = aiohttp.ClientTimeout(total=5)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url, headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Referer": "https://finance.sina.com.cn",
+                "Referer": "https://gu.qq.com",
             }) as resp:
                 raw_bytes = await resp.read()
     except Exception:
         return {"success": True, "data": [], "query": q, "note": "搜索服务暂时不可用"}
 
-    # 解码 — 尝试 gbk 再 utf-8
-    raw = ""
-    for enc in ["gbk", "utf-8"]:
-        try:
-            raw = raw_bytes.decode(enc)
-            break
-        except Exception:
-            continue
+    raw = raw_bytes.decode("utf-8", errors="ignore")
 
-    # 解析: var suggestvalue="名称,类型,代码,shszcode,...";
+    # smartbox 返回: v_hint="sh~000847~腾讯济安~txja~ZS^hk~00700~腾讯控股~txkg~GP^..."
+    # 条目以 ^ 分隔，字段以 ~ 分隔：[0]=市场(sh/sz/hk) [1]=代码 [2]=名称 [3]=拼音 [4]=类型(GP股票/ZS指数/QZ权证)
     results = []
     try:
-        match = re_mod.search(r'suggestvalue="(.+?)"', raw)
+        match = re_mod.search(r'v_hint="(.+?)"', raw)
         if match:
-            items_str = match.group(1)
-            for item_str in items_str.split(";"):
-                parts = item_str.split(",")
-                if len(parts) < 4:
+            for item_str in match.group(1).split("^"):
+                parts = item_str.split("~")
+                if len(parts) < 5:
                     continue
-                name = parts[0]
-                code = parts[2]
-                shsz = parts[3].upper()
+                market_prefix = parts[0].lower()
+                code = parts[1]
+                name = parts[2]
+                item_type = parts[4].upper()
 
-                # 判断市场
-                if shsz.startswith("SH"):
+                # 只保留股票类型（GP），指数(ZS)不纳入股票搜索结果
+                if item_type != "GP":
+                    continue
+                # 仅 A 股 + 港股，过滤美股
+                if market_prefix not in ("sh", "sz", "hk"):
+                    continue
+
+                if market_prefix == "hk":
+                    symbol = code + ".HK"
+                    market = "HK"
+                elif market_prefix == "sh":
                     symbol = code + ".SH"
-                elif shsz.startswith("SZ"):
-                    symbol = code + ".SZ"
-                elif code.startswith("6"):
-                    symbol = code + ".SH"
+                    market = "A"
                 else:
                     symbol = code + ".SZ"
+                    market = "A"
 
                 results.append({
                     "code": code,
                     "symbol": symbol,
                     "name": name,
-                    "market": "A",
+                    "market": market,
                     "price": None,
                     "change_pct": None,
                 })

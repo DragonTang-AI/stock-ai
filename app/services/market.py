@@ -67,18 +67,82 @@ async def fetch_realtime_quotes(symbols: List[str]) -> List[QuoteItem]:
     获取实时行情报价（向后兼容方法）
 
     通过 adapter 抽象获取数据，业务层不再关心具体数据源。
+    港股（.HK 后缀）自动路由到腾讯 API。
 
     Args:
-        symbols: 股票代码列表，如 ["600519.SH", "000001.SZ"]
+        symbols: 股票代码列表，如 ["600519.SH", "000001.SZ", "00700.HK"]
 
     Returns:
         QuoteItem 列表
     """
-    adapter = get_market_data_adapter()
-    logger.debug(f"使用 {adapter.name} adapter 获取 {len(symbols)} 只股票行情")
+    hk_symbols = [s for s in symbols if s.endswith(".HK")]
+    a_symbols = [s for s in symbols if not s.endswith(".HK")]
 
-    quotes = await adapter.get_quotes(symbols)
-    return [_quote_to_item(q) for q in quotes]
+    items: List[QuoteItem] = []
+
+    if hk_symbols:
+        items.extend(await fetch_hk_quotes(hk_symbols))
+
+    if a_symbols:
+        adapter = get_market_data_adapter()
+        logger.debug(f"使用 {adapter.name} adapter 获取 {len(a_symbols)} 只股票行情")
+        quotes = await adapter.get_quotes(a_symbols)
+        items.extend([_quote_to_item(q) for q in quotes])
+
+    return items
+
+
+async def fetch_hk_quotes(symbols: List[str]) -> List[QuoteItem]:
+    """
+    获取港股实时行情（腾讯 API）。
+
+    Args:
+        symbols: 港股代码列表，如 ["00700.HK", "09988.HK"]
+
+    Returns:
+        QuoteItem 列表
+    """
+    from app.integrations.market_data.tencent import fetch_hk_quotes as tencent_hk_quotes
+
+    hk_codes = [f"hk{s.replace('.HK', '')}" for s in symbols]
+    quotes = await tencent_hk_quotes(hk_codes)
+    by_code = {q.code: q for q in quotes}
+
+    items: List[QuoteItem] = []
+    for orig in symbols:
+        code = orig.replace(".HK", "")
+        q = by_code.get(code)
+        if q is None:
+            continue
+        items.append(QuoteItem(
+            symbol=q.symbol,
+            name=q.name,
+            price=q.price,
+            open=q.open,
+            high=q.high,
+            low=q.low,
+            close=q.prev_close,
+            change=q.change,
+            change_pct=q.change_pct,
+            volume=q.volume,
+            amount=q.amount,
+            turnover_rate=q.turnover_rate,
+            pe_ratio=q.pe_ratio,
+            market_cap=q.market_cap,
+        ))
+    return items
+
+
+async def fetch_hk_indices() -> list:
+    """
+    获取港股大盘指数（恒生指数 / 国企指数 / 恒生科技）。
+
+    Returns:
+        指数列表 [{symbol, name, price, change, change_pct, volume, amount}]
+    """
+    from app.integrations.market_data.tencent import fetch_hk_indices as tencent_hk_indices
+
+    return await tencent_hk_indices()
 
 
 
@@ -315,21 +379,22 @@ async def fetch_kline(
 async def fetch_ranking(
     rank_type: str = "gainers",
     limit: int = 20,
+    market: str = "A",
 ) -> list:
     """
-    获取全市场 A 股排名（涨幅榜/跌幅榜/热门榜）。
+    获取市场排名（涨幅榜/跌幅榜/热门榜）。
 
-    数据源：东方财富公开 HTTP API（无需依赖 akshare）。
+    - A 股：全市场（东方财富/腾讯公开 HTTP API，无需依赖 akshare）
+    - 港股：腾讯 API 热门池（恒指+国企+科技+热门中概 ~150 只）
 
     Args:
         rank_type: "gainers"（涨幅榜）/ "losers"（跌幅榜）/ "hot"（热门，按成交额）
         limit: 返回条数（≤50）
+        market: "A"（A股）/ "HK"（港股）
 
     Returns:
         RankItem 列表
     """
-    from app.integrations.market_data.tencent import fetch_ranking as em_fetch_ranking
-
     if rank_type == "gainers":
         sort_by, order = "change_pct", "desc"
     elif rank_type == "losers":
@@ -343,7 +408,12 @@ async def fetch_ranking(
     limit = min(limit, 50)
 
     try:
-        items = await em_fetch_ranking(sort_by=sort_by, order=order, limit=limit)
+        if market.upper() == "HK":
+            from app.integrations.market_data.tencent import fetch_hk_ranking
+            items = await fetch_hk_ranking(sort_by=sort_by, order=order, limit=limit)
+        else:
+            from app.integrations.market_data.tencent import fetch_ranking as em_fetch_ranking
+            items = await em_fetch_ranking(sort_by=sort_by, order=order, limit=limit)
     except Exception as e:
         logger.error(f"获取排行榜失败: {e}")
         return []

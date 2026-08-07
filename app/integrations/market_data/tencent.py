@@ -142,6 +142,59 @@ STOCK_POOL = [
     "sz002415", "sz002475",
 ]
 
+# ─── 港股热门股票池 (~150 只，恒指 + 国企 + 科技 + 热门中概) ───
+
+HK_STOCK_POOL = [
+    # 科技/互联网
+    "hk00700", "hk09988", "hk03690", "hk01810", "hk09618", "hk09999",
+    "hk01024", "hk09888", "hk00981", "hk00772", "hk09626", "hk09866",
+    "hk09868", "hk02015", "hk00285", "hk02382", "hk02018", "hk01347",
+    "hk00522", "hk00992", "hk00763", "hk01357", "hk00268", "hk03888",
+    "hk00354", "hk02013", "hk02400", "hk03738", "hk01415", "hk00303",
+    # 金融
+    "hk00005", "hk01299", "hk02318", "hk00388", "hk00939", "hk01398",
+    "hk03988", "hk03968", "hk01288", "hk00998", "hk01988", "hk02388",
+    "hk02628", "hk02328", "hk01336", "hk06030", "hk03908", "hk06066",
+    "hk06099", "hk03328", "hk00011", "hk06078",
+    # 能源资源
+    "hk00883", "hk00857", "hk00386", "hk01088", "hk02899", "hk01208",
+    "hk01378", "hk01171", "hk00358", "hk02600", "hk01772", "hk01818",
+    "hk01138", "hk00135",
+    # 消费
+    "hk02020", "hk02331", "hk01929", "hk01928", "hk00027", "hk06862",
+    "hk09922", "hk09633", "hk02319", "hk00322", "hk00291", "hk00168",
+    "hk06186", "hk01044", "hk00151", "hk02313", "hk01128", "hk02367",
+    "hk01876", "hk01880",
+    # 医药
+    "hk02269", "hk02359", "hk01093", "hk01801", "hk06160", "hk09926",
+    "hk01177", "hk01066", "hk01548", "hk03759", "hk01858", "hk01530",
+    "hk09688", "hk09969", "hk03320", "hk00867",
+    # 地产物业
+    "hk00016", "hk00083", "hk00101", "hk00688", "hk01109", "hk00960",
+    "hk01997", "hk00823", "hk02007", "hk06098",
+    # 汽车
+    "hk01211", "hk00175", "hk02333", "hk02338", "hk02238", "hk01958",
+    "hk09863", "hk02057",
+    # 电信公用
+    "hk00941", "hk00762", "hk00728", "hk00002", "hk00003", "hk00006",
+    "hk00066", "hk00836", "hk01816", "hk02688",
+    # 工业制造
+    "hk00001", "hk01113", "hk00390", "hk01186", "hk02727", "hk03808",
+    "hk02208", "hk00968",
+    # 互联网平台/服务
+    "hk09961", "hk09987", "hk09901", "hk06618", "hk00241", "hk01833",
+    "hk02618", "hk02500", "hk09896", "hk09899",
+    # 其他热门
+    "hk06865", "hk06969", "hk06690", "hk06181", "hk00868", "hk01308",
+]
+
+# 港股三大指数（腾讯指数代码）
+HK_INDICES = {
+    "HSI": {"symbol": "HSI", "name": "恒生指数", "qt": "s_hkHSI"},
+    "HSCEI": {"symbol": "HSCEI", "name": "恒生中国企业指数", "qt": "s_hkHSCEI"},
+    "HSTECH": {"symbol": "HSTECH", "name": "恒生科技指数", "qt": "s_hkHSTECH"},
+}
+
 
 @dataclass
 class StockQuote:
@@ -174,6 +227,8 @@ def _to_symbol(code: str, market: str) -> str:
         return f"{code}.SZ"
     if m in ("0", "BJ"):
         return f"{code}.BJ"
+    if m in ("100", "HK"):
+        return f"{code}.HK"
     return f"{code}.UNKNOWN"
     m = market.upper()
     if m == "SH":
@@ -307,6 +362,197 @@ async def fetch_ranking(
         _market_cache["ts"] = now
 
     # 过滤停牌等无效数据
+    quotes = [q for q in quotes if not (q.change_pct == 0.0 and q.price == 0.0)]
+
+    reverse = order == "desc"
+    if sort_by == "volume":
+        quotes.sort(key=lambda x: x.volume, reverse=reverse)
+    elif sort_by == "amount":
+        quotes.sort(key=lambda x: x.amount, reverse=reverse)
+    else:
+        quotes.sort(key=lambda x: x.change_pct, reverse=reverse)
+
+    return quotes[:limit]
+
+
+# ============================================================
+# 港股支持（腾讯 API）
+# ============================================================
+
+# 港股字段索引（实测验证，与 A 股不同）：
+# - A 股: [30]=时间 [31]=涨跌额 [32]=涨跌幅 [33]=最高 [34]=最低 [37]=成交额(万) [39]=PE [45]=总市值(亿) [46]=流通市值(亿)
+# - 港股: [30]=日期时间 [31]=涨跌额 [32]=涨跌幅 [33]=最高 [34]=最低 [37]=成交额(元) [39]=PE [44]=总市值(亿) [45]=流通市值(亿) [46]=英文名(非数字)
+def parse_hk_qt(raw: str) -> List[StockQuote]:
+    """解析腾讯 qt 接口返回的港股行情文本"""
+    results = []
+    for m in _QT_RE.finditer(raw):
+        fields = m.group(1).split("~")
+        if len(fields) < 40 or not fields[0] or not fields[1]:
+            continue
+        try:
+            market = fields[0]
+            name = fields[1]
+            code = fields[2]
+            price = float(fields[3])
+            prev_close = float(fields[4])
+            open_price = float(fields[5])
+            volume = int(float(fields[6]))
+            change = float(fields[31])
+            change_pct = float(fields[32])
+            high = float(fields[33])
+            low = float(fields[34])
+            amount = float(fields[37]) if fields[37] else 0.0  # 元
+
+            turnover_rate = None
+            pe_str = fields[39] if len(fields) > 39 else ""
+            pe_ratio = float(pe_str) if pe_str and pe_str not in ("", "0.00") else None
+
+            mc_str = fields[44] if len(fields) > 44 else ""
+            market_cap = float(mc_str) * 1e8 if mc_str and mc_str not in ("", "0.00") else None
+
+            cc_str = fields[45] if len(fields) > 45 else ""
+            circul_cap = float(cc_str) * 1e8 if cc_str and cc_str not in ("", "0.00") else None
+
+            results.append(StockQuote(
+                symbol=_to_symbol(code, market),
+                code=code,
+                name=name,
+                price=price,
+                change=change,
+                change_pct=change_pct,
+                volume=volume,
+                amount=amount,
+                high=high,
+                low=low,
+                open=open_price,
+                prev_close=prev_close,
+                turnover_rate=turnover_rate,
+                pe_ratio=pe_ratio,
+                market_cap=market_cap,
+                circul_cap=circul_cap,
+            ))
+        except (ValueError, IndexError) as e:
+            logger.warning(f"parse_hk_qt skip: market={market}, code={code}, error={e}")
+            continue
+    return results
+
+
+async def fetch_hk_quotes(symbols: List[str]) -> List[StockQuote]:
+    """批量获取港股行情。symbols 格式: [hk00700, hk09988, ...]"""
+    all_results = []
+
+    async def fetch_one_batch(batch: List[str]) -> List[StockQuote]:
+        query = ",".join(batch)
+        for host in TENCENT_QT_HOSTS:
+            try:
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    resp = await client.get(
+                        f"{host}/q={query}",
+                        headers={"User-Agent": "Mozilla/5.0"},
+                    )
+                    resp.encoding = "gbk"
+                    parsed = parse_hk_qt(resp.text)
+                    if parsed:
+                        return parsed
+            except Exception:
+                await asyncio.sleep(0.3)
+                continue
+        return []
+
+    for i in range(0, len(symbols), 80):
+        batch = symbols[i:i + 80]
+        results = await fetch_one_batch(batch)
+        all_results.extend(results)
+        if i + 80 < len(symbols):
+            await asyncio.sleep(0.2)
+
+    return all_results
+
+
+def parse_hk_index(raw: str) -> List[dict]:
+    """
+    解析腾讯港股指数文本。
+    指数格式: v_s_hkHSI="100~恒生指数~HSI~25637.570~107.290~0.42~24672020.5274~24672020.527~~0";
+    字段: [0]=市场 [1]=名称 [2]=代码 [3]=现价 [4]=涨跌额 [5]=涨跌幅 [6]=成交量 [7]=成交额
+    """
+    results = []
+    for m in _QT_RE.finditer(raw):
+        fields = m.group(1).split("~")
+        if len(fields) < 8 or not fields[1] or not fields[2]:
+            continue
+        try:
+            results.append({
+                "symbol": fields[2],
+                "name": fields[1],
+                "price": float(fields[3]),
+                "change": float(fields[4]),
+                "change_pct": float(fields[5]),
+                "volume": float(fields[6]) if fields[6] else 0,
+                "amount": float(fields[7]) if fields[7] else 0,
+            })
+        except (ValueError, IndexError):
+            continue
+    return results
+
+
+async def fetch_hk_indices() -> List[dict]:
+    """获取港股三大指数实时行情（带 10s 缓存）"""
+    now = time.time()
+    if now - _index_cache["ts"] < _CACHE_TTL and _index_cache["data"]:
+        return _index_cache["data"]
+
+    codes = ",".join(v["qt"] for v in HK_INDICES.values())
+    for host in TENCENT_QT_HOSTS:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"{host}/q={codes}",
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
+                resp.encoding = "gbk"
+                parsed = parse_hk_index(resp.text)
+                if parsed:
+                    # 按预置顺序输出，补充中文名称
+                    by_sym = {p["symbol"]: p for p in parsed}
+                    ordered = []
+                    for meta in HK_INDICES.values():
+                        p = by_sym.get(meta["qt"].replace("s_", "").upper()) or by_sym.get(meta["symbol"])
+                        if p:
+                            p = dict(p)
+                            p["name"] = meta["name"]
+                            p["symbol"] = meta["symbol"]
+                            ordered.append(p)
+                    if ordered:
+                        _index_cache["data"] = ordered
+                        _index_cache["ts"] = now
+                    return ordered
+        except Exception:
+            continue
+    return []
+
+
+# 港股指数缓存
+_index_cache = {"data": [], "ts": 0.0}
+
+# 港股排行缓存
+_hk_ranking_cache = {"data": [], "ts": 0.0}
+
+
+async def fetch_hk_ranking(
+    sort_by: str = "change_pct",
+    order: str = "desc",
+    limit: int = 20,
+) -> List[StockQuote]:
+    """港股热门池排名（带 30s 缓存，港股池仅 150 只故单次请求即可）"""
+    now = time.time()
+    if now - _hk_ranking_cache["ts"] < 30.0 and _hk_ranking_cache["data"]:
+        quotes = _hk_ranking_cache["data"]
+    else:
+        pool = list(dict.fromkeys(HK_STOCK_POOL))
+        quotes = await fetch_hk_quotes(pool)
+        _hk_ranking_cache["data"] = quotes
+        _hk_ranking_cache["ts"] = now
+
     quotes = [q for q in quotes if not (q.change_pct == 0.0 and q.price == 0.0)]
 
     reverse = order == "desc"
