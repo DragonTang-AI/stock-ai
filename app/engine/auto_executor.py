@@ -17,7 +17,8 @@ from app.models.agent import AgentSignal, AgentPortfolio, UserAgent, AgentTrader
 from app.services import trading as trading_service
 from app.schemas.trading import OrderRequest
 from app.core.exceptions import AppException
-from app.engine.market_hours import is_market_hours
+from app.engine.market_hours import is_market_hours, is_any_market_hours
+from app.services.hk_lot_size import get_lot_size, is_hk_symbol
 from app.services.agent_config_service import DEFAULTS as CONFIG_DEFAULTS
 
 logger = logging.getLogger(__name__)
@@ -51,7 +52,7 @@ async def auto_execute_signals(
         {"executed": [...], "pending": [...], "failed": [...], "mode": "..."}
     """
     # 非交易时段不执行
-    if not is_market_hours():
+    if not is_any_market_hours():
         logger.warning("非交易时段，跳过自动执行 hire=%d", hire_id)
         return {"executed": [], "failed": [], "pending": signals, "mode": "full_managed", "skipped_reason": "非交易时段"}
 
@@ -135,11 +136,15 @@ async def _execute_single_signal(
     """执行单条信号：下单 + 更新持仓"""
     trading_symbol = _normalize_to_trading_symbol(signal["symbol"])
     qty = signal.get("quantity", 100)
-    # A股交易单位：买入向上取整到整手(100股)，卖出向下取整到整手，最少1手
-    if signal["action"] == "sell":
-        lot_qty = max(100, (qty // 100) * 100)
+    # 按市场取手数：A股 100 股整手，港股按每手股数
+    if is_hk_symbol(trading_symbol):
+        lot = get_lot_size(trading_symbol.replace('.HK', '')) or 100
     else:
-        lot_qty = max(100, ((qty + 99) // 100) * 100)
+        lot = 100
+    if signal["action"] == "sell":
+        lot_qty = max(lot, (qty // lot) * lot)
+    else:
+        lot_qty = max(lot, ((qty + lot - 1) // lot) * lot)
 
     try:
         order_req = OrderRequest(

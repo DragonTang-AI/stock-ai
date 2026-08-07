@@ -18,7 +18,7 @@ v1 实现（纸面撮合）：
 - refresh_market_value：刷新持仓市值/盈亏
 """
 import logging
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from typing import List, Optional, Tuple
 
@@ -36,6 +36,7 @@ from app.schemas.trading import (
     TradeItem,
 )
 from app.services.market import fetch_realtime_quotes
+from app.services.hk_lot_size import get_lot_size, is_hk_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -44,13 +45,18 @@ COMMISSION_RATE = 0.00025  # 万 2.5
 COMMISSION_MIN = 5.0  # 最低 5 元
 STAMP_TAX_SELL_RATE = 0.001  # 卖出印花税千 1
 LOT_SIZE = 100  # A 股 1 手 = 100 股
+
+# 港股费率
+HK_COMMISSION_RATE = 0.0003  # 万 3
+HK_COMMISSION_MIN = 15.0  # 最低 15 HKD
+HK_STAMP_TAX_BOTH_RATE = 0.0013  # 买卖双向 0.13%
 INITIAL_BALANCE = 100000.0  # 初始资金
 
 
 # ============== 账户 ==============
-async def get_or_create_account(db: AsyncSession, user: User) -> Account:
+async def get_or_create_account(db: AsyncSession, user: User, market: str = "A") -> Account:
     """获取或创建账户"""
-    stmt = select(Account).where(Account.user_id == user.id)
+    stmt = select(Account).where(Account.user_id == user.id, Account.market == market)
     result = await db.execute(stmt)
     account = result.scalar_one_or_none()
     if account is None:
@@ -58,7 +64,7 @@ async def get_or_create_account(db: AsyncSession, user: User) -> Account:
             user_id=user.id,
             balance=Decimal(str(INITIAL_BALANCE)),
             frozen=Decimal("0"),
-            market="A",
+            market=market,
         )
         db.add(account)
         await db.commit()
@@ -66,12 +72,12 @@ async def get_or_create_account(db: AsyncSession, user: User) -> Account:
     return account
 
 
-async def get_account_info(db: AsyncSession, user: User) -> AccountInfo:
+async def get_account_info(db: AsyncSession, user: User, market: str = "A") -> AccountInfo:
     """获取账户信息（含市值/盈亏）"""
-    account = await get_or_create_account(db, user)
+    account = await get_or_create_account(db, user, market)
 
     # 持仓市值
-    positions = await get_positions(db, user)
+    positions = await get_positions(db, user, market)
     market_value = sum(p.market_value for p in positions)
     total_equity = float(account.balance) + float(account.frozen) + market_value
     deposited = float(account.total_deposited) if account.total_deposited else INITIAL_BALANCE
@@ -92,13 +98,12 @@ async def get_account_info(db: AsyncSession, user: User) -> AccountInfo:
 
 
 # ============== 持仓 ==============
-async def get_positions(db: AsyncSession, user: User) -> List[PositionItem]:
+async def get_positions(db: AsyncSession, user: User, market: str | None = None) -> List[PositionItem]:
     """获取持仓列表（实时市值）"""
-    stmt = (
-        select(Position)
-        .where(Position.user_id == user.id)
-        .order_by(Position.market_value.desc())
-    )
+    stmt = select(Position).where(Position.user_id == user.id)
+    if market is not None:
+        stmt = stmt.where(Position.market == market)
+    stmt = stmt.order_by(Position.market_value.desc())
     result = await db.execute(stmt)
     positions = result.scalars().all()
 
@@ -173,6 +178,33 @@ async def get_positions_summary(db: AsyncSession, user: User) -> Tuple[List[Posi
     return items, summary
 
 
+
+async def _compute_hk_available(db: AsyncSession, user_id: int, symbol: str) -> int:
+    """计算港股 T+2 可卖数量（当日买入两日后方可卖出）"""
+    today = date.today()
+    # 查找 T+2 之前买入的数量
+    stmt = select(func.sum(Trade.quantity)).where(
+        Trade.user_id == user_id,
+        Trade.symbol == symbol,
+        Trade.side == "buy",
+        Trade.trade_date <= today - datetime.timedelta(days=2),
+    )
+    result = await db.execute(stmt)
+    total_buy_settled = result.scalar() or 0
+
+    # 查找所有卖出的数量
+    stmt2 = select(func.sum(Trade.quantity)).where(
+        Trade.user_id == user_id,
+        Trade.symbol == symbol,
+        Trade.side == "sell",
+    )
+    result2 = await db.execute(stmt2)
+    total_sell = result2.scalar() or 0
+
+    settled = total_buy_settled - total_sell
+    return max(0, int(settled))
+
+
 # ============== 撮合（下单） ==============
 async def place_order(db: AsyncSession, user: User, req: OrderRequest, fallback_price: float | None = None, signal_id: str | None = None) -> OrderItem:
     """
@@ -187,10 +219,13 @@ async def place_order(db: AsyncSession, user: User, req: OrderRequest, fallback_
     4. 扣/加资金，更新持仓，写 Trade
     5. 更新 Order 状态为 filled
     """
-    account = await get_or_create_account(db, user)
+    symbol = req.symbol.upper()
+    is_hk = is_hk_symbol(symbol)
+    hk_market = "HK" if is_hk else "A"
+
+    account = await get_or_create_account(db, user, hk_market)
 
     # 1. 取市价
-    symbol = req.symbol.upper()
     quote = None
     try:
         quotes = await fetch_realtime_quotes([symbol])
@@ -217,8 +252,15 @@ async def place_order(db: AsyncSession, user: User, req: OrderRequest, fallback_
 
     quantity = req.quantity
     amount = fill_price * quantity
-    commission = max(amount * COMMISSION_RATE, COMMISSION_MIN)
-    tax = amount * STAMP_TAX_SELL_RATE if req.side == "sell" else 0.0
+
+    # 按市场计算费率
+    if is_hk:
+        commission = max(amount * HK_COMMISSION_RATE, HK_COMMISSION_MIN)
+        tax = amount * HK_STAMP_TAX_BOTH_RATE  # 港股买卖双向 0.13%
+    else:
+        commission = max(amount * COMMISSION_RATE, COMMISSION_MIN)
+        tax = amount * STAMP_TAX_SELL_RATE if req.side == "sell" else 0.0
+
     total_cost = amount + commission + tax  # 买入实际扣款 / 卖出实际收款 = amount - commission - tax
 
     # 2. 校验
@@ -240,10 +282,11 @@ async def place_order(db: AsyncSession, user: User, req: OrderRequest, fallback_
         position = pos_result.scalar_one_or_none()
         if position is None:
             raise AppException(code="NO_POSITION", message=f"未持有 {symbol}，无法卖出", status_code=400)
-        if position.quantity < quantity:
+        check_qty = position.available if is_hk else position.quantity
+        if check_qty < quantity:
             raise AppException(
                 code="INSUFFICIENT_POSITION",
-                message=f"持仓不足：需要卖出 {quantity}，持有 {position.quantity}",
+                message=f"持仓不足：需要卖出 {quantity}，持有可用 {check_qty}（总 {position.quantity}）",
                 status_code=400,
             )
 
@@ -252,6 +295,7 @@ async def place_order(db: AsyncSession, user: User, req: OrderRequest, fallback_
         user_id=user.id,
         account_id=account.id,
         symbol=symbol,
+        market=hk_market,
         name=quote.name or "",
         side=req.side,
         order_type=req.order_type,
@@ -281,6 +325,7 @@ async def place_order(db: AsyncSession, user: User, req: OrderRequest, fallback_
         account_id=account.id,
         order_id=order.id,
         symbol=symbol,
+        market=hk_market,
         name=quote.name or "",
         side=req.side,
         price=Decimal(str(fill_price)),
@@ -346,9 +391,9 @@ async def _update_position(
                 account_id=account_id,
                 symbol=symbol,
                 name=name,
-                market="A",
+                market=hk_market,
                 quantity=quantity,
-                available=quantity,  # 模拟盘不需要T+1限制
+                available=0 if is_hk else quantity,  # HK T+2：买入当日不可卖；A 股不限制
                 cost_price=Decimal(str(price)),
                 cost_amount=Decimal(str(price * quantity)),
                 market_price=Decimal(str(price)),
@@ -361,6 +406,7 @@ async def _update_position(
             new_qty = position.quantity + quantity
             new_cost_price = total_cost / new_qty if new_qty > 0 else price
             position.quantity = new_qty
+            position.available = new_qty  # A 股买入全部可用；港股买入时 available 不变（T+2 处理在 place_order 内）
             position.cost_price = Decimal(str(new_cost_price))
             position.cost_amount = Decimal(str(total_cost))
             # market_price / market_value 会在 get_positions 刷新

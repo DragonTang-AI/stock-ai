@@ -1,5 +1,6 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
@@ -22,15 +23,41 @@ logger = logging.getLogger(__name__)
 @router.get("/account", response_model=AccountResponse)
 async def get_account(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    market: str = Query("A", description="市场：A / HK"),
 ):
     """获取账户信息"""
-    account_info = await trading_service.get_account_info(db, current_user)
+    account_info = await trading_service.get_account_info(db, current_user, market)
     return {
         "success": True,
         "data": account_info
     }
 
+
+@router.post("/account/init-hk")
+async def init_hk_account(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """初始化港股模拟账户（10 万 HKD 初始资金）"""
+    from app.models.trading import Account
+    from decimal import Decimal
+    stmt = select(Account).where(Account.user_id == current_user.id, Account.market == "HK")
+    result = await db.execute(stmt)
+    hk_account = result.scalar_one_or_none()
+    if hk_account:
+        return {"success": True, "data": {"message": "港股账户已存在", "account_id": hk_account.id, "balance": float(hk_account.balance)}}
+    hk_account = Account(
+        user_id=current_user.id,
+        balance=Decimal("100000.00"),
+        frozen=Decimal("0"),
+        market="HK",
+        total_deposited=Decimal("100000.00"),
+    )
+    db.add(hk_account)
+    await db.commit()
+    await db.refresh(hk_account)
+    return {"success": True, "data": {"message": "港股账户创建成功", "account_id": hk_account.id, "balance": 100000.00}}
 
 @router.post("/orders", response_model=OrderResponse)
 async def create_order(
