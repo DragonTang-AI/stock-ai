@@ -111,12 +111,12 @@ async def generate_signals(
     if use_real:
         logger.info("使用 ai-hedge-fund 真实引擎，策略=%s agents=%s", strategy, agents)
         return await _generate_real_signals(
-            db, hire_id, user_id, trader.id, tickers, agents, ticker_map, total_capital
+            db, hire_id, user_id, trader.id, tickers, agents, ticker_map, total_capital, agent_config=agent_config
         )
     else:
         logger.info("使用 mock 模拟信号（演示模式），策略=%s", strategy)
         return await _generate_mock_signals(
-            db, hire_id, user_id, trader.id, tickers, ticker_map, total_capital
+            db, hire_id, user_id, trader.id, tickers, ticker_map, total_capital, agent_config=agent_config
         )
 
 
@@ -137,6 +137,7 @@ async def _generate_real_signals(
     agents: list[str],
     ticker_map: dict[str, str],
     total_capital: float = 100000,
+    agent_config=None,
 ) -> dict[str, Any]:
     """使用 ai-hedge-fund 真实引擎生成信号"""
     errors = []
@@ -151,13 +152,13 @@ async def _generate_real_signals(
         if not result["success"]:
             # 真实引擎失败，fallback 到 mock
             logger.warning("ai-hedge-fund 分析失败: %s，切换到 mock", result.get("error"))
-            return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map, total_capital)
+            return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map, total_capital, agent_config=agent_config)
 
         decisions = result.get("decisions", {})
         logger.info("DEBUG decisions type=%s len=%s value=%s", type(decisions).__name__, len(decisions) if hasattr(decisions, "__len__") else "N/A", str(decisions)[:500])
         if not decisions:
             logger.info("ai-hedge-fund 未产生交易决策，切换 mock")
-            return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map, total_capital)
+            return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map, total_capital, agent_config=agent_config)
 
         # 解析 decisions → 信号
         # decisions 格式：{"ticker": {"action": "buy", "quantity": 100, ...}, ...}
@@ -178,7 +179,7 @@ async def _generate_real_signals(
 
         logger.info("DEBUG candidate_signals count=%s", len(candidate_signals))
         if not candidate_signals:
-            return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map, total_capital)
+            return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map, total_capital, agent_config=agent_config)
 
         # 补充实时价格
         prices = await market_data.get_batch_prices([s["symbol"] for s in candidate_signals])
@@ -240,7 +241,7 @@ async def _generate_real_signals(
 
     except Exception as e:
         logger.exception("真实引擎信号生成异常")
-        return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map, total_capital)
+        return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map, total_capital, agent_config=agent_config)
 
 
 async def _generate_mock_signals(
@@ -251,6 +252,7 @@ async def _generate_mock_signals(
     tickers: list[str],
     ticker_map: dict[str, str],
     total_capital: float = 100000,
+    agent_config=None,
 ) -> dict[str, Any]:
     """使用模拟信号（Phase 2 兼容，P2-11: 标记为演示模式，禁止 full_managed 自动执行）"""
     count = random.randint(1, 3)
