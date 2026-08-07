@@ -199,6 +199,7 @@ async def fetch_stock_detail(symbol: str) -> dict:
         "volume": q.volume,
         "amount": q.amount,
         "turnover_rate": q.turnover_rate,
+        "amplitude": q.amplitude,
         "pe_ratio": q.pe_ratio,
         "pb_ratio": q.pb_ratio,
         "market_cap": q.market_cap,
