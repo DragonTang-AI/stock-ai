@@ -25,6 +25,7 @@ class QuoteItem(BaseModel):
     pb_ratio: Optional[float] = None
     market_cap: Optional[float] = None
     circul_cap: Optional[float] = None
+    amplitude: Optional[float] = None
 
 
 class QuoteResponse(BaseModel):
@@ -81,6 +82,7 @@ class StockDetail(BaseModel):
     pb_ratio: Optional[float] = None
     market_cap: Optional[float] = None
     circul_cap: Optional[float] = None
+    amplitude: Optional[float] = None
 
     # 技术指标（从 K 线计算）
     ma5: Optional[float] = None
@@ -130,6 +132,7 @@ class RankItem(BaseModel):
     pe_ratio: Optional[float] = None
     market_cap: Optional[float] = None
     circul_cap: Optional[float] = None
+    amplitude: Optional[float] = None
 
 
 class RankResponse(BaseModel):
