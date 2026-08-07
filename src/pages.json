@@ -213,6 +213,15 @@
       }
     },
     {
+      "path": "pages/agent-config/index",
+      "style": {
+        "navigationBarTitleText": "交易员配置",
+        "enablePullDownRefresh": false,
+        "animationType": "slide-in-bottom",
+        "animationDuration": 300
+      }
+    },
+    {
       "path": "pages/dashboard/index",
       "style": {
         "navigationBarTitleText": "数据看板",,

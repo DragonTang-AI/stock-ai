@@ -231,3 +231,38 @@ export function terminateAgent(hireId: number): Promise<any> {
 export function generateSignals(hireId: number): Promise<ConsoleSignal[]> {
   return request<ConsoleSignal[]>('/agent-console/' + hireId + '/generate-signals', { method: 'POST' })
 }
+
+// ── 交易员配置 API ──
+
+export interface AgentConfig {
+  hire_id?: number
+  markets: string[]
+  allocated_capital: number
+  max_position_pct: number | null
+  max_position_count: number | null
+  loss_stop_pct: number | null
+  loss_stop_amount: number | null
+  t1_enabled: boolean
+  auto_exec_confidence: number
+  max_auto_exec_per_round: number | null
+  signal_interval_min: number | null
+  trading_style: string
+}
+
+/** 获取交易员配置 */
+export function getAgentConfig(hireId: number): Promise<AgentConfig> {
+  return request<AgentConfig>('/agent/' + hireId + '/config')
+}
+
+/** 更新交易员配置 */
+export function updateAgentConfig(hireId: number, data: Partial<AgentConfig>): Promise<AgentConfig> {
+  return request<AgentConfig>('/agent/' + hireId + '/config', {
+    method: 'PUT',
+    data,
+  })
+}
+
+/** 启用交易员 */
+export function activateAgent(hireId: number): Promise<any> {
+  return request('/agent/' + hireId + '/activate', { method: 'POST' })
+}

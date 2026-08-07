@@ -256,9 +256,10 @@ const doHire = async () => {
   hiring.value = true
   try {
     const result = await hireAgent(agent.value.id, hireMode.value)
-    uni.showToast({ title: '雇佣成功！', icon: 'success' })
+    const data = (result as any).data || result
+    const userAgentId = data.user_agent_id
     showHireModal.value = false
-    setTimeout(() => uni.navigateBack(), 1200)
+    uni.navigateTo({ url: '/pages/agent-config/index?hire_id=' + userAgentId })
   } catch (e: any) {
     const msg = e?.response?.data?.detail || e?.message || '雇佣失败'
     uni.showToast({ title: msg, icon: 'none' })

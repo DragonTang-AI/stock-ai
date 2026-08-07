@@ -21,8 +21,8 @@
               <text class="agent-name">{{ item.agent.code_name }}</text>
               <text class="agent-tag">{{ item.agent.tag }}</text>
             </view>
-            <text :class="item.status === 'active' ? 'status-active' : 'status-expired'">
-              {{ item.status === 'active' ? '运行中' : '已停用' }}
+            <text :class="statusClass(item)">
+              {{ statusText(item) }}
             </text>
           </view>
 
@@ -62,6 +62,9 @@
               <view v-if="item.status === 'paused'" class="ft-btn resume-btn" @click="handleResume(item)">
                 <text>恢复</text>
               </view>
+              <view v-if="item.status === 'configuring'" class="ft-btn config-btn" @click="goConfig(item)">
+                <text>继续配置</text>
+              </view>
               <view class="ft-btn terminate-btn" @click="handleTerminate(item)">
                 <text>终止</text>
               </view>
@@ -88,6 +91,18 @@ const formatPct = (v: number | null | undefined) => {
   return formatPercent(v, 1)
 }
 
+const statusClass = (item: UserAgent) => {
+  if (item.status === 'active') return 'status-active'
+  if (item.status === 'configuring') return 'status-configuring'
+  return 'status-expired'
+}
+
+const statusText = (item: UserAgent) => {
+  if (item.status === 'active') return '运行中'
+  if (item.status === 'configuring') return '待配置'
+  return '已停用'
+}
+
 const loadData = async () => {
   loading.value = true
   try {
@@ -102,6 +117,10 @@ const loadData = async () => {
 
 const goConsole = (item: UserAgent) => {
   uni.navigateTo({ url: `/pages/agent-console/index?hire_id=${item.id}` })
+}
+
+const goConfig = (item: UserAgent) => {
+  uni.navigateTo({ url: `/pages/agent-config/index?hire_id=${item.id}` })
 }
 
 const handlePause = (item: UserAgent) => {
@@ -300,6 +319,13 @@ onPullDownRefresh(() => {
     padding: 6rpx 16rpx;
     border-radius: 12rpx;
   }
+  .status-configuring {
+    font-size: 22rpx;
+    color: #f0c060;
+    background: rgba(240, 192, 96, 0.12);
+    padding: 6rpx 16rpx;
+    border-radius: 12rpx;
+  }
   .status-expired {
     font-size: 22rpx;
     color: #667788;
@@ -392,6 +418,10 @@ onPullDownRefresh(() => {
   .resume-btn {
     background: rgba(39, 174, 96, 0.15);
     color: #27ae60;
+  }
+  .config-btn {
+    background: rgba(240, 192, 96, 0.15);
+    color: #f0c060;
   }
   .terminate-btn {
     background: rgba(231, 76, 60, 0.15);
