@@ -306,6 +306,12 @@ async def list_my_agents(
             .group_by(AgentPortfolio.hire_id)
         )
         pnl_by_hire = {hid: float(pnl) for hid, pnl in pnl_rows.all()}
+        # P3: 拉取 config_source 标记
+        cfg_rows = await db.execute(
+            select(AgentConfig.hire_id, AgentConfig.config_source)
+            .where(AgentConfig.hire_id.in_(hire_ids))
+        )
+        config_by_hire = {hid: src for hid, src in cfg_rows.all()}
         # 回写 UserAgent.current_pnl
         for ua, _ in rows:
             calc = pnl_by_hire.get(ua.id, 0.0)
@@ -325,6 +331,7 @@ async def list_my_agents(
             current_pnl=pnl_by_hire.get(ua.id, float(ua.current_pnl) if ua.current_pnl else 0.0),
             hired_at=ua.hired_at,
             expires_at=ua.expires_at,
+            config_source=config_by_hire.get(ua.id, "default"),
         ))
     return items
 
@@ -422,6 +429,13 @@ async def resume_agent(
         raise HTTPException(status_code=404, detail='交易员不存在')
     if ua.status == 'expired':
         raise HTTPException(status_code=400, detail='交易员已终止，无法恢复')
+    # P3: 未完成配置不允许启动
+    cfg_result = await db.execute(
+        select(AgentConfig).where(AgentConfig.hire_id == user_agent_id)
+    )
+    cfg = cfg_result.scalar_one_or_none()
+    if cfg is None or cfg.config_source != "user":
+        raise HTTPException(status_code=400, detail='启动交易员前必须先完成配置')
     ua.status = 'active'
     return {'success': True, 'user_agent_id': ua.id, 'status': 'active', 'message': '已恢复交易员'}
 
@@ -481,6 +495,13 @@ async def activate_agent(
         raise HTTPException(status_code=404, detail="交易员不存在")
     if ua.status not in ("configuring", "dormant"):
         raise HTTPException(status_code=400, detail=f"当前状态 {ua.status} 不可激活, 仅 configuring/dormant 可激活")
+    # P3: 未完成配置不允许启动
+    cfg_result = await db.execute(
+        select(AgentConfig).where(AgentConfig.hire_id == user_agent_id)
+    )
+    cfg = cfg_result.scalar_one_or_none()
+    if cfg is None or cfg.config_source != "user":
+        raise HTTPException(status_code=400, detail="启动交易员前必须先完成配置")
     ua.status = "active"
     logger.info(f"激活交易员 user_id={current_user.id} user_agent_id={user_agent_id}")
     return ActivateAgentResponse(
@@ -541,7 +562,10 @@ async def get_agent_config(
     )
     cfg = cfg_result.scalar_one_or_none()
     if not cfg:
-        raise HTTPException(status_code=404, detail="配置不存在")
+        cfg = AgentConfig(hire_id=user_agent_id)
+        db.add(cfg)
+        await db.commit()
+        await db.refresh(cfg)
     return AgentConfigResponse.model_validate(cfg)
 
 
@@ -569,14 +593,18 @@ async def update_agent_config(
     )
     cfg = cfg_result.scalar_one_or_none()
     if not cfg:
-        raise HTTPException(status_code=404, detail="配置不存在")
+        cfg = AgentConfig(hire_id=user_agent_id)
+        db.add(cfg)
+        await db.flush()
 
     update_data = req.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         if hasattr(cfg, field):
             setattr(cfg, field, value)
 
+    # P3: 用户保存配置后标记已配置
+    cfg.config_source = "user"
     await db.flush()
     await db.refresh(cfg)
-    logger.info(f"配置已更新 hire_id={user_agent_id} fields={list(update_data.keys())}")
+    logger.info(f"配置已更新 hire_id={user_agent_id} fields={list(update_data.keys())} config_source=user")
     return AgentConfigResponse.model_validate(cfg)

@@ -83,6 +83,7 @@ class UserAgentResponse(BaseModel):
     current_pnl: float | None = None
     hired_at: datetime
     expires_at: datetime | None = None
+    config_source: str = "default"
 
     class Config:
         from_attributes = True
@@ -230,6 +231,7 @@ class AgentConfigResponse(BaseModel):
     auto_exec_confidence: int
     max_auto_exec_per_round: int
     notify_channels: list[str]
+    config_source: str = "default"
     created_at: datetime
     updated_at: datetime
 
