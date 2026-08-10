@@ -7,7 +7,7 @@ from app.api.v1.auth import get_current_user
 from app.schemas.trading import OrderRequest, OrderResponse
 import logging
 from app.core.exceptions import AppException
-from app.engine.market_hours import is_market_hours
+from app.engine.market_hours import is_market_hours, is_hk_market_hours
 from app.services.trading import (
     get_account_info,
     get_positions_summary,
@@ -73,8 +73,13 @@ async def place_simulation_order(
     if hosted_engine.is_active(current_user.id):
         raise AppException(code="HOSTED_ACTIVE", message="AI托管已开启，手动交易已禁用。请先关闭AI托管再操作。", status_code=403)
 
-    if not is_market_hours():
-        raise AppException(code="NOT_TRADING_HOURS", message="当前非交易时段（A股：周一至周五 9:30-11:30, 13:00-15:00），无法下单", status_code=400)
+    is_hk = symbol.upper().endswith('.HK')
+    if is_hk:
+        if not is_hk_market_hours():
+            raise AppException(code="NOT_TRADING_HOURS", message="当前非交易时段（港股：周一至周五 9:30-12:00, 13:00-16:00），无法下单", status_code=400)
+    else:
+        if not is_market_hours():
+            raise AppException(code="NOT_TRADING_HOURS", message="当前非交易时段（A股：周一至周五 9:30-11:30, 13:00-15:00），无法下单", status_code=400)
 
 
     try:
