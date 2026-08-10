@@ -25,7 +25,7 @@
     </view>
 
     <!-- 账户卡片 -->
-    <view class="account-card fade-in-view" v-else-if="account">
+    <view class="account-card fade-in-view" v-if="account">
       <view class="account-header">
         <text class="account-type">{{ activeMarket === 'HK' ? '模拟账户(港股)' : '模拟账户(A股)' }}</text>
         <button class="btn-refresh" @click="refreshAll">刷新</button>
@@ -576,7 +576,8 @@ import { isOfflineMode, onNetworkChange } from '@/utils/offline'
 import type { NetworkInfo } from '@/utils/network'
 import {
   getAccount, getPositions, getOrders, placeOrder, getTrades, getPortfolioAnalytics, topupAccount,
-  type AccountInfo, type PositionItem, type OrderItem, type TradeItem, type PositionAnalytics,
+  initHKAccount, getMarketRules,
+  type AccountInfo, type PositionItem, type OrderItem, type TradeItem, type PositionAnalytics, type MarketRules,
 } from '@/api/portfolio'
 import { searchStocks, fetchQuote, getLotSize, type SearchResult, type QuoteSnapshot } from '@/api/market'
 import { formatPercent, formatSigned } from '@/utils/format'
@@ -1001,7 +1002,7 @@ async function loadTrades() {
   tradesPage.value = 1
   tradesHasMore.value = true
   try {
-    const res = await getTrades(20, 0)
+    const res = await getTrades(activeMarket.value)
     trades.value = res.data || []
     tradesTotal.value = res.total
     tradesHasMore.value = res.data.length >= 20
@@ -1013,7 +1014,7 @@ async function loadMoreTrades() {
   tradesLoadingMore.value = true
   try {
     const offset = tradesPage.value * 20
-    const res = await getTrades(20, offset)
+    const res = await getTrades(activeMarket.value)
     trades.value.push(...(res.data || []))
     tradesPage.value++
     tradesHasMore.value = trades.value.length < res.total
