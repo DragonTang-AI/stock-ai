@@ -283,6 +283,8 @@ def parse_tencent_qt(raw: str) -> List[StockQuote]:
             circul_cap = float(cc_str) * 1e8 if cc_str and cc_str not in ("", "0.00") else None
 
             # 计算换手率: 成交量 / (流通市值 / 当前价) * 100
+            # 计算振幅
+            amplitude = round((high - low) / prev_close * 100, 2) if prev_close > 0 else None
             if circul_cap and circul_cap > 0 and price > 0:
                 turnover_rate = round(volume / (circul_cap / price) * 100, 2)
             else:
@@ -423,6 +425,8 @@ def parse_hk_qt(raw: str) -> List[StockQuote]:
             circul_cap = float(cc_str) * 1e8 if cc_str and cc_str not in ("", "0.00") else None
 
             # 计算换手率: 成交量 / (流通市值 / 当前价) * 100
+            # 计算振幅
+            amplitude = round((high - low) / prev_close * 100, 2) if prev_close > 0 else None
             if circul_cap and circul_cap > 0 and price > 0:
                 turnover_rate = round(volume / (circul_cap / price) * 100, 2)
             else:
