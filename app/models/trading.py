@@ -36,12 +36,12 @@ from app.core.database import Base
 
 # ============== 账户 ==============
 class Account(Base):
-    """用户资金账户（1 用户 1 账户）"""
+    """用户资金账户（1 用户每市场 1 账户）"""
     __tablename__ = "accounts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False, index=True
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     balance: Mapped[float] = mapped_column(Numeric(18, 2), default=100000.0, nullable=False)
     frozen: Mapped[float] = mapped_column(Numeric(18, 2), default=0.0, nullable=False, comment="冻结资金（下单未成交）")
@@ -54,6 +54,10 @@ class Account(Base):
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "market", name="uq_accounts_user_market"),
     )
 
     user = relationship("User", backref="account", uselist=False)
