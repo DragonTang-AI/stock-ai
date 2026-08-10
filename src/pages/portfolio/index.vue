@@ -1084,7 +1084,7 @@ async function handleTopup() {
   if (!topupAmount.value) return
   topupSubmitting.value = true
   try {
-    const res = await topupAccount(topupAmount.value)
+    const res = await topupAccount(topupAmount.value, activeMarket.value)
     uni.showToast({ title: res.message || '充值成功', icon: 'success', duration: 2000 })
     uni.vibrateShort({ type: 'medium' })
     showTopupModal.value = false

@@ -211,9 +211,10 @@ export interface TopupResult {
   message: string
 }
 
-export async function topupAccount(amount: number): Promise<TopupResult> {
+export async function topupAccount(amount: number, market?: string): Promise<TopupResult> {
+  const params = market ? `&market=${market}` : ''
   const res = await request<TopupResult>(
-    `/portfolio/topup?amount=${amount}`,
+    `/portfolio/topup?amount=${amount}${params}`,
     { method: 'POST' }
   )
   return res as any
