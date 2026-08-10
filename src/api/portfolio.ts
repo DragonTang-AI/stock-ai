@@ -17,8 +17,39 @@ export interface AccountInfo {
   created_at: string
 }
 
-export async function getAccount(): Promise<AccountInfo> {
-  const res = await request<{ success: boolean; data: AccountInfo }>('/portfolio/account', { method: 'GET' })
+export async function getAccount(market?: string): Promise<AccountInfo> {
+  const params: Record<string, string> = {}
+  if (market) params.market = market
+  const res = await request<{ success: boolean; data: AccountInfo }>('/portfolio/account', { method: 'GET', params })
+  return (res as any).data
+}
+
+/** 初始化港股账户 */
+export async function initHKAccount(): Promise<AccountInfo> {
+  const res = await request<{ success: boolean; data: AccountInfo }>('/portfolio/account/init-hk', { method: 'POST' })
+  return (res as any).data
+}
+
+// ---- 市场规则 ----
+export interface MarketRules {
+  market: string
+  lot_size: number | null
+  price_limit_pct: number | null
+  commission_rate: number
+  min_commission: number
+  stamp_tax_rate: number
+  stamp_tax_side: 'BOTH' | 'SELL'
+  settlement: string
+  trading_hours: {
+    morning: string
+    afternoon: string
+  }
+  trading_currency: string
+  trading_currency_symbol: string
+}
+
+export async function getMarketRules(market: string): Promise<MarketRules> {
+  const res = await request<{ success: boolean; data: MarketRules }>(`/market/rules/${market}`, { method: 'GET' })
   return (res as any).data
 }
 
@@ -47,8 +78,10 @@ export interface PositionsResponse {
   }
 }
 
-export async function getPositions(): Promise<PositionsResponse> {
-  const res = await request<{ success: boolean; data: PositionItem[]; summary: any }>('/portfolio/positions', { method: 'GET' })
+export async function getPositions(market?: string): Promise<PositionsResponse> {
+  const params: Record<string, string> = {}
+  if (market) params.market = market
+  const res = await request<{ success: boolean; data: PositionItem[]; summary: any }>('/portfolio/positions', { method: 'GET', params })
   return { data: (res as any).data || [], summary: (res as any).summary || {} }
 }
 
@@ -66,11 +99,13 @@ export interface OrderItem {
   created_at: string
   updated_at: string
   error_msg?: string
+  market?: string
 }
 
-export async function getOrders(status?: string): Promise<{ data: OrderItem[]; total: number }> {
+export async function getOrders(status?: string, market?: string): Promise<{ data: OrderItem[]; total: number }> {
   const params: Record<string, string> = {}
   if (status && status !== 'all') params.status = status
+  if (market) params.market = market
   const res = await request<{ success: boolean; data: OrderItem[]; total: number }>('/portfolio/orders', { method: 'GET', params })
   return { data: (res as any).data || [], total: (res as any).total || 0 }
 }
@@ -110,8 +145,10 @@ export interface TradeItem {
   trader_name?: string | null
 }
 
-export async function getTrades(): Promise<{ data: TradeItem[]; total: number }> {
-  const res = await request<{ success: boolean; data: TradeItem[]; total: number }>('/portfolio/trades', { method: 'GET' })
+export async function getTrades(market?: string): Promise<{ data: TradeItem[]; total: number }> {
+  const params: Record<string, string> = {}
+  if (market) params.market = market
+  const res = await request<{ success: boolean; data: TradeItem[]; total: number }>('/portfolio/trades', { method: 'GET', params })
   return { data: (res as any).data || [], total: (res as any).total || 0 }
 }
 

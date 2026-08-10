@@ -9,17 +9,32 @@
     <!-- 骨架屏 -->
     <LoadingSkeleton v-if="isLoading" scene="portfolio" :rows="4" />
 
+    <!-- 市场选择器 -->
+    <view class="market-selector fade-in-view" v-if="!isLoading">
+      <view class="market-tabs">
+        <view
+          v-for="m in markets"
+          :key="m.key"
+          class="market-tab"
+          :class="{ active: activeMarket === m.key }"
+          @click="switchMarket(m.key)"
+        >
+          {{ m.label }}
+        </view>
+      </view>
+    </view>
+
     <!-- 账户卡片 -->
     <view class="account-card fade-in-view" v-else-if="account">
       <view class="account-header">
-        <text class="account-type">模拟账户</text>
+        <text class="account-type">{{ activeMarket === 'HK' ? '模拟账户(港股)' : '模拟账户(A股)' }}</text>
         <button class="btn-refresh" @click="refreshAll">刷新</button>
         <button class="btn-topup" @click="showTopupModal = true">充值</button>
       </view>
       <view class="account-main">
         <text class="total-label">总资产</text>
         <view class="total-value">
-          <text class="currency">&yen;</text>
+          <text class="currency">{{ activeMarket === 'HK' ? 'HK$' : '&yen;' }}</text>
           <text class="amount">{{ formatMoney(account.total_equity) }}</text>
         </view>
       </view>
@@ -379,7 +394,7 @@
                 :adjust-position="true"
                 :cursor-spacing="20"
               />
-              <view class="tm-price-refs">
+              <view class="tm-price-refs" v-if="activeMarket === 'A'">
                 <text class="tm-price-ref" @click="tradePrice = String(quoteData.price)">
                   市价 {{ formatMoney(quoteData.price, 2) }}
                 </text>
@@ -388,6 +403,11 @@
                 </text>
                 <text class="tm-price-ref" @click="tradePrice = String(formatMoney(quoteData.price * 0.90, 2))">
                   跌停 {{ formatMoney(quoteData.price * 0.90, 2) }}
+                </text>
+              </view>
+              <view class="tm-price-refs" v-else>
+                <text class="tm-price-ref" @click="tradePrice = String(quoteData.price)">
+                  市价 {{ formatMoney(quoteData.price, 2) }}
                 </text>
               </view>
             </view>
@@ -400,7 +420,7 @@
               class="tm-qty-input"
               v-model="tradeQty"
               type="number"
-              placeholder="100的整数倍"
+              :placeholder="activeMarket === 'HK' ? '每手' + (lotSize || '?') + '股的整数倍' : '100的整数倍'"
               :adjust-position="true"
               :cursor-spacing="20"
             />
@@ -416,7 +436,7 @@
               </view>
             </view>
             <view class="tm-qty-hint">
-              <text v-if="tradeSide === 'buy'">可用余额：&yen;{{ formatMoney(account?.balance || 0) }}</text>
+              <text v-if="tradeSide === 'buy'">可用余额：{{ activeMarket === 'HK' ? 'HK$' : '&yen;' }}{{ formatMoney(account?.balance || 0) }}</text>
               <text v-else-if="tradeSide === 'sell' && currentPosition">
                 可卖：{{ currentPosition.available }}股 / 成本：{{ formatMoney(currentPosition.cost_price, 2) }}
               </text>
@@ -428,8 +448,24 @@
             <view class="tm-estimate">
               <text class="tm-estimate-label">预估金额</text>
               <text class="tm-estimate-value">
-                &yen;{{ formatMoney(parseFloat(tradePrice) * parseInt(tradeQty || '0')) }}
+                {{ activeMarket === 'HK' ? 'HK$' : '&yen;' }}{{ formatMoney(parseFloat(tradePrice) * parseInt(tradeQty || '0')) }}
               </text>
+            </view>
+          </view>
+
+          <!-- 6.5 港股费用提示 -->
+          <view class="tm-section tm-fee-note" v-if="activeMarket === 'HK' && tradePrice && tradeQty">
+            <view class="tm-fee-row">
+              <text class="tm-fee-label">佣金（万3，最低15 HKD）</text>
+              <text class="tm-fee-value">约 HK${{ formatMoney(Math.max(parseFloat(tradePrice) * parseInt(tradeQty) * 0.0003, 15), 2) }}</text>
+            </view>
+            <view class="tm-fee-row">
+              <text class="tm-fee-label">印花税（双边0.13%）</text>
+              <text class="tm-fee-value">约 HK${{ formatMoney(parseFloat(tradePrice) * parseInt(tradeQty) * 0.0013, 2) }}</text>
+            </view>
+            <view class="tm-fee-row">
+              <text class="tm-fee-label">结算制度</text>
+              <text class="tm-fee-value">T+2（买入当日不可卖）</text>
             </view>
           </view>
 
@@ -441,7 +477,7 @@
               :disabled="!canTrade || submitting"
               @click="handleTradeSubmit"
             >
-              <text v-if="!canTrade">非交易时段</text>
+              <text v-if="!canTrade">非交易时段{{ activeMarket === 'HK' ? ' (港股 9:30-12:00, 13:00-16:00)' : ' (A股 9:30-11:30, 13:00-15:00)' }}</text>
               <text v-else-if="submitting">提交中...</text>
               <text v-else>{{ tradeSide === 'buy' ? '买入' : '卖出' }} {{ quoteData.name }}</text>
             </button>
@@ -488,6 +524,17 @@
         <text class="topup-modal-title">模拟充值</text>
         <text class="topup-modal-sub">选择充值金额（模拟资金）</text>
         <view class="topup-options">
+          <template v-if="activeMarket === 'HK'">
+            <view class="topup-option" :class="{ active: topupAmount === 100000 }" @click="topupAmount = 100000">
+              <text class="topup-opt-amount">10 万</text>
+              <text class="topup-opt-label">HK$100,000</text>
+            </view>
+            <view class="topup-option" :class="{ active: topupAmount === 500000 }" @click="topupAmount = 500000">
+              <text class="topup-opt-amount">50 万</text>
+              <text class="topup-opt-label">HK$500,000</text>
+            </view>
+          </template>
+          <template v-else>
           <view
             class="topup-option"
             :class="{ active: topupAmount === 100000 }"
@@ -504,6 +551,7 @@
             <text class="topup-opt-amount">100 万</text>
             <text class="topup-opt-label">￥1,000,000</text>
           </view>
+          </template>
         </view>
         <view class="topup-actions">
           <button class="topup-btn-cancel" @click="showTopupModal = false">取消</button>
@@ -548,6 +596,16 @@ const STATUS_LABELS: Record<string, string> = {
   rejected: '已拒绝',
 }
 
+// ─── 市场切换 ───
+const markets = [
+  { key: 'A', label: 'A股' },
+  { key: 'HK', label: '港股' },
+]
+const activeMarket = ref('A')
+const lotSize = ref<number>(0)
+const marketRules = ref<MarketRules | null>(null)
+
+// ─── 默认 Tab ───
 const activeTab = ref('positions')
 const isLoading = ref(false)
 const submitting = ref(false)
@@ -614,8 +672,9 @@ const currentPosition = computed(() => {
 })
 
 /** 是否可以交易（交易时段检查） */
+/** 当前市场时段是否可交易 */
 const canTrade = computed(() => {
-  return isMarketHours()
+  return isCurrentMarketHours()
 })
 
 /** 确认弹窗信息 */
@@ -666,6 +725,24 @@ function isMarketHours(): boolean {
   return (mins >= 570 && mins < 690) || (mins >= 780 && mins < 900)
 }
 
+/** 港股交易时段判断（9:30-12:00, 13:00-16:00） */
+function isHKMarketHours(): boolean {
+  const now = new Date()
+  const utc8 = new Date(now.getTime() + now.getTimezoneOffset() * 60000 + 8 * 3600000)
+  const dow = utc8.getDay()
+  const h = utc8.getHours()
+  const m = utc8.getMinutes()
+  const mins = h * 60 + m
+  if (dow === 0 || dow === 6) return false
+  return (mins >= 570 && mins < 720) || (mins >= 780 && mins < 960)
+}
+
+/** 根据当前市场判断交易时段 */
+function isCurrentMarketHours(): boolean {
+  if (activeMarket.value === 'HK') return isHKMarketHours()
+  return isCurrentMarketHours()
+}
+
 // ─── 交易面板逻辑 ───
 
 /** 打开交易面板 */
@@ -685,7 +762,7 @@ function openTradeForSell(pos: PositionItem) {
   tradeQty.value = ''
   tradePrice.value = ''
   loadQuote(pos.symbol)
-  loadOrders()
+  loadOrders(undefined, activeMarket.value)
 }
 
 /** 关闭交易面板 */
@@ -747,6 +824,16 @@ async function loadQuote(symbol: string) {
 
 /** 计算快捷数量按钮 */
 function calcPresets() {
+  if (activeMarket.value === 'HK' && lotSize.value > 0) {
+    const ls = lotSize.value
+    qtyPresets.value = [
+      { label: ls + '股', key: 1, active: false },
+      { label: (ls * 2) + '股', key: 2, active: false },
+      { label: (ls * 5) + '股', key: 5, active: false },
+      { label: (ls * 10) + '股', key: 10, active: false },
+    ]
+    return
+  }
   const price = parseFloat(tradePrice.value)
   if (!price || price <= 0) return
   const presets: QtyPreset[] = []
@@ -859,8 +946,8 @@ function cancelSubmitOrder() {
 
 function switchTab(key: string) {
   activeTab.value = key
-  if (key === 'orders') loadOrders()
-  if (key === 'trades') loadTrades()
+  if (key === 'orders') loadOrders(undefined, activeMarket.value)
+  if (key === 'trades') loadTrades(activeMarket.value)
 }
 
 function goDetail(symbol: string) {
@@ -872,12 +959,12 @@ function goAnalytics() {
 }
 
 async function loadAccount() {
-  try { account.value = await getAccount() } catch (e) { console.error('[Portfolio] loadAccount 失败', e); }
+  try { account.value = await getAccount(activeMarket.value) } catch (e) { console.error('[Portfolio] loadAccount 失败', e); }
 }
 
 async function loadPositions() {
   try {
-    const res = await getPositions()
+    const res = await getPositions(activeMarket.value)
     positions.value = res.data || []
   } catch (e) { console.error('[Portfolio] loadPositions 失败', e); }
 }
@@ -886,7 +973,7 @@ async function loadOrders() {
   ordersPage.value = 1
   ordersHasMore.value = true
   try {
-    const res = await getOrders(undefined, 20, 0)
+    const res = await getOrders(undefined, activeMarket.value)
     orders.value = res.data || []
     ordersTotal.value = res.total
     ordersHasMore.value = res.data.length >= 20
@@ -898,7 +985,7 @@ async function loadMoreOrders() {
   ordersLoadingMore.value = true
   try {
     const offset = ordersPage.value * 20
-    const res = await getOrders(undefined, 20, offset)
+    const res = await getOrders(undefined, activeMarket.value)
     orders.value.push(...(res.data || []))
     ordersPage.value++
     ordersHasMore.value = orders.value.length < res.total
@@ -938,6 +1025,47 @@ async function loadHostedStatus() {
   hostedLoading.value = true
   try { hostedStatus.value = await getHostedStatus() } catch (e) { console.error('[Portfolio] loadHostedStatus 失败', e); }
   finally { hostedLoading.value = false }
+}
+
+/** 切换市场 */
+async function switchMarket(market: string) {
+  if (market === activeMarket.value) return
+  activeMarket.value = market
+  if (market === 'HK') {
+    try {
+      account.value = await getAccount('HK')
+    } catch (e: any) {
+      // 港股账户不存在，尝试初始化
+      if (e && (e.statusCode === 404 || (e.message && e.message.includes('not found')))) {
+        try {
+          account.value = await initHKAccount()
+          uni.showToast({ title: '港股账户已初始化（10万HKD）', icon: 'success' })
+        } catch (e2) {
+          console.error('[Portfolio] initHKAccount 失败', e2)
+          activeMarket.value = 'A'
+          return
+        }
+      } else {
+        console.error('[Portfolio] getAccount HK 失败', e)
+        activeMarket.value = 'A'
+        return
+      }
+    }
+  } else {
+    await loadAccount()
+  }
+  // 加载市场规则（港股需要每手股数）
+  if (market === 'HK') {
+    try {
+      marketRules.value = await getMarketRules('HK')
+      lotSize.value = marketRules.value.lot_size || 0
+    } catch (e) { console.error('[Portfolio] getMarketRules 失败', e); }
+  } else {
+    lotSize.value = 0
+    marketRules.value = null
+  }
+  await loadPositions()
+  await loadAnalytics()
 }
 
 async function refreshAll() {
@@ -980,8 +1108,8 @@ onUnmounted(() => {
 onShow(() => {
   useShowRefresh('portfolio', () => {
     loadAnalytics()
-    if (activeTab.value === 'orders') loadOrders()
-    if (activeTab.value === 'trades') loadTrades()
+    if (activeTab.value === 'orders') loadOrders(undefined, activeMarket.value)
+    if (activeTab.value === 'trades') loadTrades(activeMarket.value)
   })
   offline.value = isOfflineMode()
   trackPageView('portfolio')
@@ -1001,6 +1129,55 @@ onShow(() => {
 .offline-text { font-size: $font-size-sm; color: #F57F17; font-weight: 500; }
 
 /* Account Card */
+/* Market Selector */
+.market-selector {
+  padding: 16rpx 24rpx;
+  background: -card;
+  border-bottom: 1rpx solid -color;
+}
+.market-tabs {
+  display: flex;
+  gap: 8rpx;
+}
+.market-tab {
+  padding: 12rpx 32rpx;
+  font-size: $font-size-base;
+  color: $text-secondary;
+  background: $bg-page;
+  border-radius: 20rpx;
+  border: 1rpx solid transparent;
+  transition: all 0.2s;
+}
+.market-tab.active {
+  color: $color-primary;
+  background: rgba($color-primary, 0.1);
+  border-color: $color-primary;
+  font-weight: 600;
+}
+
+/* HK Fee Note */
+.tm-fee-note {
+  background: rgba(#F59E0B, 0.08);
+  border-radius: 12rpx;
+  padding: 16rpx 20rpx;
+  border: 1rpx solid rgba(#F59E0B, 0.2);
+}
+.tm-fee-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6rpx 0;
+}
+.tm-fee-label {
+  font-size: -size-xs;
+  color: $text-secondary;
+}
+.tm-fee-value {
+  font-size: -size-xs;
+  color: #F59E0B;
+  font-weight: 500;
+}
+
 .account-card {
   background: linear-gradient(135deg, $bg-primary 0%, #2d4a8a 100%);
   padding: 32rpx; color: $text-inverse;
