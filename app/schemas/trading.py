@@ -76,12 +76,7 @@ class OrderRequest(BaseModel):
             raise ValueError("order_type 必须是 market 或 limit")
         return v
 
-    @field_validator("quantity")
-    @classmethod
-    def _validate_quantity(cls, v: int) -> int:
-        if v % 100 != 0:
-            raise ValueError("数量必须是 100 的整数倍（A 股交易单位）")
-        return v
+
 
 
 class OrderItem(BaseModel):

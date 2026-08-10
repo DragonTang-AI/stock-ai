@@ -224,6 +224,23 @@ async def place_order(db: AsyncSession, user: User, req: OrderRequest, fallback_
     hk_market = "HK" if is_hk else "A"
 
     account = await get_or_create_account(db, user, hk_market)
+    # 1.0 校验整手倍数
+    if is_hk:
+        code = symbol.replace(".HK", "").replace(".hk", "").strip()
+        lot_size = get_lot_size(code)
+        if quantity % lot_size != 0:
+            raise AppException(
+                code="INVALID_QUANTITY",
+                message=f"港股 {symbol} 每手 {lot_size} 股，数量必须是 {lot_size} 的整数倍",
+                status_code=400,
+            )
+    elif quantity % 100 != 0:
+        raise AppException(
+            code="INVALID_QUANTITY",
+            message="A股数量必须是 100 的整数倍（交易单位：手）",
+            status_code=400,
+        )
+
 
     # 1. 取市价
     quote = None
