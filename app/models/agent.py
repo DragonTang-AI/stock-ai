@@ -98,6 +98,7 @@ class AgentSignal(Base):
     )
     symbol: Mapped[str] = mapped_column(String(16), nullable=False)
     symbol_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    market: Mapped[str] = mapped_column(String(4), nullable=False, default="A")  # A / HK
     action: Mapped[str] = mapped_column(String(8), nullable=False)  # buy / sell
     price: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=100)

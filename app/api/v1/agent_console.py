@@ -180,6 +180,7 @@ async def list_signals(
             trader_id=row.trader_id,
             symbol=row.symbol,
             symbol_name=row.symbol_name,
+            market=row.market,
             action=row.action,
             price=float(row.price),
             quantity=row.quantity,

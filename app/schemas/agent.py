@@ -114,6 +114,7 @@ class ConsoleSignalResponse(BaseModel):
     trader_id: str
     symbol: str
     symbol_name: str
+    market: str
     action: str
     price: float
     quantity: int
