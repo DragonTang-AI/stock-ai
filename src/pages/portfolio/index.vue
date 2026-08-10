@@ -79,7 +79,7 @@
             :class="analytics.total_profit >= 0 ? 'up' : 'down'"
             :value="Math.abs(analytics.total_profit)"
             :precision="2"
-            :prefix="(analytics.total_profit >= 0 ? '+¥' : '-¥')"
+            :prefix="(analytics.total_profit >= 0 ? '+' + currencySymbol : '-' + currencySymbol)"
             :color-rule="'auto'"
             :duration="600"
             :thousandth="true"
@@ -103,7 +103,7 @@
               :class="analytics.daily_profit >= 0 ? 'up' : 'down'"
               :value="analytics.daily_profit"
               :precision="2"
-              :prefix="'¥' + (analytics.daily_profit >= 0 ? '+' : '')"
+              :prefix="currencySymbol + (analytics.daily_profit >= 0 ? '+' : '')"
               :color-rule="'auto'"
               :duration="500"
             />
@@ -120,7 +120,7 @@
           </view>
           <view class="overview-sub-item">
             <text class="sub-label">持仓市值</text>
-            <text class="sub-value">&yen;{{ formatMoney(analytics.total_market_value) }}</text>
+            <text class="sub-value">{{ currencySymbol }}{{ formatMoney(analytics.total_market_value) }}</text>
           </view>
         </view>
       </view>
@@ -603,6 +603,7 @@ const markets = [
   { key: 'HK', label: '港股' },
 ]
 const activeMarket = ref('A')
+const currencySymbol = computed(() => (activeMarket.value === 'HK' ? 'HK$' : '¥'))
 const lotSize = ref<number>(0)
 const marketRules = ref<MarketRules | null>(null)
 
@@ -1023,7 +1024,7 @@ async function loadMoreTrades() {
 }
 
 async function loadAnalytics() {
-  try { analytics.value = await getPortfolioAnalytics() } catch (e) { console.error('[Portfolio] loadAnalytics 失败', e); }
+  try { analytics.value = await getPortfolioAnalytics(activeMarket.value) } catch (e) { console.error('[Portfolio] loadAnalytics 失败', e); }
 }
 
 async function loadHostedStatus() {

@@ -195,8 +195,9 @@ export interface PositionAnalytics {
   }>
 }
 
-export async function getPortfolioAnalytics(): Promise<PositionAnalytics> {
-  const res = await request<{ success: boolean; data: PositionAnalytics }>('/portfolio/analytics', { method: 'GET' })
+export async function getPortfolioAnalytics(market?: string): Promise<PositionAnalytics> {
+  const params = market ? `?market=${market}` : ''
+  const res = await request<{ success: boolean; data: PositionAnalytics }>(`/portfolio/analytics${params}`, { method: 'GET' })
   return (res as any).data || {}
 }
 
