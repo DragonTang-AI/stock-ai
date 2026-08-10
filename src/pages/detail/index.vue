@@ -133,9 +133,12 @@
               <input v-model="tradePrice" class="stepper-input" type="digit" placeholder="输入价格" />
               <view class="stepper-btn" @click="adjustPrice(0.01)">+</view>
             </view>
-            <view class="price-hint" v-if="quote?.price">
+            <view class="price-hint" v-if="quote?.price && !isHK">
               <text class="hint-text">涨停 {{ formatPrice((quote?.price || 0) * 1.1) }}</text>
               <text class="hint-text down">跌停 {{ formatPrice((quote?.price || 0) * 0.9) }}</text>
+            </view>
+            <view class="price-hint" v-else-if="quote?.price && isHK">
+              <text class="hint-text dim">港股无涨跌停限制</text>
             </view>
           </view>
 
@@ -144,7 +147,7 @@
             <text class="section-label">数量（股）</text>
             <view class="stepper-row">
               <view class="stepper-btn" @click="adjustQty(-1)">−</view>
-              <input v-model="tradeQty" class="stepper-input" type="digit" placeholder="100" />
+              <input v-model="tradeQty" class="stepper-input" type="digit" :placeholder="isHK ? ('每手' + (lotSize || '?') + '股') : '100'" />
               <view class="stepper-btn" @click="adjustQty(1)">+</view>
             </view>
             <view class="qty-actions">
@@ -154,7 +157,7 @@
                 </text>
                 <text class="qty-info-text" v-else-if="maxTradeQty > 0">可买 {{ maxTradeQty }} 股</text>
                 <text class="qty-info-text dim" v-else>可买 0 股</text>
-                <text class="qty-info-text cash">可用 {{ formatMoney(accountCash, 2) }} 元</text>
+                <text class="qty-info-text cash">可用 {{ formatMoney(accountCash, 2) }} {{ isHK ? 'HK$' : '元' }}</text>
               </view>
               <view class="qty-shortcuts">
                 <view class="shortcut-btn" @click="fillQuarter()">1/4</view>
@@ -195,7 +198,7 @@
           <!-- 预估金额 -->
           <view class="estimate-row" v-if="estimatedAmount !== '0.00'">
             <text class="estimate-label">预估金额</text>
-            <text class="estimate-value">{{ estimatedAmount }} 元</text>
+            <text class="estimate-value">{{ estimatedAmount }} {{ isHK ? 'HK$' : '元' }}</text>
           </view>
 
           <view v-if="tradeError" class="trade-error">{{ tradeError }}</view>
@@ -227,7 +230,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import SkeletonScreen from '@/components/common/SkeletonScreen.vue'
 import KlineChart from '@/components/market/KlineChart.vue'
-import { fetchQuote, fetchKline, type QuoteSnapshot, type KlinePoint } from '@/api/market'
+import { fetchQuote, fetchKline, getLotSize, type QuoteSnapshot, type KlinePoint } from '@/api/market'
 import { placeOrder, fetchAccount, fetchSimulationPositions, type OrderSide, type SimPosition } from '@/api/trading'
 import { getTradeErrorMessage } from '@/utils/trade-errors'
 import { trackPageView } from '@/utils/tracker'
@@ -253,6 +256,10 @@ const tradeSubmitting = ref(false)
 // 当前股票持仓
 const currentPosition = ref<SimPosition | null>(null)
 
+// 港股每手股数
+const lotSize = ref(0)
+const isHK = computed(() => code.value.toUpperCase().endsWith('.HK'))
+
 // 账户可用资金
 const accountCash = ref(0)
 const loadingAccount = ref(false)
@@ -264,6 +271,10 @@ const maxTradeQty = computed(() => {
   }
   const price = parseFloat(tradePrice.value)
   if (!price || price <= 0 || accountCash.value <= 0) return 0
+  if (isHK.value) {
+    const ls = lotSize.value || 100
+    return Math.floor(accountCash.value / price / ls) * ls
+  }
   return Math.floor(accountCash.value / price / 100) * 100
 })
 
@@ -352,6 +363,9 @@ async function loadData() {
       fetchQuote(code.value),
     ])
     quote.value = quoteData
+    if (isHK.value) {
+      getLotSize(code.value).then(ls => { lotSize.value = ls }).catch(() => {})
+    }
     await loadKline()
   } catch (e: any) {
     error.value = e?.message || '加载失败'
@@ -397,7 +411,7 @@ watch(showTradeModal, async (open) => {
   loadingAccount.value = true
   try {
     const [account, posResult] = await Promise.all([
-      fetchAccount(),
+      fetchAccount(isHK.value ? 'HK' : undefined),
       fetchSimulationPositions(),
     ])
     accountCash.value = account.cash
@@ -419,7 +433,8 @@ function adjustPrice(delta: number) {
 
 function adjustQty(delta: number) {
   const current = parseInt(tradeQty.value) || 0
-  const next = Math.max(0, current + delta * 100)
+  const step = isHK.value ? (lotSize.value || 100) : 100
+  const next = Math.max(0, current + delta * step)
   tradeQty.value = String(next)
 }
 
@@ -428,18 +443,21 @@ function fillFullPosition() {
 }
 
 function fillHalf() {
-  const qty = Math.floor(maxTradeQty.value / 200) * 100
-  tradeQty.value = String(Math.max(100, qty))
+  const ls = isHK.value ? (lotSize.value || 100) : 100
+  const qty = Math.floor(maxTradeQty.value / (ls * 2)) * ls
+  tradeQty.value = String(Math.max(ls, qty))
 }
 
 function fillThird() {
-  const qty = Math.floor(maxTradeQty.value / 300) * 100
-  tradeQty.value = String(Math.max(100, qty))
+  const ls = isHK.value ? (lotSize.value || 100) : 100
+  const qty = Math.floor(maxTradeQty.value / (ls * 3)) * ls
+  tradeQty.value = String(Math.max(ls, qty))
 }
 
 function fillQuarter() {
-  const qty = Math.floor(maxTradeQty.value / 400) * 100
-  tradeQty.value = String(Math.max(100, qty))
+  const ls = isHK.value ? (lotSize.value || 100) : 100
+  const qty = Math.floor(maxTradeQty.value / (ls * 4)) * ls
+  tradeQty.value = String(Math.max(ls, qty))
 }
 
 const estimatedAmount = computed(() => {
@@ -452,8 +470,15 @@ async function handlePlaceOrder() {
   tradeError.value = ''
   const quantity = parseInt(tradeQty.value)
   const price = parseFloat(tradePrice.value)
-  if (!quantity || quantity < 100) { tradeError.value = '数量不能少于100股'; return }
-  if (quantity % 100 !== 0) { tradeError.value = '数量必须是100的整数倍'; return }
+  if (isHK.value) {
+    const ls = lotSize.value || 0
+    if (!ls) { tradeError.value = '获取每手股数失败，请重试'; return }
+    if (!quantity || quantity < ls) { tradeError.value = '数量不能少于' + ls + '股（每手' + ls + '股）'; return }
+    if (quantity % ls !== 0) { tradeError.value = '数量必须是' + ls + '的整数倍'; return }
+  } else {
+    if (!quantity || quantity < 100) { tradeError.value = '数量不能少于100股'; return }
+    if (quantity % 100 !== 0) { tradeError.value = '数量必须是100的整数倍'; return }
+  }
   if (!price || price <= 0) { tradeError.value = '请输入有效价格'; return }
   if (tradeSide.value === 'sell' && currentPosition.value && quantity > currentPosition.value.available_quantity) {
     tradeError.value = '可卖数量不足，最多可卖 ' + currentPosition.value.available_quantity + ' 股'; return
