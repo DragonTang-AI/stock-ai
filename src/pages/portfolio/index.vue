@@ -578,7 +578,7 @@ import {
   getAccount, getPositions, getOrders, placeOrder, getTrades, getPortfolioAnalytics, topupAccount,
   type AccountInfo, type PositionItem, type OrderItem, type TradeItem, type PositionAnalytics,
 } from '@/api/portfolio'
-import { searchStocks, fetchQuote, type SearchResult, type QuoteSnapshot } from '@/api/market'
+import { searchStocks, fetchQuote, getLotSize, type SearchResult, type QuoteSnapshot } from '@/api/market'
 import { formatPercent, formatSigned } from '@/utils/format'
 import { useShowRefresh, touchRefreshKey } from '@/utils/refresh-cache'
 
@@ -806,6 +806,10 @@ async function selectStock(r: SearchResult) {
     buyInPosition.value = false
   } else {
     tradeSide.value = 'buy'
+  }
+  // 港股：查每手股数
+  if (activeMarket.value === 'HK' || r.symbol?.endsWith('.HK')) {
+    getLotSize(r.symbol).then(ls => { lotSize.value = ls }).catch(() => {})
   }
   loadQuote(r.symbol)
 }
@@ -1054,11 +1058,10 @@ async function switchMarket(market: string) {
   } else {
     await loadAccount()
   }
-  // 加载市场规则（港股需要每手股数）
+  // 加载市场规则（费率等信息）
   if (market === 'HK') {
     try {
       marketRules.value = await getMarketRules('HK')
-      lotSize.value = marketRules.value.lot_size || 0
     } catch (e) { console.error('[Portfolio] getMarketRules 失败', e); }
   } else {
     lotSize.value = 0

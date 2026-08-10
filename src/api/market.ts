@@ -195,6 +195,18 @@ export interface KlinePoint {
 }
 
 /** 获取单股实时行情 */
+/** 获取股票每手股数（港股用） */
+export interface LotSizeResult {
+  symbol: string
+  lot_size: number
+  market: string
+}
+
+export async function getLotSize(symbol: string): Promise<number> {
+  const res = await request<{ success: boolean; data: LotSizeResult }>(`/market/lot-size/${symbol}`, { method: 'GET' })
+  return (res as any).data?.lot_size || 100
+}
+
 export async function fetchQuote(symbol: string): Promise<QuoteSnapshot> {
   const detail = await marketApi.getDetail(symbol)
   const d = detail?.data || detail || {}
