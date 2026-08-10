@@ -1535,3 +1535,48 @@ onShow(() => {
   color: var(--color-primary, #4A90E2);
 }
 </style>
+/* Topup Modal */
+.topup-modal-mask {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5); z-index: 1000;
+  display: flex; align-items: center; justify-content: center;
+}
+.topup-modal {
+  width: 600rpx; background: #fff; border-radius: 24rpx; padding: 40rpx 36rpx;
+}
+.topup-modal-title {
+  font-size: 36rpx; font-weight: 700; color: #1a1a1a; text-align: center; display: block; margin-bottom: 12rpx;
+}
+.topup-modal-sub {
+  font-size: 24rpx; color: #999; text-align: center; display: block; margin-bottom: 36rpx;
+}
+.topup-options {
+  display: flex; gap: 20rpx; margin-bottom: 36rpx;
+}
+.topup-option {
+  flex: 1; padding: 28rpx 0; border-radius: 16rpx; border: 2rpx solid #e5e5e5;
+  text-align: center; transition: all 0.2s;
+  &.active { border-color: #F59E0B; background: rgba(245,158,11,0.06); }
+}
+.topup-opt-amount {
+  font-size: 32rpx; font-weight: 700; color: #1a1a1a; display: block;
+}
+.topup-opt-label {
+  font-size: 22rpx; color: #999; margin-top: 6rpx; display: block;
+}
+.topup-actions {
+  display: flex; gap: 20rpx;
+}
+.topup-btn-cancel, .topup-btn-confirm {
+  flex: 1; padding: 24rpx 0; border-radius: 16rpx; font-size: 28rpx; font-weight: 600;
+  text-align: center;
+}
+.topup-btn-cancel {
+  background: #f5f5f5; color: #666; border: none;
+  &::after { border: none; }
+}
+.topup-btn-confirm {
+  background: linear-gradient(135deg, #F59E0B, #F97316); color: #fff; border: none;
+  &::after { border: none; }
+  &[disabled] { opacity: 0.5; }
+}
