@@ -295,7 +295,7 @@ async def place_order(db: AsyncSession, user: User, req: OrderRequest, fallback_
         user_id=user.id,
         account_id=account.id,
         symbol=symbol,
-        market=hk_market,
+        market=market,
         name=quote.name or "",
         side=req.side,
         order_type=req.order_type,
@@ -325,7 +325,7 @@ async def place_order(db: AsyncSession, user: User, req: OrderRequest, fallback_
         account_id=account.id,
         order_id=order.id,
         symbol=symbol,
-        market=hk_market,
+        market=market,
         name=quote.name or "",
         side=req.side,
         price=Decimal(str(fill_price)),
@@ -338,7 +338,7 @@ async def place_order(db: AsyncSession, user: User, req: OrderRequest, fallback_
     db.add(trade)
 
     # 6. 更新持仓
-    await _update_position(db, user.id, account.id, symbol, quote.name or "", req.side, fill_price, quantity)
+    await _update_position(db, user.id, account.id, symbol, quote.name or "", req.side, fill_price, quantity, is_hk=is_hk, market=hk_market)
 
     await db.commit()
     await db.refresh(order)
@@ -375,6 +375,8 @@ async def _update_position(
     side: str,
     price: float,
     quantity: int,
+    is_hk: bool = False,
+    market: str = "A",
 ) -> None:
     """更新持仓（内部）"""
     stmt = select(Position).where(
@@ -391,7 +393,7 @@ async def _update_position(
                 account_id=account_id,
                 symbol=symbol,
                 name=name,
-                market=hk_market,
+                market=market,
                 quantity=quantity,
                 available=0 if is_hk else quantity,  # HK T+2：买入当日不可卖；A 股不限制
                 cost_price=Decimal(str(price)),
