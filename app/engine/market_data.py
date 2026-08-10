@@ -33,20 +33,57 @@ HOT_A_STOCKS: list[dict[str, str]] = [
     {"symbol": "688981", "name": "中芯国际"},
 ]
 
+# Phase 3: 港股候选池（试点 15 只）
+HK_STOCK_POOL: list[dict[str, str]] = [
+    {"symbol": "00700.HK", "name": "腾讯控股"},
+    {"symbol": "09988.HK", "name": "阿里巴巴"},
+    {"symbol": "01810.HK", "name": "小米集团"},
+    {"symbol": "00941.HK", "name": "中国移动"},
+    {"symbol": "09618.HK", "name": "京东集团"},
+    {"symbol": "09999.HK", "name": "网易"},
+    {"symbol": "02318.HK", "name": "中国平安"},
+    {"symbol": "01299.HK", "name": "友邦保险"},
+    {"symbol": "00388.HK", "name": "港交所"},
+    {"symbol": "00005.HK", "name": "汇丰控股"},
+    {"symbol": "02020.HK", "name": "安踏体育"},
+    {"symbol": "00175.HK", "name": "吉利汽车"},
+    {"symbol": "00981.HK", "name": "中芯国际"},
+    {"symbol": "02269.HK", "name": "药明生物"},
+    {"symbol": "01093.HK", "name": "石药集团"},
+]
+
 
 def get_ticker_map() -> dict[str, str]:
-    """获取 symbol → name 映射"""
-    return {s["symbol"]: s["name"] for s in HOT_A_STOCKS}
+    """获取 symbol → name 映射（A+H 两市）"""
+    m = {s["symbol"]: s["name"] for s in HOT_A_STOCKS}
+    m.update({s["symbol"]: s["name"] for s in HK_STOCK_POOL})
+    return m
 
 
-async def get_stock_list(db: AsyncSession, limit: int = 10) -> list[dict[str, str]]:
+async def get_stock_list(db: AsyncSession, limit: int = 10, markets: list[str] | None = None) -> list[dict[str, str]]:
     """
-    返回股票列表作为分析候选池。
-    注：stocks 表尚未创建，直接使用内置 HOT_A_STOCKS。
-    待 stocks 表创建后可切换回数据库查询。
+    返回股票列表作为分析候选池（A+H 混合）。
+
+    Args:
+        db: 数据库会话（保留参数，待 stocks 表后使用）
+        limit: 返回数量上限
+        markets: 市场筛选，默认 ["A", "HK"]；传 ["HK"] 仅港股
     """
-    # TODO: 创建 stocks 表后，替换为数据库查询
-    return HOT_A_STOCKS[:limit]
+    if markets is None:
+        markets = ["A", "HK"]
+
+    pool: list[dict[str, str]] = []
+    if "A" in markets:
+        pool.extend(HOT_A_STOCKS)
+    if "HK" in markets:
+        pool.extend(HK_STOCK_POOL)
+
+    # 信号生成数量有限（Yahoo Finance 限流），多市场时优先交叉采样
+    if "A" in markets and "HK" in markets:
+        a_size = (limit + 1) // 2
+        hk_size = limit - a_size
+        return HOT_A_STOCKS[:a_size] + HK_STOCK_POOL[:hk_size]
+    return pool[:limit]
 
 
 async def get_realtime_price(symbol: str) -> dict[str, Any] | None:
@@ -98,15 +135,51 @@ async def get_realtime_price(symbol: str) -> dict[str, Any] | None:
         return None
 
 
+def _is_hk(symbol: str) -> bool:
+    """判断 symbol 是否为港股（以 .HK 结尾）"""
+    return symbol.upper().endswith(".HK")
+
+
 async def get_batch_prices(symbols: list[str]) -> dict[str, dict]:
-    """批量获取实时价格"""
-    results = {}
-    # 新浪接口不支持批量，逐个获取但并发
-    tasks = [get_realtime_price(s) for s in symbols]
-    prices = await asyncio.gather(*tasks, return_exceptions=True)
-    for sym, price in zip(symbols, prices):
-        if isinstance(price, dict) and price:
-            results[sym] = price
+    """批量获取实时价格（A 股走新浪，港股走腾讯）"""
+    results: dict[str, dict] = {}
+    a_symbols = [s for s in symbols if not _is_hk(s)]
+    hk_symbols = [s for s in symbols if _is_hk(s)]
+
+    # A 股：新浪逐个并发
+    if a_symbols:
+        tasks = [get_realtime_price(s) for s in a_symbols]
+        prices = await asyncio.gather(*tasks, return_exceptions=True)
+        for sym, price in zip(a_symbols, prices):
+            if isinstance(price, dict) and price:
+                results[sym] = price
+
+    # 港股：腾讯批量接口
+    if hk_symbols:
+        try:
+            from app.integrations.market_data.tencent import fetch_hk_quotes
+            # 格式转换：00700.HK → hk00700
+            hk_codes = ["hk{}".format(s.split(".")[0]) for s in hk_symbols]
+            quotes = await fetch_hk_quotes(hk_codes)
+            for q in quotes:
+                # 腾讯返回的 code 格式为 hk00700，反向映射
+                sym = "{}.HK".format(q.code.replace("hk", "", 1))
+                if sym in hk_symbols:
+                    results[sym] = {
+                        "symbol": sym,
+                        "name": q.name,
+                        "open": q.open,
+                        "prev_close": q.prev_close,
+                        "price": q.price,
+                        "high": q.high,
+                        "low": q.low,
+                        "volume": q.volume,
+                        "amount": q.amount,
+                        "market": "HK",
+                    }
+        except Exception:
+            pass  # 港股行情失败不阻塞
+
     return results
 
 

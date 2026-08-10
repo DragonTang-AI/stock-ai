@@ -21,7 +21,7 @@ from app.api.v1.auth import get_current_user
 from app.schemas.trading import OrderRequest
 from app.services import trading as trading_service
 from app.core.exceptions import AppException
-from app.engine.market_hours import is_market_hours
+from app.engine.market_hours import is_market_hours, is_hk_market_hours, is_any_market_hours
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -63,6 +63,9 @@ def _normalize_to_trading_symbol(raw_symbol: str) -> str:
         return f'{s}.SZ'
     elif s.startswith(('4', '8')):
         return f'{s}.BJ'
+    # 港股裸代码（5位数字，以0开头）→ .HK
+    if s.isdigit() and len(s) == 5 and s.startswith('0'):
+        return f'{s}.HK'
     return s.upper()
 
 
@@ -212,21 +215,36 @@ async def confirm_signal(
         logger.warning(f"确认信号失败: 状态为{signal.exec_status} user_id={current_user.id} signal_id={signal_id}")
         raise HTTPException(status_code=400, detail=f"信号状态为 {signal.exec_status}，无法确认")
 
-    # 非交易时段不允许确认
-    if not is_market_hours():
-        logger.warning(f"确认信号失败: 非交易时段 user_id={current_user.id} signal_id={signal_id}")
-        raise HTTPException(status_code=400, detail="当前非交易时段（A股：周一至周五 9:30-11:30, 13:00-15:00），无法确认信号")
+    # 非交易时段不允许确认（按信号市场区分）
+    is_hk = signal.symbol.upper().endswith(".HK") or (signal.symbol.isdigit() and len(signal.symbol) == 5 and signal.symbol.startswith("0"))
+    market_in_hours = is_hk_market_hours() if is_hk else is_market_hours()
+    if not market_in_hours:
+        market_name = "港股" if is_hk else "A股"
+        logger.warning(f"确认信号失败: 非交易时段 user_id={current_user.id} signal_id={signal_id} market={market_name}")
+        raise HTTPException(status_code=400, detail=f"当前非{market_name}交易时段，无法确认信号")
 
     if req and req.quantity:
         signal.quantity = req.quantity
 
     trading_symbol = _normalize_to_trading_symbol(signal.symbol)
-    # A股交易单位：买入向上取整到整手(100股)，卖出向下取整到整手，最少1手（与 auto_executor 一致）
+    # 交易单位取整
     raw_qty = int(signal.quantity)
-    if signal.action == "sell":
-        lot_qty = max(100, (raw_qty // 100) * 100)
+    if is_hk:
+        try:
+            from app.services.hk_lot_size import get_lot_size
+            code = signal.symbol.replace(".HK", "").replace(".hk", "")
+            lot = get_lot_size(code) or 100
+        except Exception:
+            lot = 100
+        if signal.action == "sell":
+            lot_qty = max(lot, (raw_qty // lot) * lot)
+        else:
+            lot_qty = max(lot, ((raw_qty + lot - 1) // lot) * lot)
     else:
-        lot_qty = max(100, ((raw_qty + 99) // 100) * 100)
+        if signal.action == "sell":
+            lot_qty = max(100, (raw_qty // 100) * 100)
+        else:
+            lot_qty = max(100, ((raw_qty + 99) // 100) * 100)
     order_result = None
     trading_error = None
 

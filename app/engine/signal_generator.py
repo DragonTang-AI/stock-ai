@@ -89,10 +89,21 @@ async def generate_signals(
     strategy = trader.id or "value_hunter"
     agents = hedge_fund_client.get_agents_for_strategy(strategy)
 
-    # 3. 获取股票池
+    # 3. 获取股票池（A+H 混合，各至少留 2 只给分析引擎）
     stock_list = await market_data.get_stock_list(db, limit=10)
-    tickers = [s["symbol"] for s in stock_list[:5]]   # 最多分析 5 只（Yahoo Finance 限流）
-    ticker_map = {s["symbol"]: s["name"] for s in stock_list}
+    _a_stocks = [s for s in stock_list if not _is_hk_symbol(s["symbol"])]
+    _h_stocks = [s for s in stock_list if _is_hk_symbol(s["symbol"])]
+    tickers: list[str] = []
+    ticker_map: dict[str, str] = {}
+    for i in range(min(5, len(stock_list))):
+        if _a_stocks and (i % 3 != 2 or not _h_stocks):
+            s = _a_stocks.pop(0)
+        elif _h_stocks:
+            s = _h_stocks.pop(0)
+        else:
+            s = _a_stocks.pop(0)
+        tickers.append(s["symbol"])
+        ticker_map[s["symbol"]] = s["name"]
 
     # P1: 风控总资金从 agent_configs 读取，缺省 100000
     from app.services.agent_config_service import get_agent_config, DEFAULTS as CONFIG_DEFAULTS
@@ -120,9 +131,29 @@ async def generate_signals(
         )
 
 
-def _round_lot_quantity(action: str, qty: int) -> int:
-    """A股交易单位：数量取整到整手(100股)。买入向上取整，卖出向下取整，最少1手。"""
+def _is_hk_symbol(symbol: str) -> bool:
+    """判断是否为港股 symbol"""
+    return symbol.upper().endswith(".HK")
+
+
+def _round_lot_quantity(action: str, qty: int, symbol: str = "") -> int:
+    """交易单位取整：A股100股/手，港股按lot_size计算。买入向上取整，卖出向下取整，最少1手。"""
     qty = int(qty or 100)
+
+    # 港股按实际每手股数取整
+    if symbol.upper().endswith(".HK"):
+        try:
+            from app.services.hk_lot_size import get_lot_size
+            code = symbol.replace(".HK", "").replace(".hk", "")
+            lot = get_lot_size(code) or 100
+        except Exception:
+            lot = 100
+
+        if action == "sell":
+            return max(lot, (qty // lot) * lot)
+        return max(lot, ((qty + lot - 1) // lot) * lot)
+
+    # A 股：100 股/手
     if action == "sell":
         return max(100, (qty // 100) * 100)
     return max(100, ((qty + 99) // 100) * 100)
@@ -202,7 +233,7 @@ async def _generate_real_signals(
                 symbol_name=sig.get("name", sig["symbol"]),
                 action=sig["action"],
                 price=sig["price"],
-                quantity=_round_lot_quantity(sig["action"], sig["quantity"]),
+                quantity=_round_lot_quantity(sig["action"], sig["quantity"], sig["symbol"]),
                 confidence=sig["confidence"],
                 reasoning=sig.get("reasoning", ""),
                 exec_status="pending",  # advisory 默认 pending；full_managed 在端点层自动执行

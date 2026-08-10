@@ -34,6 +34,9 @@ def _normalize_to_trading_symbol(raw_symbol: str) -> str:
         return f'{s}.SZ'
     elif s.startswith(('4', '8')):
         return f'{s}.BJ'
+    # 港股裸代码（5位数字，以0开头）→ .HK
+    if s.isdigit() and len(s) == 5 and s.startswith('0'):
+        return f'{s}.HK'
     return s.upper()
 
 
