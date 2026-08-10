@@ -10,6 +10,7 @@ import logging
 from app.core.exceptions import AppException
 from app.schemas.market import QuoteItem, QuoteResponse, KLineItem, KLineResponse, StockDetailResponse
 from app.services import market as market_service
+from app.services.hk_lot_size import get_lot_size, is_hk_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +143,16 @@ async def get_indices(market: str = Query("A", description="市场：A=沪深指
         {"symbol": "399001.SZ", "name": "深证成指", "price": 10823.17, "change_pct": 0.83},
         {"symbol": "399006.SZ", "name": "创业板指", "price": 2215.39, "change_pct": 1.26},
     ]}
+
+@router.get("/lot-size/{symbol}")
+async def get_lot_size_endpoint(symbol: str):
+    """获取港股个股每手股数"""
+    if not is_hk_symbol(symbol):
+        return {"success": True, "data": {"symbol": symbol, "lot_size": 100, "market": "A"}}
+    code = symbol.replace(".HK", "").replace(".hk", "").strip()
+    ls = get_lot_size(code)
+    return {"success": True, "data": {"symbol": symbol, "lot_size": ls, "market": "HK"}}
+
 
 @router.get("/rules/{market}")
 async def get_market_rules(market: str):
