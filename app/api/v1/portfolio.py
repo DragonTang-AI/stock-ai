@@ -55,21 +55,23 @@ logger = logging.getLogger(__name__)
 
 @router.get("/account", response_model=AccountResponse)
 async def get_account(
+    market: str = Query("A"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """获取账户信息（余额、市值、盈亏）"""
-    info = await get_account_info(db, current_user)
+    info = await get_account_info(db, current_user, market)
     return {"success": True, "data": info}
 
 
 @router.get("/positions", response_model=PositionListResponse)
 async def get_positions(
+    market: str = Query("A"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """获取持仓列表（实时市值）"""
-    items, summary = await get_positions_summary(db, current_user)
+    items, summary = await get_positions_summary(db, current_user, market)
     return {"success": True, "data": items, "summary": summary}
 
 
@@ -158,6 +160,7 @@ async def delete_order(
 
 @router.get("/analytics", response_model=PortfolioAnalyticsResponse)
 async def get_analytics(
+    market: str = Query("A"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -178,7 +181,7 @@ async def get_analytics(
     - top_holdings: Top3 持仓明细
     - holdings_distribution: 行业分布
     """
-    analytics = await get_portfolio_analytics(db, current_user)
+    analytics = await get_portfolio_analytics(db, current_user, market)
     return {"success": True, "data": analytics}
 
 

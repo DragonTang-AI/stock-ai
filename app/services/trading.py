@@ -164,9 +164,9 @@ async def get_positions(db: AsyncSession, user: User, market: str | None = None)
     return items
 
 
-async def get_positions_summary(db: AsyncSession, user: User) -> Tuple[List[PositionItem], dict]:
-    """获取持仓列表 + 汇总"""
-    items = await get_positions(db, user)
+async def get_positions_summary(db: AsyncSession, user: User, market: str = "A") -> Tuple[List[PositionItem], dict]:
+    """获取持仓列表 + 汇总（按市场过滤）"""
+    items = await get_positions(db, user, market)
     summary = {
         "total_market_value": round(sum(p.market_value for p in items), 2),
         "total_profit": round(sum(p.profit for p in items), 2),
@@ -534,6 +534,7 @@ async def cancel_order(db: AsyncSession, user: User, order_id: int) -> OrderItem
 async def get_portfolio_analytics(
     db: AsyncSession,
     user: User,
+    market: str = "A",
 ) -> dict:
     """
     持仓分析：
@@ -545,8 +546,8 @@ async def get_portfolio_analytics(
     """
     from decimal import Decimal
 
-    account = await get_or_create_account(db, user)
-    positions = await get_positions(db, user)
+    account = await get_or_create_account(db, user, market)
+    positions = await get_positions(db, user, market)
 
     if not positions:
         return {
