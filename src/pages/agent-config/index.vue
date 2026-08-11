@@ -177,6 +177,26 @@
             <text class="input-suffix">分钟</text>
           </view>
         </view>
+        <view class="input-group">
+          <text class="input-label">每轮分析股票数</text>
+          <view class="input-wrapper">
+            <input
+              class="input-field"
+              type="number"
+              v-model.number="config.analyze_ticker_limit"
+              placeholder="如 10"
+            />
+            <text class="input-suffix">只</text>
+          </view>
+        </view>
+        <view class="input-group">
+          <text class="input-label">启用自动执行</text>
+          <switch
+            :checked="config.auto_exec_enabled"
+            color="#4A90E2"
+            @change="(e: any) => config.auto_exec_enabled = e.detail.value"
+          />
+        </view>
       </view>
 
       <!-- Step 5: 交易风格 -->
@@ -320,6 +340,8 @@ const config = reactive({
   auto_exec_confidence: 0.8,
   max_auto_exec_per_round: null as number | null,
   signal_interval_min: null as number | null,
+  analyze_ticker_limit: 10,
+  auto_exec_enabled: true,
   trading_style: 'swing' as string,
 })
 
@@ -393,6 +415,8 @@ const handleSubmit = async () => {
       auto_exec_confidence: config.auto_exec_confidence,
       max_auto_exec_per_round: config.max_auto_exec_per_round,
       signal_interval_min: config.signal_interval_min,
+      analyze_ticker_limit: config.analyze_ticker_limit,
+      auto_exec_enabled: config.auto_exec_enabled,
       trading_style: config.trading_style,
     })
     // P3: paused 状态走 resume，configuring/dormant 走 activate
