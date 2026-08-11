@@ -56,6 +56,7 @@ _tasks: list[asyncio.Task] = []
 _scheduler_status: dict[str, Any] = {
     "running": False,
     "last_run_at": None,
+    "next_run_at": None,
     "last_run_result": None,
     "active_hires": 0,
     "current_phase": "idle",
@@ -292,6 +293,7 @@ async def _run_one_cycle():
     if not is_any_market_hours():
         logger.info("非交易时段，跳过本次调度")
         _scheduler_status["current_phase"] = "idle"
+        _scheduler_status["next_run_at"] = (datetime.now(timezone.utc) + timedelta(seconds=DEV_INTERVAL_SECONDS)).isoformat().replace("+00:00", "Z")
         return
     
 
@@ -302,7 +304,9 @@ async def _run_one_cycle():
 
         if not hires:
             logger.info("调度: 无活跃雇佣关系")
-            _scheduler_status["last_run_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            now = datetime.now(timezone.utc)
+            _scheduler_status["last_run_at"] = now.isoformat().replace("+00:00", "Z")
+            _scheduler_status["next_run_at"] = (now + timedelta(seconds=DEV_INTERVAL_SECONDS)).isoformat().replace("+00:00", "Z")
             _scheduler_status["last_run_result"] = {"total": 0, "items": []}
             _scheduler_status["current_phase"] = "idle"
             return
@@ -337,6 +341,7 @@ async def _run_one_cycle():
 
         _scheduler_status.update({
             "last_run_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "next_run_at": (datetime.now(timezone.utc) + timedelta(seconds=DEV_INTERVAL_SECONDS)).isoformat().replace("+00:00", "Z"),
             "last_run_result": {
                 "total_hires": len(hires),
                 "total_signals": total_signals,
