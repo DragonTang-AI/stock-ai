@@ -206,7 +206,7 @@ async def _compute_hk_available(db: AsyncSession, user_id: int, symbol: str) -> 
 
 
 # ============== 撮合（下单） ==============
-async def place_order(db: AsyncSession, user: User, req: OrderRequest, fallback_price: float | None = None, signal_id: str | None = None) -> OrderItem:
+async def place_order(db: AsyncSession, user: User, req: OrderRequest, fallback_price: float | None = None, signal_id: str | None = None, agent_sell_holdings: dict | None = None) -> OrderItem:
     """
     下单（v1：市价立即成交）
 
@@ -290,22 +290,34 @@ async def place_order(db: AsyncSession, user: User, req: OrderRequest, fallback_
                 status_code=400,
             )
     else:  # sell
-        # 持仓检查：无持仓不可卖；模拟盘不启用 T+1（买入时 available 即赋满），故不再校验 available
-        pos_stmt = select(Position).where(
-            Position.user_id == user.id,
-            Position.symbol == symbol,
-        )
-        pos_result = await db.execute(pos_stmt)
-        position = pos_result.scalar_one_or_none()
-        if position is None:
-            raise AppException(code="NO_POSITION", message=f"未持有 {symbol}，无法卖出", status_code=400)
-        check_qty = position.available if is_hk else position.quantity
-        if check_qty < quantity:
-            raise AppException(
-                code="INSUFFICIENT_POSITION",
-                message=f"持仓不足：需要卖出 {quantity}，持有可用 {check_qty}（总 {position.quantity}）",
-                status_code=400,
+        # 持仓检查：优先使用 agent_sell_holdings（Agent 交易员模拟盘持仓），
+        # 否则查询真实 Position 表。
+        if agent_sell_holdings is not None:
+            agent_qty = agent_sell_holdings.get(symbol, 0)
+            if agent_qty <= 0:
+                raise AppException(code="NO_POSITION", message=f"未持有 {symbol}，无法卖出", status_code=400)
+            if agent_qty < quantity:
+                raise AppException(
+                    code="INSUFFICIENT_POSITION",
+                    message=f"持仓不足：需要卖出 {quantity}，持有可用 {agent_qty}",
+                    status_code=400,
+                )
+        else:
+            pos_stmt = select(Position).where(
+                Position.user_id == user.id,
+                Position.symbol == symbol,
             )
+            pos_result = await db.execute(pos_stmt)
+            position = pos_result.scalar_one_or_none()
+            if position is None:
+                raise AppException(code="NO_POSITION", message=f"未持有 {symbol}，无法卖出", status_code=400)
+            check_qty = position.available if is_hk else position.quantity
+            if check_qty < quantity:
+                raise AppException(
+                    code="INSUFFICIENT_POSITION",
+                    message=f"持仓不足：需要卖出 {quantity}，持有可用 {check_qty}（总 {position.quantity}）",
+                    status_code=400,
+                )
 
     # 3. 写订单
     order = Order(

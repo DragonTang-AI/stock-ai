@@ -164,12 +164,27 @@ async def _execute_single_signal(
             f"sig_{user_id}_{trading_symbol}_{int(datetime.now(timezone.utc).timestamp())}"
             if signal.get("id") else None
         )
+        # P3: 卖出前查询 Agent 模拟盘持仓，传入 place_order 绕过真实 Position 表校验
+        agent_sell_holdings = None
+        if signal["action"] == "sell":
+            from sqlalchemy import select as sa_select
+            from app.models.agent import AgentPortfolio
+            pf_result = await db.execute(
+                sa_select(AgentPortfolio).where(
+                    AgentPortfolio.hire_id == hire_id,
+                    AgentPortfolio.symbol == trading_symbol,
+                )
+            )
+            pf = pf_result.scalar_one_or_none()
+            if pf:
+                agent_sell_holdings = {trading_symbol: pf.quantity}
         order_result = await trading_service.place_order(
             db=db,
             user=user_stub,
             req=order_req,
             fallback_price=float(signal.get("price", 0)),
             signal_id=sig_id,
+            agent_sell_holdings=agent_sell_holdings,
         )
 
         await _update_portfolio(
