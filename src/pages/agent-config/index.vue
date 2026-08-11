@@ -337,7 +337,7 @@ const config = reactive({
   loss_stop_pct: null as number | null,
   loss_stop_amount: null as number | null,
   t1_enabled: false,
-  auto_exec_confidence: 0.8,
+  auto_exec_confidence: 70,
   max_auto_exec_per_round: null as number | null,
   signal_interval_min: null as number | null,
   analyze_ticker_limit: 10,
