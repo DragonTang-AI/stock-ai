@@ -160,13 +160,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
 import ErrorPage from '@/components/common/ErrorPage.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import Disclaimer from '@/components/compliance/Disclaimer.vue'
 import { fetchQuotes, fetchIndices, fetchRanking, type RankItem } from '@/api/market'
 import { formatPercent } from '@/utils/format'
+
+let pollTimer: ReturnType<typeof setInterval> | null = null
 
 type Market = 'A' | 'HK'
 
@@ -342,6 +344,14 @@ function goDetail(code: string) {
 
 onMounted(() => {
   fetchMarketData('A')
+  pollTimer = setInterval(() => fetchMarketData(currentMarket.value), 30000)
+})
+
+onUnmounted(() => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
 })
 </script>
 

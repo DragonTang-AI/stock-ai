@@ -98,7 +98,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'; import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
 import { getAgentMarket, getMyAgents, type AgentTrader } from '@/api/agent'
 import { getPointsBalance, dailyCheckin } from '@/api/points'
@@ -118,6 +119,8 @@ const truncate = (s: string, len: number) => {
   if (!s) return ''
   return s.length > len ? s.slice(0, len) + '...' : s
 }
+
+let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const loadData = async () => {
   try {
@@ -161,6 +164,17 @@ const goDetail = (id: string) => {
 const goMyAgents = () => {
   uni.navigateTo({ url: '/pages/agent-market/my-agents' })
 }
+onMounted(() => {
+  pollTimer = setInterval(loadData, 30000)
+})
+
+onUnmounted(() => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+})
+
 onShow(() => {
   useShowRefresh('agent-market', () => loadData())
 })

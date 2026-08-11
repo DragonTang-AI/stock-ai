@@ -783,6 +783,7 @@ function closeTradeModal() {
 
 /** 股票搜索输入 */
 let searchTimer: ReturnType<typeof setTimeout> | null = null
+let pollTimer: ReturnType<typeof setInterval> | null = null
 async function onSearchInput() {
   if (searchTimer) clearTimeout(searchTimer)
   const q = searchQuery.value.trim()
@@ -1099,12 +1100,17 @@ async function handleTopup() {
 
 onMounted(() => {
   refreshAll()
+  pollTimer = setInterval(refreshAll, 30000)
   unsubNetwork = onNetworkChange((info: NetworkInfo) => {
     offline.value = !info.isConnected
   })
 })
 
 onUnmounted(() => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
   if (unsubNetwork) {
     unsubNetwork()
     unsubNetwork = null
