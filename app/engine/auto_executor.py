@@ -169,10 +169,12 @@ async def _execute_single_signal(
         if signal["action"] == "sell":
             from sqlalchemy import select as sa_select
             from app.models.agent import AgentPortfolio
+            # AgentPortfolio 表存裸代码（如 600519），_normalize_to_trading_symbol 加了 .SH/.SZ 后缀
+            portfolio_symbol = re.sub(r'\.(SH|SZ|HK)$', '', trading_symbol, flags=re.IGNORECASE)
             pf_result = await db.execute(
                 sa_select(AgentPortfolio).where(
                     AgentPortfolio.hire_id == hire_id,
-                    AgentPortfolio.symbol == trading_symbol,
+                    AgentPortfolio.symbol == portfolio_symbol,
                 )
             )
             pf = pf_result.scalar_one_or_none()
