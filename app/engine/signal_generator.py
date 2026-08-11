@@ -89,8 +89,13 @@ async def generate_signals(
     strategy = trader.id or "value_hunter"
     agents = hedge_fund_client.get_agents_for_strategy(strategy)
 
+    # P1: 从 agent_configs 读取 ticker 限制和风控参数
+    from app.services.agent_config_service import get_agent_config, DEFAULTS as CONFIG_DEFAULTS
+    agent_config = await get_agent_config(db, hire_id)
+    ticker_limit = agent_config.analyze_ticker_limit if agent_config and agent_config.analyze_ticker_limit else CONFIG_DEFAULTS.get("analyze_ticker_limit", 10)
+
     # 3. 获取股票池（A+H 混合，各至少留 2 只给分析引擎）
-    stock_list = await market_data.get_stock_list(db, limit=10)
+    stock_list = await market_data.get_stock_list(db, limit=ticker_limit)
     _a_stocks = [s for s in stock_list if not _is_hk_symbol(s["symbol"])]
     _h_stocks = [s for s in stock_list if _is_hk_symbol(s["symbol"])]
     tickers: list[str] = []
@@ -105,9 +110,7 @@ async def generate_signals(
         tickers.append(s["symbol"])
         ticker_map[s["symbol"]] = s["name"]
 
-    # P1: 风控总资金从 agent_configs 读取，缺省 100000
-    from app.services.agent_config_service import get_agent_config, DEFAULTS as CONFIG_DEFAULTS
-    agent_config = await get_agent_config(db, hire_id)
+    # P1: 风控总资金（config 已在前面获取）
     total_capital = (
         float(agent_config.allocated_capital)
         if agent_config and agent_config.allocated_capital

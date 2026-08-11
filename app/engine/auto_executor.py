@@ -55,6 +55,11 @@ async def auto_execute_signals(
     Returns:
         {"executed": [...], "pending": [...], "failed": [...], "mode": "..."}
     """
+    # 配置关闭自动执行时直接跳过
+    if config and not getattr(config, "auto_exec_enabled", True):
+        logger.info("auto_exec 已关闭，跳过 hire=%d", hire_id)
+        return {"executed": [], "failed": [], "pending": signals, "mode": management_mode, "skipped_reason": "auto_exec_disabled"}
+
     # 非交易时段不执行
     if not is_any_market_hours():
         logger.warning("非交易时段，跳过自动执行 hire=%d", hire_id)

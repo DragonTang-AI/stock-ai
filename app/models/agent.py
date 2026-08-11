@@ -177,6 +177,8 @@ class AgentConfig(Base):
     t1_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     auto_exec_confidence: Mapped[int] = mapped_column(Integer, nullable=False, default=70)
     max_auto_exec_per_round: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    analyze_ticker_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    auto_exec_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     notify_channels: Mapped[dict] = mapped_column(JSON, nullable=False, default=lambda: ["inbox"])
     config_source: Mapped[str] = mapped_column(String(16), nullable=False, default="default")
     created_at: Mapped[datetime] = mapped_column(

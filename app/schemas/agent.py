@@ -199,6 +199,8 @@ class AgentConfigRequest(BaseModel):
     t1_enabled: bool | None = None
     auto_exec_confidence: int | None = None
     max_auto_exec_per_round: int | None = None
+    analyze_ticker_limit: int | None = None
+    auto_exec_enabled: bool | None = None
     notify_channels: list[str] | None = None
 
 
@@ -231,6 +233,8 @@ class AgentConfigResponse(BaseModel):
     t1_enabled: bool
     auto_exec_confidence: int
     max_auto_exec_per_round: int
+    analyze_ticker_limit: int = 10
+    auto_exec_enabled: bool = True
     notify_channels: list[str]
     config_source: str = "default"
     created_at: datetime

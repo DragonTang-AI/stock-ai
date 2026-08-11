@@ -22,6 +22,8 @@ DEFAULTS = {
     "max_auto_exec_per_round": 2,
     "signal_interval_min": 3,      # 分钟
     "allocated_capital": 100000,
+    "analyze_ticker_limit": 10,
+    "auto_exec_enabled": True,
 }
 
 
