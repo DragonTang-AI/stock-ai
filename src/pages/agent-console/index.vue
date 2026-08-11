@@ -10,8 +10,10 @@
       <text class="sched-text">
         {{ schedulerRunning ? 'AI 引擎运行中' : 'AI 引擎空闲' }}
       </text>
-      <text v-if="schedulerRunning && schedInfo" class="sched-detail">
-        刚刚为 {{ schedInfo.total_signals || 0 }} 只股票生成了信号
+      <text v-if="schedLastRun" class="sched-detail">上次 {{ schedLastRun }}</text>
+      <text v-if="schedNextRun" class="sched-detail next">下次 {{ schedNextRun }}</text>
+      <text v-if="schedulerRunning && schedInfo" class="sched-detail sched-count">
+        {{ schedInfo.total_signals || 0 }} 信号
       </text>
     </view>
 
@@ -256,6 +258,8 @@ const trades = ref<ConsoleTrade[]>([])
 
 const schedulerRunning = ref(false)
 const schedInfo = ref<any>(null)
+const schedLastRun = ref('')
+const schedNextRun = ref('')
 let pollTimer: number | null = null
 let schedTimer: number | null = null
 
@@ -310,6 +314,22 @@ const checkScheduler = async () => {
     schedulerRunning.value = status.running
     if (status.last_run_result) {
       schedInfo.value = status.last_run_result
+    }
+    if (status.last_run_at) {
+      schedLastRun.value = formatRelative(status.last_run_at)
+    }
+    if (status.next_run_at) {
+      const bj = toBJTime(status.next_run_at)
+      if (bj) {
+        const h = String(bj.getUTCHours()).padStart(2, '0')
+        const m = String(bj.getUTCMinutes()).padStart(2, '0')
+        const diff = bj.getTime() - Date.now()
+        if (diff > 0 && diff < 3600000) {
+          schedNextRun.value = Math.ceil(diff / 60000) + '分钟后'
+        } else {
+          schedNextRun.value = h + ':' + m
+        }
+      }
     }
   } catch (e) {
     // 忽略
@@ -455,7 +475,16 @@ const formatRelative = (t: string | null) => {
   .sched-detail {
     font-size: 20rpx;
     color: #4A6FA5;
+  }
+
+  .sched-detail.next {
+    color: #556677;
+    margin-left: 16rpx;
+  }
+
+  .sched-detail.sched-count {
     margin-left: auto;
+    color: #4A6FA5;
   }
 
   &.active {
