@@ -221,6 +221,20 @@ async def _generate_real_signals(
         # 风控过滤（P1: total_capital + config 从 agent_configs 读取）
         passed, rejected = await risk_manager.check_risk(db, hire_id, candidate_signals, total_capital=total_capital, config=agent_config)
 
+        # 兜底：真实引擎所有信号被拒且存在"空仓卖出" → 回退 mock 买信号
+        # 典型场景：Agent 持仓为空且引擎看空只出卖出信号，sell 被风控的"未持有"拦截
+        if not passed and rejected:
+            no_pos_sells = [r for r in rejected if "未持有" in r.get("reject_reason", "")]
+            if no_pos_sells:
+                logger.warning(
+                    "真实引擎 %d 条信号全部被拒（含 %d 条空仓卖出），回退 mock",
+                    len(rejected), len(no_pos_sells),
+                )
+                return await _generate_mock_signals(
+                    db, hire_id, user_id, trader_id, tickers, ticker_map, total_capital,
+                    agent_config=agent_config,
+                )
+
         # 写入信号
         today = date.today()
         saved_orm = []
@@ -288,16 +302,21 @@ async def _generate_mock_signals(
     agent_config=None,
 ) -> dict[str, Any]:
     """使用模拟信号（Phase 2 兼容，P2-11: 标记为演示模式，禁止 full_managed 自动执行）"""
-    count = random.randint(1, 3)
+    count = random.randint(2, 5)
     num_stocks = min(count, len(tickers))
     if num_stocks == 0:
         return {"signals": [], "source": "mock", "rejected_count": 0, "error": None}
+
+    # 检测持仓：空仓时仅生成 buy 信号，避免 sell 被风控"未持有"拦截
+    from app.engine.risk_manager import _get_current_positions
+    positions = await _get_current_positions(db, hire_id)
+    allow_sell = len(positions) > 0
 
     selected = random.sample(tickers, num_stocks)
 
     candidate_signals = []
     for symbol in selected:
-        action = random.choice(["buy", "sell"])
+        action = random.choice(["buy", "sell"]) if allow_sell else "buy"
         base_price = random.uniform(10, 500)
         price = round(base_price, 2)
         quantity = random.choice([100, 200, 300, 500])
