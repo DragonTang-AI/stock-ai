@@ -18,7 +18,7 @@ DEFAULTS = {
     "max_position_count": 5,
     "loss_stop_pct": 5,            # 百分比，使用时 /100
     "t1_enabled": True,
-    "auto_exec_confidence": 50,
+    "auto_exec_confidence": 70,
     "max_auto_exec_per_round": 2,
     "signal_interval_min": 3,      # 分钟
     "allocated_capital": 100000,

@@ -92,7 +92,7 @@ async def generate_signals(
     # P1: 从 agent_configs 读取 ticker 限制和风控参数
     from app.services.agent_config_service import get_agent_config, DEFAULTS as CONFIG_DEFAULTS
     agent_config = await get_agent_config(db, hire_id)
-    ticker_limit = agent_config.analyze_ticker_limit if agent_config and agent_config.analyze_ticker_limit else CONFIG_DEFAULTS.get("analyze_ticker_limit", 10)
+    ticker_limit = agent_config.analyze_ticker_limit if agent_config and agent_config.analyze_ticker_limit is not None else CONFIG_DEFAULTS.get("analyze_ticker_limit", 10)
 
     # 3. 获取股票池（A+H 混合，各至少留 2 只给分析引擎）
     stock_list = await market_data.get_stock_list(db, limit=ticker_limit)
