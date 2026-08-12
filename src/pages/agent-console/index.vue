@@ -68,6 +68,37 @@
       <view class="tab-item" :class="{ active: activeTab === 'trades' }" @click="activeTab = 'trades'">
         <text>交易记录</text>
       </view>
+      <view class="tab-item" :class="{ active: activeTab === 'perf' }" @click="activeTab = 'perf'" @click.once="loadPerformance">
+        <text>绩效</text>
+      </view>
+    </view>
+
+    <!-- 信号筛选 -->
+    <view v-if="activeTab === 'signals'" class="signal-filters">
+      <input
+        v-model="filterSymbol"
+        class="filter-input"
+        placeholder="股票代码..."
+        @confirm="onFilterChange"
+      />
+      <picker mode="date" :value="filterDateFrom" @change="onDateFromChange">
+        <view class="filter-picker">{{ filterDateFrom || '起始日期' }}</view>
+      </picker>
+      <picker mode="date" :value="filterDateTo" @change="onDateToChange">
+        <view class="filter-picker">{{ filterDateTo || '结束日期' }}</view>
+      </picker>
+      <picker
+        mode="selector"
+        :range="statusOptions"
+        @change="onStatusChange"
+      >
+        <view class="filter-picker">
+          {{ filterStatusLabel }}
+        </view>
+      </picker>
+      <view v-if="hasFilters" class="filter-clear" @click="clearFilters">
+        <text class="filter-clear-text">清空</text>
+      </view>
     </view>
 
     <!-- 信号列表 -->
@@ -207,6 +238,70 @@
         </view>
       </view>
     </view>
+
+    <!-- 绩效面板 -->
+    <view v-if="activeTab === 'perf'" class="perf-panel">
+      <view v-if="perfLoading" class="perf-loading">
+        <text>加载中...</text>
+      </view>
+      <view v-else-if="!perfData" class="empty-state">
+        <view class="empty-icon">&#9783;</view>
+        <text class="empty-title">暂无绩效数据</text>
+        <text class="empty-desc">交易员开始交易后将生成绩效指标</text>
+      </view>
+      <template v-else>
+        <!-- 指标卡片 -->
+        <view class="perf-metrics">
+          <view class="perf-card">
+            <text class="perf-label">累计收益</text>
+            <text class="perf-value" :class="perfData.return_pct >= 0 ? 'up' : 'down'">
+              {{ perfData.return_pct >= 0 ? '+' : '' }}{{ formatMoney(perfData.return_pct, 2) }}%
+            </text>
+          </view>
+          <view class="perf-card">
+            <text class="perf-label">Alpha</text>
+            <text class="perf-value" :class="(perfData.alpha || 0) >= 0 ? 'up' : 'down'">
+              {{ (perfData.alpha || 0) >= 0 ? '+' : '' }}{{ formatMoney(perfData.alpha || 0, 2) }}%
+            </text>
+          </view>
+          <view class="perf-card">
+            <text class="perf-label">夏普比率</text>
+            <text class="perf-value">{{ formatMoney(perfData.sharpe_ratio || 0, 2) }}</text>
+          </view>
+          <view class="perf-card">
+            <text class="perf-label">最大回撤</text>
+            <text class="perf-value down">{{ formatMoney(perfData.max_drawdown || 0, 2) }}%</text>
+          </view>
+          <view class="perf-card">
+            <text class="perf-label">胜率</text>
+            <text class="perf-value">{{ formatMoney(perfData.win_rate || 0, 1) }}%</text>
+          </view>
+        </view>
+        <!-- 收益曲线 -->
+        <view v-if="perfCurve.dates.length" class="perf-chart-section">
+          <text class="perf-section-title">收益走势</text>
+          <LineChart
+            v-model="perfPeriod"
+            :dates="perfCurve.dates"
+            :values="perfCurve.values"
+            height="200px"
+            :show-legend="false"
+          />
+        </view>
+        <!-- 历史记录 -->
+        <view v-if="perfHistory.length" class="perf-history">
+          <text class="perf-section-title">历史记录</text>
+          <view v-for="p in perfHistory" :key="p.period + '-' + p.period_end" class="perf-history-row">
+            <text class="perf-history-period">{{ p.period_end }}</text>
+            <text class="perf-history-return" :class="p.return_pct >= 0 ? 'up' : 'down'">
+              {{ p.return_pct >= 0 ? '+' : '' }}{{ formatMoney(p.return_pct, 2) }}%
+            </text>
+            <text class="perf-history-sharpe">Sharpe {{ formatMoney(p.sharpe_ratio || 0, 2) }}</text>
+            <text class="perf-history-win">胜率 {{ formatMoney(p.win_rate || 0, 1) }}%</text>
+          </view>
+        </view>
+      </template>
+    </view>
     </template>
   </view>
 </template>
@@ -230,10 +325,11 @@ import {
 import { request } from '@/utils/request'
 import { formatMoney } from '@/utils/format'
 import { useShowRefresh, touchRefreshKey } from '@/utils/refresh-cache'
+import LineChart from '@/components/charts/LineChart.vue'
 
 const isLoading = ref(true)
 const hireId = ref<number>(0)
-const activeTab = ref<'signals' | 'portfolio' | 'trades'>('signals')
+const activeTab = ref<'signals' | 'portfolio' | 'trades' | 'perf'>('signals')
 
 const overview = ref<ConsoleOverview>({
   hire_id: 0,
@@ -352,7 +448,12 @@ const loadAll = async () => {
 
 const loadSignals = async () => {
   try {
-    signals.value = await getSignals(hireId.value)
+    const filters: any = {}
+    if (filterStatus.value) filters.status = filterStatus.value
+    if (filterSymbol.value) filters.symbol = filterSymbol.value
+    if (filterDateFrom.value) filters.date_from = filterDateFrom.value
+    if (filterDateTo.value) filters.date_to = filterDateTo.value
+    signals.value = await getSignals(hireId.value, Object.keys(filters).length ? filters : undefined)
   } catch (e) { /* ignore */ }
 }
 
@@ -366,6 +467,33 @@ const loadTrades = async () => {
   try {
     trades.value = await getAgentTrades(hireId.value)
   } catch (e) { /* ignore */ }
+}
+
+const loadPerformance = async () => {
+  if (!hireId.value) return
+  perfLoading.value = true
+  try {
+    // 先获取 hire 信息拿到 agent_id
+    const hireInfo: any = await request('/agent-console/' + hireId.value)
+    const agentId = hireInfo.agent_id || hireInfo.data?.agent_id
+    if (!agentId) return
+
+    const perf: any = await request('/agent/market/' + agentId + '/performance')
+    const pdata = perf || {}
+    if (pdata.performance_metrics) {
+      perfData.value = pdata.performance_metrics
+    }
+    if (pdata.recent_performances) {
+      perfHistory.value = pdata.recent_performances
+    }
+    if (pdata.salary_curve && pdata.salary_curve.length) {
+      perfCurve.value = {
+        dates: pdata.salary_curve.map((p: any) => p.date),
+        values: pdata.salary_curve.map((p: any) => p.value),
+      }
+    }
+  } catch (e) { /* ignore */ }
+  finally { perfLoading.value = false }
 }
 
 const handleConfirm = async (sig: ConsoleSignal) => {
@@ -681,6 +809,46 @@ const formatRelative = (t: string | null) => {
 }
 
 // ── Signal Cards ──
+.signal-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+.filter-input {
+  flex: 1 1 100px;
+  max-width: 120px;
+  height: 30px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 0 8px;
+  font-size: 13px;
+  background: #fff;
+}
+.filter-picker {
+  height: 30px;
+  line-height: 30px;
+  padding: 0 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  font-size: 13px;
+  background: #fff;
+  color: #6b7280;
+  white-space: nowrap;
+}
+.filter-clear {
+  height: 30px;
+  line-height: 30px;
+  padding: 0 8px;
+  cursor: pointer;
+}
+.filter-clear-text {
+  font-size: 13px;
+  color: #ef4444;
+}
+
 .signal-list {
   padding: 0 24rpx;
 }
@@ -1024,4 +1192,29 @@ const formatRelative = (t: string | null) => {
 .mono {
   font-family: 'DIN Alternate', 'Courier New', monospace;
 }
+
+/* 绩效面板 */
+.perf-panel { padding: 12px; }
+.perf-loading { text-align: center; padding: 40px 0; color: #999; font-size: 14px; }
+.perf-metrics { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.perf-card {
+  flex: 1 1 calc(33.33% - 8px); min-width: 100px;
+  background: #f9fafb; border-radius: 8px; padding: 10px 12px;
+  text-align: center;
+}
+.perf-label { font-size: 12px; color: #999; display: block; margin-bottom: 4px; }
+.perf-value { font-size: 16px; font-weight: 600; color: #333; }
+.perf-value.up { color: #e53e3e; }
+.perf-value.down { color: #38a169; }
+.perf-chart-section { margin-bottom: 16px; }
+.perf-section-title { font-size: 14px; font-weight: 600; color: #333; display: block; margin-bottom: 8px; }
+.perf-history-row {
+  display: flex; align-items: center; padding: 10px 0;
+  border-bottom: 1px solid #f0f0f0; gap: 8px;
+}
+.perf-history-period { font-size: 13px; color: #666; min-width: 80px; }
+.perf-history-return { font-size: 14px; font-weight: 600; min-width: 70px; }
+.perf-history-sharpe { font-size: 12px; color: #999; }
+.perf-history-win { font-size: 12px; color: #999; margin-left: auto; }
+
 </style>

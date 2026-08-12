@@ -171,10 +171,21 @@ export function getConsoleOverview(hireId: number): Promise<ConsoleOverview> {
 }
 
 /** 获取信号列表 */
-export function getSignals(hireId: number, status?: string): Promise<ConsoleSignal[]> {
-  let url = '/agent-console/' + hireId + '/signals'
-  if (status) url += '?status=' + status
-  return request<ConsoleSignal[]>(url)
+export interface SignalFilters {
+  status?: string
+  symbol?: string
+  date_from?: string
+  date_to?: string
+}
+
+export function getSignals(hireId: number, filters?: SignalFilters): Promise<ConsoleSignal[]> {
+  const params = new URLSearchParams()
+  if (filters?.status) params.set('status', filters.status)
+  if (filters?.symbol) params.set('symbol', filters.symbol)
+  if (filters?.date_from) params.set('date_from', filters.date_from)
+  if (filters?.date_to) params.set('date_to', filters.date_to)
+  const qs = params.toString()
+  return request<ConsoleSignal[]>('/agent-console/' + hireId + '/signals' + (qs ? '?' + qs : ''))
 }
 
 /** 确认信号执行 */

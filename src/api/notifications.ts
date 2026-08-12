@@ -4,16 +4,18 @@
  */
 import { request } from '@/utils/request'
 
-export type NotificationType = 'system' | 'price' | 'selection' | 'advisor' | 'trade'
+export type NotificationType = 'system' | 'price' | 'selection' | 'advisor' | 'trade' | 'signal'
 
 export interface NotificationItem {
-  id: string
+  id: number
   type: NotificationType
   title: string
   content: string
+  channel: string
+  is_read: boolean
+  hire_id?: number
+  trader_id?: string
   created_at: string   // ISO datetime
-  read: boolean
-  data?: Record<string, any>  // 跳转携带数据（code 等）
 }
 
 export interface NotificationsPage {
@@ -28,14 +30,14 @@ export interface NotificationsPage {
 export function fetchNotifications(params?: {
   limit?: number; offset?: number
 }): Promise<NotificationsPage> {
-  return request<{ success: boolean; data: NotificationsPage }>(
+  return request<{ items: NotificationItem[]; total: number; unread_count: number; limit: number; offset: number }>(
     '/notifications', { method: 'GET', params }
-  ).then(res => res.data)
+  ).then(res => res)
 }
 
 /** 标记单条已读 */
-export function markAsRead(id: string): Promise<void> {
-  return request(`/notifications/${id}/read`, { method: 'PUT' })
+export function markAsRead(id: number): Promise<void> {
+  return request(, { method: 'PUT' })
 }
 
 /** 全部标记已读 */
@@ -44,8 +46,8 @@ export function markAllAsRead(): Promise<void> {
 }
 
 /** 删除单条通知 */
-export function deleteNotification(id: string): Promise<void> {
-  return request(`/notifications/${id}`, { method: 'DELETE' })
+export function deleteNotification(id: number): Promise<void> {
+  return request(, { method: 'DELETE' })
 }
 
 /** 清空全部通知 */
