@@ -4,9 +4,8 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import asc, desc, func, select, text
+from sqlalchemy import desc, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.models.agent import Notification
@@ -28,7 +27,7 @@ class NotificationOut(BaseModel):
     trader_id: str | None = None
     created_at: datetime
 
-    model_config = {from_attributes: True}
+    model_config = {"from_attributes": True}
 
 
 class NotificationPage(BaseModel):
@@ -39,7 +38,7 @@ class NotificationPage(BaseModel):
     offset: int
 
 
-@router.get(, response_model=NotificationPage)
+@router.get("", response_model=NotificationPage)
 async def get_notifications(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
@@ -76,7 +75,7 @@ async def get_notifications(
     )
 
 
-@router.put(/{id}/read)
+@router.put("/{id}/read")
 async def mark_read(
     id: int,
     current_user: User = Depends(get_current_user),
@@ -89,29 +88,29 @@ async def mark_read(
     )
     notif = result.scalar_one_or_none()
     if not notif:
-        raise HTTPException(status_code=404, detail=通知不存在)
+        raise HTTPException(status_code=404, detail="通知不存在")
     notif.is_read = True
     await db.commit()
-    return {success: True}
+    return {"success": True}
 
 
-@router.put(/read-all)
+@router.put("/read-all")
 async def mark_all_read(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     await db.execute(
         text(
-            UPDATE agent.notifications SET is_read = TRUE 
-            WHERE user_id = :uid AND is_read = FALSE
+            "UPDATE agent.notifications SET is_read = TRUE "
+            "WHERE user_id = :uid AND is_read = FALSE"
         ),
-        {uid: current_user.id},
+        {"uid": current_user.id},
     )
     await db.commit()
-    return {success: True}
+    return {"success": True}
 
 
-@router.delete(/{id})
+@router.delete("/{id}")
 async def delete_notification(
     id: int,
     current_user: User = Depends(get_current_user),
@@ -124,20 +123,20 @@ async def delete_notification(
     )
     notif = result.scalar_one_or_none()
     if not notif:
-        raise HTTPException(status_code=404, detail=通知不存在)
+        raise HTTPException(status_code=404, detail="通知不存在")
     await db.delete(notif)
     await db.commit()
-    return {success: True}
+    return {"success": True}
 
 
-@router.delete()
+@router.delete("")
 async def clear_notifications(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     await db.execute(
-        text(DELETE FROM agent.notifications WHERE user_id = :uid),
-        {uid: current_user.id},
+        text("DELETE FROM agent.notifications WHERE user_id = :uid"),
+        {"uid": current_user.id},
     )
     await db.commit()
-    return {success: True}
+    return {"success": True}

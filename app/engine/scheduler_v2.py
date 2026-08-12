@@ -145,20 +145,20 @@ async def _process_single_hire_impl(hire: dict) -> dict[str, Any]:
             signals = gen_result.get("signals", [])
             source = gen_result.get("source", "unknown")
 
-            # P3: 为每个信号写入通知
+            # P3: write notification for each signal
             if signals and hire.get("notify_channels"):
                 channels = hire.get("notify_channels") or ["inbox"]
                 if "inbox" in channels:
                     for sig in signals:
                         try:
+                            reasoning_suffix = ("\n" + sig.get("reasoning","")) if sig.get("reasoning") else ""
                             db.add(Notification(
                                 user_id=hire["user_id"],
                                 hire_id=hire_id,
                                 trader_id=sig.get("trader_id", ""),
                                 type="signal",
                                 title=sig.get("symbol_name", sig.get("symbol", "")) + " " + sig.get("action", "").upper(),
-                                content=f"{sig.get('symbol_name','')}({sig.get('symbol','')}) {sig.get('action','')} @ {sig.get('price',0):.2f} x{sig.get('quantity',0)}，置信度 {sig.get('confidence',0)}%" + (f"
-{sig.get('reasoning','')}" if sig.get('reasoning') else ""),
+                                content=sig.get("symbol_name","") + "(" + sig.get("symbol","") + ") " + sig.get("action","") + " @ " + "{:.2f}".format(sig.get("price",0)) + " x" + str(sig.get("quantity",0)) + u"，置信度 " + str(sig.get("confidence",0)) + "%" + reasoning_suffix,
                                 channel="inbox",
                             ))
                         except Exception:
