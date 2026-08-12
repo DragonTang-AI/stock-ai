@@ -146,8 +146,8 @@ async def _process_single_hire_impl(hire: dict) -> dict[str, Any]:
             source = gen_result.get("source", "unknown")
 
             # P3: write notification for each signal
-            if signals and hire.get("notify_channels"):
-                channels = hire.get("notify_channels") or ["inbox"]
+            if signals and agent_config and agent_config.notify_channels:
+                channels = agent_config.notify_channels or ["inbox"]
                 if "inbox" in channels:
                     for sig in signals:
                         try:
