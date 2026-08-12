@@ -187,3 +187,29 @@ class AgentConfig(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+# ── 通知 ──
+from sqlalchemy import Index
+
+class Notification(Base):
+    通知消息表 agent.notifications
+    __tablename__ = notifications
+    __table_args__ = (
+        Index(ix_notifications_user_read, user_id, is_read, created_at),
+        Index(ix_notifications_hire, hire_id, created_at),
+        {schema: agent},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey(users.id, ondelete=CASCADE), nullable=False)
+    hire_id: Mapped[int | None] = mapped_column(Integer, ForeignKey(agent.user_agents.id, ondelete=CASCADE), nullable=True)
+    trader_id: Mapped[str | None] = mapped_column(String(32), ForeignKey(agent.agent_traders.id, ondelete=CASCADE), nullable=True)
+    type: Mapped[str] = mapped_column(String(32), nullable=False, default=signal)
+    title: Mapped[str] = mapped_column(String(128), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False, default=)
+    channel: Mapped[str] = mapped_column(String(32), nullable=False, default=inbox)
+    is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

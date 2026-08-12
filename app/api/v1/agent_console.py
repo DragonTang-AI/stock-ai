@@ -153,6 +153,9 @@ async def get_console_overview(
 async def list_signals(
     hire_id: int,
     status: str | None = Query(default=None, description="筛选状态: pending/confirmed/ignored/auto_executed"),
+    symbol: str | None = Query(default=None, description="按股票代码模糊筛选"),
+    date_from: date | None = Query(default=None, description="起始日期"),
+    date_to: date | None = Query(default=None, description="结束日期"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
@@ -163,6 +166,12 @@ async def list_signals(
     conditions = [AgentSignal.hire_id == hire_id]
     if status:
         conditions.append(AgentSignal.exec_status == status)
+    if symbol:
+        conditions.append(AgentSignal.symbol.ilike(f"%{symbol}%"))
+    if date_from:
+        conditions.append(func.date(AgentSignal.created_at) >= date_from)
+    if date_to:
+        conditions.append(func.date(AgentSignal.created_at) <= date_to)
 
     q = (
         select(AgentSignal)

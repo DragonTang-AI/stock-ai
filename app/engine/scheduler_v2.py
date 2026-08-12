@@ -21,7 +21,7 @@ from sqlalchemy import and_, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_scheduler_db_context as get_db_context
-from app.models.agent import UserAgent, AgentTrader, AgentSignal, AgentConfig
+from app.models.agent import UserAgent, AgentTrader, AgentSignal, AgentConfig, Notification
 from app.engine import signal_generator
 from app.engine.auto_executor import auto_execute_signals
 from app.engine.market_hours import is_any_market_hours
@@ -84,6 +84,7 @@ async def _get_active_hires(db: AsyncSession) -> list[dict]:
             "trader_id": trader.id,
             "management_mode": hire.management_mode,
             "trader_name": trader.code_name,
+            "notify_channels": trader.notify_channels,
         }
         for hire, trader in rows
     ]
@@ -143,6 +144,26 @@ async def _process_single_hire_impl(hire: dict) -> dict[str, Any]:
 
             signals = gen_result.get("signals", [])
             source = gen_result.get("source", "unknown")
+
+            # P3: 为每个信号写入通知
+            if signals and hire.get("notify_channels"):
+                channels = hire.get("notify_channels") or ["inbox"]
+                if "inbox" in channels:
+                    for sig in signals:
+                        try:
+                            db.add(Notification(
+                                user_id=hire["user_id"],
+                                hire_id=hire_id,
+                                trader_id=sig.get("trader_id", ""),
+                                type="signal",
+                                title=sig.get("symbol_name", sig.get("symbol", "")) + " " + sig.get("action", "").upper(),
+                                content=f"{sig.get('symbol_name','')}({sig.get('symbol','')}) {sig.get('action','')} @ {sig.get('price',0):.2f} x{sig.get('quantity',0)}，置信度 {sig.get('confidence',0)}%" + (f"
+{sig.get('reasoning','')}" if sig.get('reasoning') else ""),
+                                channel="inbox",
+                            ))
+                        except Exception:
+                            pass
+                    await db.flush()
             rejected = gen_result.get("rejected_count", 0)
             demo_mode = gen_result.get("demo_mode", False)
 
