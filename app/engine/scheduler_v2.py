@@ -84,7 +84,6 @@ async def _get_active_hires(db: AsyncSession) -> list[dict]:
             "trader_id": trader.id,
             "management_mode": hire.management_mode,
             "trader_name": trader.code_name,
-            "notify_channels": trader.notify_channels,
         }
         for hire, trader in rows
     ]
