@@ -1,7 +1,7 @@
 <template>
   <view class="selection-page">
     <!-- 骨架屏 -->
-    <LoadingSkeleton v-if="activeTab === 'daily' ? dailyLoading : loading" scene="selection" :rows="3" />
+    <LoadingSkeleton v-if="loading" scene="selection" :rows="3" />
   <!-- ========== 搜索入口 ========== -->
   <view class="search-entry" @click="goSearch">
     <text class="search-entry-icon">🔍</text>
@@ -43,7 +43,7 @@
   </view>
 
     <!-- 选股结果（委员会实时 / 每日推荐缓存共用渲染） -->
-    <view v-if="displayResults.length > 0 && (activeTab === 'daily' ? !dailyLoading : !loading)">
+    <view v-if="!loading && displayResults.length > 0 && (activeTab === 'daily' ? !dailyLoading : true)">
       <view class="section-title">{{ activeTab === 'daily' ? '每日推荐' : 'AI 委员会选股' }}</view>
 
       <view
@@ -270,8 +270,6 @@ async function loadResults() {
 }
 
 onMounted(() => {
-  // 每日推荐走缓存直读，秒出；委员会实时计算较慢，后台并行加载
-  loadDailyPicks()
   loadResults()
 })
 
