@@ -106,17 +106,26 @@ export function fetchCommitteeResults(): Promise<CommitteeResult[]> {
   )
 }
 
-/** 获取每日精选 (GET /selection/daily-picks) */
+/** 获取每日精选 (GET /selection/daily-picks) — C 端直读服务端每日缓存，不触发 LLM */
 export function fetchDailyPicks(): Promise<CommitteeResult[]> {
-  return cachedRequest(
-    'selection:dailyPicks',
-    () => request<any>('/selection/daily-picks', { method: 'GET' })
-      .then(res => {
-        const raw = res?.data || res?.picks || res || []
-        const list = Array.isArray(raw) ? raw : raw.items || raw.results || []
-        return list.map(normalizeCommitteeResult)
-      })
-  )
+  return request<any>('/selection/daily-picks', { method: 'GET' })
+    .then(res => {
+      const raw = res?.data || res?.picks || res || []
+      const list = Array.isArray(raw) ? raw : raw.items || raw.results || []
+      return list.map(normalizeCommitteeResult)
+    })
+}
+
+/** 手动刷新每日精选 (POST /selection/daily-picks/refresh) — 重新调度 LLM 生成 */
+export function refreshDailyPicks(): Promise<CommitteeResult[]> {
+  return request<any>('/selection/daily-picks/refresh', {
+    method: 'POST',
+    data: { market: 'A', top_n: 5 },
+  }).then(res => {
+    const raw = res?.data || res?.picks || res || []
+    const list = Array.isArray(raw) ? raw : raw.items || raw.results || []
+    return list.map(normalizeCommitteeResult)
+  })
 }
 
 /** 获取单股详细分析 → 后端 /analysis/diagnose/{symbol} */

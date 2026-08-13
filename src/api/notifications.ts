@@ -37,7 +37,7 @@ export function fetchNotifications(params?: {
 
 /** 标记单条已读 */
 export function markAsRead(id: number): Promise<void> {
-  return request(, { method: 'PUT' })
+  return request(`/notifications/${id}/read`, { method: 'PUT' })
 }
 
 /** 全部标记已读 */
@@ -47,7 +47,7 @@ export function markAllAsRead(): Promise<void> {
 
 /** 删除单条通知 */
 export function deleteNotification(id: number): Promise<void> {
-  return request(, { method: 'DELETE' })
+  return request(`/notifications/${id}`, { method: 'DELETE' })
 }
 
 /** 清空全部通知 */

@@ -12,7 +12,13 @@
 
     <!-- 委员会分析结果 -->
     <view v-if="!loading && results.length > 0">
-      <view class="section-title">AI 委员会选股</view>
+      <view class="section-title-row">
+        <text class="section-title">AI 委员会选股</text>
+        <text class="refresh-btn" :class="{ refreshing }" @click="handleRefresh">
+          {{ refreshing ? '分析中...' : '刷新' }}
+        </text>
+      </view>
+      <view class="daily-picks-hint">每日 08:00 自动生成，点击刷新可重新分析</view>
 
       <view
         v-for="(item, idx) in results"
@@ -104,7 +110,8 @@ import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
 import { trackPageView, trackAction } from '@/utils/tracker'
 import { formatPercent } from '@/utils/format'
 import {
-  fetchCommitteeResults,
+  fetchDailyPicks,
+  refreshDailyPicks,
   addToWatchlist,
   removeFromWatchlist,
   type CommitteeResult,
@@ -117,6 +124,7 @@ function goSearch() {
 
 
 const results = ref<CommitteeResult[]>([])
+const refreshing = ref(false)
 const loading = ref(true)
 const error = ref('')
 const expandedSet = reactive(new Set<number>())
@@ -183,11 +191,26 @@ async function loadResults() {
   loading.value = true
   error.value = ''
   try {
-    results.value = await fetchCommitteeResults()
+    results.value = await fetchDailyPicks()
   } catch (e: any) {
     error.value = e?.message || '加载失败'
   } finally {
     loading.value = false
+  }
+}
+
+async function handleRefresh() {
+  if (refreshing.value) return
+  refreshing.value = true
+  uni.showLoading({ title: 'AI 重新分析中...' })
+  try {
+    results.value = await refreshDailyPicks()
+    uni.showToast({ title: '已刷新', icon: 'success' })
+  } catch (e: any) {
+    uni.showToast({ title: e?.message || '刷新失败', icon: 'none' })
+  } finally {
+    uni.hideLoading()
+    refreshing.value = false
   }
 }
 
@@ -267,11 +290,31 @@ onShow(() => {
 }
 
 // ---- 标题 ----
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 32rpx 0;
+}
 .section-title {
-  padding: 24rpx 32rpx 16rpx;
   font-size: $font-size-lg;
   font-weight: 700;
   color: $text-primary;
+}
+.refresh-btn {
+  font-size: $font-size-sm;
+  color: $color-primary;
+  padding: 8rpx 24rpx;
+  border: 1rpx solid $color-primary;
+  border-radius: 999rpx;
+  &.refreshing {
+    opacity: 0.6;
+  }
+}
+.daily-picks-hint {
+  padding: 8rpx 32rpx 16rpx;
+  font-size: $font-size-xs;
+  color: $text-secondary;
 }
 
 // ---- 结果卡片 ----
