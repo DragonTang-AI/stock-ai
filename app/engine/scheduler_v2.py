@@ -181,24 +181,33 @@ async def _process_single_hire_impl(hire: dict) -> dict[str, Any]:
                     "status": "no_signals",
                 }
 
-            # P2-11: mock 演示模式禁止 full_managed 自动执行，只保留为 pending 供前端展示
+            # P2-11: mock 演示模式仅禁止自动卖出（防 mock 假卖出），允许 buy 信号自动建仓
             if management_mode == "full_managed" and demo_mode:
-                logger.warning(
-                    "调度 #%d [%s] full_managed 收到演示模式信号，禁止自动下单（source=mock）",
-                    hire_id, trader_name,
-                )
-                return {
-                    "hire_id": hire_id,
-                    "trader_name": trader_name,
-                    "mode": management_mode,
-                    "source": source,
-                    "demo_mode": True,
-                    "signals_count": len(signals),
-                    "executed_count": 0,
-                    "pending_count": len(signals),
-                    "failed_count": 0,
-                    "status": "demo_mode_skipped",
-                }
+                sell_signals = [s for s in signals if s.get("action") == "sell"]
+                buy_signals = [s for s in signals if s.get("action") == "buy"]
+                if sell_signals and not buy_signals:
+                    logger.warning(
+                        "调度 #%d [%s] full_managed 收到演示卖出信号，禁止自动下单（source=mock）",
+                        hire_id, trader_name,
+                    )
+                    return {
+                        "hire_id": hire_id,
+                        "trader_name": trader_name,
+                        "mode": management_mode,
+                        "source": source,
+                        "demo_mode": True,
+                        "signals_count": len(signals),
+                        "executed_count": 0,
+                        "pending_count": len(signals),
+                        "failed_count": 0,
+                        "status": "demo_mode_skipped",
+                    }
+                if sell_signals:
+                    signals = buy_signals
+                    logger.warning(
+                        "调度 #%d [%s] full_managed mock 过滤 %d 条卖出信号，保留 %d 条买入自动执行",
+                        hire_id, trader_name, len(sell_signals), len(buy_signals),
+                    )
 
             # 自动执行
             exec_result = await auto_execute_signals(

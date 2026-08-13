@@ -186,6 +186,19 @@ async def _execute_single_signal(
             pf = pf_result.scalar_one_or_none()
             if pf:
                 agent_sell_holdings = {trading_symbol: pf.quantity}
+                # B: 卖出数量按实际持仓裁剪，避免"持仓不足"下单失败
+                if lot_qty > int(pf.quantity or 0):
+                    adjusted = (int(pf.quantity) // lot) * lot
+                    if adjusted <= 0:
+                        raise AppException(
+                            f"持仓不足：需要卖出 {lot_qty}，持有可用 {int(pf.quantity)}"
+                        )
+                    logger.warning(
+                        "持仓不足，卖出数量由 %d 裁剪为 %d（持仓 %d）",
+                        lot_qty, adjusted, int(pf.quantity),
+                    )
+                    lot_qty = adjusted
+                    order_req.quantity = lot_qty
         order_result = await trading_service.place_order(
             db=db,
             user=user_stub,
