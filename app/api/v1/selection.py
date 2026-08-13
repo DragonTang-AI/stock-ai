@@ -9,8 +9,7 @@ from app.api.v1.auth import get_current_user_optional
 from app.schemas.selection import RecommendResponse, RecommendRequest
 import logging
 from app.services.selection import recommend_stocks
-from app.services.daily_picks_service import get_daily_picks as get_daily_picks_cache
-from app.services.daily_picks_service import refresh_daily_picks as refresh_daily_picks_cache
+from app.services.daily_picks_service import get_daily_picks as get_daily_picks_cache, refresh_daily_picks
 
 logger = logging.getLogger(__name__)
 
@@ -59,33 +58,30 @@ async def get_recommend(
 
 @router.get("/daily-picks")
 async def get_daily_picks(
-    market: str = Query("A", description="市场代码: A/HK"),
+    market: str = Query("A", description="市场过滤：A/HK"),
     current_user: Optional[User] = Depends(get_current_user_optional),
 ) -> dict:
     """
-    每日精选（C 端直读缓存，不触发 LLM / 实时计算）。
+    每日推荐（C 端直读缓存，不触发实时计算）。
 
-    列表由服务端每日 08:00 调度器自动生成（4-Agent 委员会 LLM），
-    用户手动刷新时可通过 POST /selection/daily-picks/refresh 触发重新生成。
+    每日 8:00 由总部调度器用原因子评分引擎预生成并落库，
+    用户进入页面直接读取当日结果；未生成时返回空列表。
     """
     return await get_daily_picks_cache(market=market)
 
 
 @router.post("/daily-picks/refresh")
-async def refresh_daily_picks(
-    market: str = Query("A", description="市场代码: A/HK"),
-    top_n: int = Query(5, ge=1, le=5, description="输出信号上限"),
+async def post_daily_picks_refresh(
+    market: str = Query("A", description="市场过滤：A/HK"),
+    top_n: int = Query(5, ge=1, le=50, description="返回 Top N"),
     current_user: Optional[User] = Depends(get_current_user_optional),
 ) -> dict:
     """
-    手动刷新每日精选：立即重新执行 4-Agent 委员会（LLM）并覆盖当日缓存。
-
-    注意：此接口会触发 LLM 调度，仅应在用户主动点击刷新时调用。
+    每日推荐手动刷新：强制用原因子评分引擎重新生成当日结果并落库。
     """
-    return await refresh_daily_picks_cache(market=market, top_n=top_n)
+    return await refresh_daily_picks(market=market, top_n=top_n)
 
-
-# ── Prescreen 粗筛接口 ────────────────────────────────────────────────
+# ── Prescreen 粗筛接口 ────────────────────────────────
 from datetime import date
 from app.schemas.prescreen import PrescreenResponse
 from app.services.prescreen_service import get_prescreen_candidates
@@ -109,7 +105,7 @@ async def get_prescreen(
     return await get_prescreen_candidates(market=market, limit=limit)
 
 
-# ── 4-Agent 选股委员会接口 ────────────────────────────────────────────────
+# ── 4-Agent 选股委员会接口# ── Prescreen 粗筛接口 ────────────────────────────────
 from datetime import date
 from app.schemas.committee import CommitteeRunResponse
 from app.services.committee_service import run_committee_analysis

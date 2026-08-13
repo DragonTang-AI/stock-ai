@@ -1,9 +1,13 @@
 """app/services/daily_picks_service.py — 每日推荐列表服务
 
 机制：
-- 每日 8:00 由调度器触发生成一次（LLM 委员会管线），结果持久化到 daily_picks 表
+- 每日 8:00 由调度器触发生成一次（复用 /selection/recommend 因子评分引擎），
+  结果持久化到 daily_picks 表
 - C 端直接读取已生成的列表（不触发 LLM / 实时计算）
 - 用户手动刷新时强制重新生成（source=refresh）
+
+注意：生成引擎与选股页「AI 委员会选股」完全一致（recommend_stocks 多因子评分），
+只是执行时机从「每个用户进页面实时计算」改为「总部每天 8 点预生成一次」。
 """
 import json
 import logging
@@ -14,26 +18,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_scheduler_db_context
 from app.models.daily_pick import DailyPick
-from app.services.committee_service import run_committee_analysis
+from app.schemas.selection import RecommendRequest
+from app.services.selection import recommend_stocks
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TOP_N = 5
 DEFAULT_MARKET = "A"
-
-
-def _signal_to_pick(signal) -> dict:
-    """将 Signal 对象转换为 C 端友好结构（对齐前端 normalizeCommitteeResult）"""
-    return {
-        "symbol": signal.symbol,
-        "name": signal.symbol_name or signal.symbol,
-        "action": signal.action.value if hasattr(signal.action, "value") else str(signal.action),
-        "confidence": signal.confidence,
-        "reasoning": signal.reasoning,
-        "reason_codes": [rc.value if hasattr(rc, "value") else str(rc) for rc in (signal.reason_codes or [])],
-        "summary": signal.reasoning,
-        "generated_at": signal.created_at.isoformat() if signal.created_at else datetime.now(timezone.utc).isoformat(),
-    }
 
 
 async def generate_daily_picks(
@@ -42,7 +33,7 @@ async def generate_daily_picks(
     top_n: int = DEFAULT_TOP_N,
     source: str = "scheduler",
 ) -> dict:
-    """执行 4-Agent 委员会（LLM）生成每日推荐并持久化。
+    """使用原因子评分引擎生成每日推荐并持久化。
 
     若当日已有记录则覆盖更新（upsert），返回落库后的记录信息。
     """
@@ -53,13 +44,9 @@ async def generate_daily_picks(
                 trade_date_str, market, top_n, source)
 
     try:
-        result = await run_committee_analysis(
-            market=market,
-            trade_date=trade_date,
-            candidate_limit=50,
-            signal_limit=top_n,
-        )
-        picks = [_signal_to_pick(s) for s in result.signals]
+        req = RecommendRequest(market=market, top_n=top_n, strategy="momentum")
+        result = await recommend_stocks(req)
+        picks = [p.model_dump() for p in result.picks]
         picks_json = json.dumps(picks, ensure_ascii=False)
 
         async with get_scheduler_db_context() as db:
@@ -111,7 +98,7 @@ async def generate_daily_picks(
 
 
 async def get_daily_picks(market: str = DEFAULT_MARKET) -> dict:
-    """读取当日已生成的每日推荐（只读，无 LLM 调用）。"""
+    """读取当日已生成的每日推荐（只读，无计算）。"""
     trade_date_str = date.today().isoformat()
 
     async with get_scheduler_db_context() as db:
@@ -119,7 +106,7 @@ async def get_daily_picks(market: str = DEFAULT_MARKET) -> dict:
 
     if record is None:
         return {
-            "success": False,
+            "success": True,
             "found": False,
             "trade_date": trade_date_str,
             "market": market,
@@ -147,7 +134,6 @@ async def refresh_daily_picks(market: str = DEFAULT_MARKET, top_n: int = DEFAULT
 
 
 async def _get_record(db: AsyncSession, trade_date: str, market: str) -> DailyPick | None:
-    from sqlalchemy import select
     stmt = select(DailyPick).where(
         DailyPick.trade_date == trade_date,
         DailyPick.market == market,
