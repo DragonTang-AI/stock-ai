@@ -26,6 +26,7 @@ from app.engine import signal_generator
 from app.engine.auto_executor import auto_execute_signals
 from app.engine.market_hours import is_any_market_hours
 from app.services.agent_config_service import get_agent_config, DEFAULTS as CONFIG_DEFAULTS
+from app.services.daily_picks_service import generate_daily_picks, get_daily_picks
 
 logger = logging.getLogger(__name__)
 
@@ -305,6 +306,21 @@ async def _expire_stale_pending():
         logger.error("过期清理失败: %s", str(e))
 
 
+async def _maybe_generate_daily_picks():
+    """每日 08:00 后若当日推荐尚未生成，则触发一次 LLM 委员会生成（不依赖交易时段）。"""
+    try:
+        now = datetime.now()
+        if now.hour < 8:
+            return
+        result = await get_daily_picks(market="A")
+        if result.get("found"):
+            return
+        logger.info("[Scheduler] 触发每日推荐生成")
+        await generate_daily_picks(market="A", top_n=5, source="scheduler")
+    except Exception as e:  # noqa: BLE001
+        logger.error("[Scheduler] 每日推荐生成失败: %s", str(e))
+
+
 async def _run_one_cycle():
     """执行一次完整的调度周期"""
     global _scheduler_status
@@ -317,6 +333,9 @@ async def _run_one_cycle():
 
     # 过期清理：超过 24h 的 pending 信号自动标 expired（不依赖交易时段）
     await _expire_stale_pending()
+
+    # 每日 08:00 推荐生成（不依赖交易时段，开盘前完成）
+    await _maybe_generate_daily_picks()
 
     # 非交易时段跳过（A 股或港股任一交易时段均允许运行）
     if not is_any_market_hours():

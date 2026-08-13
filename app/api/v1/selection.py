@@ -9,6 +9,8 @@ from app.api.v1.auth import get_current_user_optional
 from app.schemas.selection import RecommendResponse, RecommendRequest
 import logging
 from app.services.selection import recommend_stocks
+from app.services.daily_picks_service import get_daily_picks as get_daily_picks_cache
+from app.services.daily_picks_service import refresh_daily_picks as refresh_daily_picks_cache
 
 logger = logging.getLogger(__name__)
 
@@ -57,18 +59,30 @@ async def get_recommend(
 
 @router.get("/daily-picks")
 async def get_daily_picks(
+    market: str = Query("A", description="市场代码: A/HK"),
     current_user: Optional[User] = Depends(get_current_user_optional),
 ) -> dict:
     """
-    每日精选（兼容旧接口，复用 recommend top 5）
+    每日精选（C 端直读缓存，不触发 LLM / 实时计算）。
+
+    列表由服务端每日 08:00 调度器自动生成（4-Agent 委员会 LLM），
+    用户手动刷新时可通过 POST /selection/daily-picks/refresh 触发重新生成。
     """
-    req = RecommendRequest(market="all", top_n=5, strategy="momentum")
-    result = await recommend_stocks(req)
-    return {
-        "success": True,
-        "picks": [p.model_dump() for p in result.picks],
-        "meta": result.meta,
-    }
+    return await get_daily_picks_cache(market=market)
+
+
+@router.post("/daily-picks/refresh")
+async def refresh_daily_picks(
+    market: str = Query("A", description="市场代码: A/HK"),
+    top_n: int = Query(5, ge=1, le=5, description="输出信号上限"),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+) -> dict:
+    """
+    手动刷新每日精选：立即重新执行 4-Agent 委员会（LLM）并覆盖当日缓存。
+
+    注意：此接口会触发 LLM 调度，仅应在用户主动点击刷新时调用。
+    """
+    return await refresh_daily_picks_cache(market=market, top_n=top_n)
 
 
 # ── Prescreen 粗筛接口 ────────────────────────────────────────────────

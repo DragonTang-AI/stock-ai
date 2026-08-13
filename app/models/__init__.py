@@ -12,3 +12,4 @@ from app.models.trading import (  # noqa: F401
 from app.models.stock import Watchlist  # noqa: F401
 from app.models.signals import Signal  # noqa: F401
 from app.models.broadcast import Broadcast  # noqa: F401
+from app.models.daily_pick import DailyPick  # noqa: F401
