@@ -8,20 +8,46 @@
     <text class="search-entry-text">搜索股票代码或名称</text>
   </view>
 
+  <!-- ========== Tab 切换 ========== -->
+  <view class="page-tabs">
+    <view
+      class="tab-item"
+      :class="{ active: activeTab === 'committee' }"
+      @click="switchTab('committee')"
+    >AI 委员会选股</view>
+    <view
+      class="tab-item"
+      :class="{ active: activeTab === 'daily' }"
+      @click="switchTab('daily')"
+    >每日推荐</view>
+  </view>
 
+  <!-- 每日推荐：预生成缓存直读 + 手动刷新 -->
+  <view v-if="activeTab === 'daily' && !dailyLoading" class="daily-toolbar">
+    <view class="daily-toolbar-title">每日推荐（总部每日 8:00 预生成）</view>
+    <button class="btn-refresh" :disabled="refreshing" @click="handleRefreshDaily">
+      {{ refreshing ? '刷新中...' : '刷新' }}
+    </button>
+  </view>
 
-    <!-- 委员会分析结果 -->
-    <view v-if="!loading && results.length > 0">
-      <view class="section-title-row">
-        <text class="section-title">AI 委员会选股</text>
-        <text class="refresh-btn" :class="{ refreshing }" @click="handleRefresh">
-          {{ refreshing ? '分析中...' : '刷新' }}
-        </text>
-      </view>
-      <view class="daily-picks-hint">每日 08:00 自动生成，点击刷新可重新分析</view>
+  <!-- 每日推荐：空状态 -->
+  <view v-if="activeTab === 'daily' && !dailyLoading && !dailyError && dailyResults.length === 0" class="state-view">
+    <text class="state-text">当日推荐尚未生成</text>
+    <text class="state-hint">总部每日 8:00 自动预生成，也可点击上方「刷新」立即生成</text>
+  </view>
+
+  <!-- 每日推荐：错误 -->
+  <view v-if="activeTab === 'daily' && dailyError" class="state-view">
+    <text class="state-text error">{{ dailyError }}</text>
+    <button class="btn-retry" @click="loadDailyPicks">重试</button>
+  </view>
+
+    <!-- 选股结果（委员会实时 / 每日推荐缓存共用渲染） -->
+    <view v-if="!loading && displayResults.length > 0 && (activeTab === 'daily' ? !dailyLoading : true)">
+      <view class="section-title">{{ activeTab === 'daily' ? '每日推荐' : 'AI 委员会选股' }}</view>
 
       <view
-        v-for="(item, idx) in results"
+        v-for="(item, idx) in displayResults"
         :key="item.symbol"
         class="result-card"
       >
@@ -87,14 +113,14 @@
       </view>
     </view>
 
-    <!-- 空状态 -->
-    <view v-if="!loading && !error && results.length === 0" class="state-view">
+    <!-- 委员会：空状态 -->
+    <view v-if="activeTab !== 'daily' && !loading && !error && results.length === 0" class="state-view">
       <text class="state-text">暂无选股结果</text>
       <text class="state-hint">每日收盘后 AI 委员会将自动生成分析</text>
     </view>
 
-    <!-- 错误 -->
-    <view v-if="error" class="state-view">
+    <!-- 委员会：错误 -->
+    <view v-if="activeTab !== 'daily' && error" class="state-view">
       <text class="state-text error">{{ error }}</text>
       <button class="btn-retry" @click="loadResults">重试</button>
     </view>
@@ -104,12 +130,13 @@
 
 <script setup lang="ts">
 import Disclaimer from '@/components/compliance/Disclaimer.vue'
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
 import { trackPageView, trackAction } from '@/utils/tracker'
 import { formatPercent } from '@/utils/format'
 import {
+  fetchCommitteeResults,
   fetchDailyPicks,
   refreshDailyPicks,
   addToWatchlist,
@@ -124,11 +151,54 @@ function goSearch() {
 
 
 const results = ref<CommitteeResult[]>([])
-const refreshing = ref(false)
 const loading = ref(true)
 const error = ref('')
 const expandedSet = reactive(new Set<number>())
 const watchlistSet = reactive(new Set<string>())
+
+// ── 每日推荐（新 tab）──
+const activeTab = ref<'committee' | 'daily'>('committee')
+const dailyResults = ref<CommitteeResult[]>([])
+const dailyLoading = ref(false)
+const dailyError = ref('')
+const refreshing = ref(false)
+
+const displayResults = computed(() => activeTab.value === 'daily' ? dailyResults.value : results.value)
+
+function switchTab(tab: 'committee' | 'daily') {
+  activeTab.value = tab
+  expandedSet.clear()
+  if (tab === 'daily' && dailyResults.value.length === 0 && !dailyError.value) {
+    loadDailyPicks()
+  }
+}
+
+async function loadDailyPicks() {
+  dailyLoading.value = true
+  dailyError.value = ''
+  try {
+    dailyResults.value = await fetchDailyPicks()
+  } catch (e: any) {
+    dailyError.value = e?.message || '加载失败'
+  } finally {
+    dailyLoading.value = false
+  }
+}
+
+async function handleRefreshDaily() {
+  if (refreshing.value) return
+  refreshing.value = true
+  dailyError.value = ''
+  try {
+    dailyResults.value = await refreshDailyPicks()
+    uni.showToast({ title: '已刷新', icon: 'success' })
+  } catch (e: any) {
+    dailyError.value = e?.message || '刷新失败'
+    uni.showToast({ title: '刷新失败', icon: 'none' })
+  } finally {
+    refreshing.value = false
+  }
+}
 
 function actionLabel(action: string): string {
   const map: Record<string, string> = {
@@ -191,26 +261,11 @@ async function loadResults() {
   loading.value = true
   error.value = ''
   try {
-    results.value = await fetchDailyPicks()
+    results.value = await fetchCommitteeResults()
   } catch (e: any) {
     error.value = e?.message || '加载失败'
   } finally {
     loading.value = false
-  }
-}
-
-async function handleRefresh() {
-  if (refreshing.value) return
-  refreshing.value = true
-  uni.showLoading({ title: 'AI 重新分析中...' })
-  try {
-    results.value = await refreshDailyPicks()
-    uni.showToast({ title: '已刷新', icon: 'success' })
-  } catch (e: any) {
-    uni.showToast({ title: e?.message || '刷新失败', icon: 'none' })
-  } finally {
-    uni.hideLoading()
-    refreshing.value = false
   }
 }
 
@@ -225,6 +280,50 @@ onShow(() => {
 
 <style lang="scss" scoped>
 .selection-page {
+.page-tabs {
+  display: flex;
+  margin: 16rpx 24rpx;
+  background: #f2f3f5;
+  border-radius: 12rpx;
+  padding: 6rpx;
+}
+.tab-item {
+  flex: 1;
+  text-align: center;
+  font-size: 28rpx;
+  color: #666;
+  padding: 12rpx 0;
+  border-radius: 10rpx;
+  transition: all .2s;
+}
+.tab-item.active {
+  background: #fff;
+  color: #1a1a3e;
+  font-weight: 600;
+  box-shadow: 0 2rpx 8rpx rgba(0,0,0,.06);
+}
+.daily-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8rpx 24rpx 0;
+}
+.daily-toolbar-title {
+  font-size: 24rpx;
+  color: #999;
+}
+.btn-refresh {
+  font-size: 24rpx;
+  color: #4a90e2;
+  background: #eef4fd;
+  border: none;
+  border-radius: 8rpx;
+  padding: 8rpx 24rpx;
+  line-height: 1.6;
+}
+.btn-refresh[disabled] {
+  opacity: .6;
+}
 
 .agent-banner {
   margin: 16rpx 24rpx;
@@ -290,31 +389,11 @@ onShow(() => {
 }
 
 // ---- 标题 ----
-.section-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 24rpx 32rpx 0;
-}
 .section-title {
+  padding: 24rpx 32rpx 16rpx;
   font-size: $font-size-lg;
   font-weight: 700;
   color: $text-primary;
-}
-.refresh-btn {
-  font-size: $font-size-sm;
-  color: $color-primary;
-  padding: 8rpx 24rpx;
-  border: 1rpx solid $color-primary;
-  border-radius: 999rpx;
-  &.refreshing {
-    opacity: 0.6;
-  }
-}
-.daily-picks-hint {
-  padding: 8rpx 32rpx 16rpx;
-  font-size: $font-size-xs;
-  color: $text-secondary;
 }
 
 // ---- 结果卡片 ----

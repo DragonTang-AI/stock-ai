@@ -106,7 +106,7 @@ export function fetchCommitteeResults(): Promise<CommitteeResult[]> {
   )
 }
 
-/** 获取每日精选 (GET /selection/daily-picks) — C 端直读服务端每日缓存，不触发 LLM */
+/** 获取每日推荐（直读缓存，不触发实时计算）(GET /selection/daily-picks) */
 export function fetchDailyPicks(): Promise<CommitteeResult[]> {
   return request<any>('/selection/daily-picks', { method: 'GET' })
     .then(res => {
@@ -116,7 +116,7 @@ export function fetchDailyPicks(): Promise<CommitteeResult[]> {
     })
 }
 
-/** 手动刷新每日精选 (POST /selection/daily-picks/refresh) — 重新调度 LLM 生成 */
+/** 手动刷新每日推荐（强制重新生成）(POST /selection/daily-picks/refresh) */
 export function refreshDailyPicks(): Promise<CommitteeResult[]> {
   return request<any>('/selection/daily-picks/refresh', {
     method: 'POST',
