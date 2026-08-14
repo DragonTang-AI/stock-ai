@@ -19,6 +19,7 @@ async def run_committee_analysis(
     trade_date: date,
     candidate_limit: int = _DEFAULT_CANDIDATE_LIMIT,
     signal_limit: int = _DEFAULT_SIGNAL_LIMIT,
+    llm_enabled: bool | None = None,
 ) -> CommitteeRunResponse:
     """
     执行完整 4-Agent 选股委员会流程。
@@ -31,6 +32,7 @@ async def run_committee_analysis(
         trade_date: 交易日期
         candidate_limit: 粗筛参与上限（默认50）
         signal_limit: 输出信号上限（默认5）
+        llm_enabled: 覆盖全局 LLM 开关（透传给 orchestrator）
 
     Returns:
         CommitteeRunResponse（包含 Signal 列表）
@@ -52,6 +54,7 @@ async def run_committee_analysis(
         market=market,
         trade_date=trade_date_str,
         top_n=effective_signal_limit,
+        llm_enabled=llm_enabled,
     )
 
     return CommitteeRunResponse(

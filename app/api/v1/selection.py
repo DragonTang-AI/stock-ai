@@ -59,27 +59,30 @@ async def get_recommend(
 @router.get("/daily-picks")
 async def get_daily_picks(
     market: str = Query("A", description="市场过滤：A/HK"),
+    engine: str = Query("committee_llm", description="读取引擎：committee_llm(LLM委员会,默认)/factor(因子评分)"),
     current_user: Optional[User] = Depends(get_current_user_optional),
 ) -> dict:
     """
     每日推荐（C 端直读缓存，不触发实时计算）。
 
-    每日 8:00 由总部调度器用原因子评分引擎预生成并落库，
+    每日 8:00 由总部调度器预生成并落库（LLM 委员会 + 因子评分双引擎），
     用户进入页面直接读取当日结果；未生成时返回空列表。
+    默认读取 committee_llm（LLM 委员会结果），缺失/失败时自动 fallback 到 factor。
     """
-    return await get_daily_picks_cache(market=market)
+    return await get_daily_picks_cache(market=market, engine=engine)
 
 
 @router.post("/daily-picks/refresh")
 async def post_daily_picks_refresh(
     market: str = Query("A", description="市场过滤：A/HK"),
     top_n: int = Query(5, ge=1, le=50, description="返回 Top N"),
+    engine: str = Query("committee_llm", description="生成引擎：committee_llm(LLM委员会,默认)/factor(因子评分)"),
     current_user: Optional[User] = Depends(get_current_user_optional),
 ) -> dict:
     """
-    每日推荐手动刷新：强制用原因子评分引擎重新生成当日结果并落库。
+    每日推荐手动刷新：强制重新生成当日结果并落库（默认 LLM 委员会引擎）。
     """
-    return await refresh_daily_picks(market=market, top_n=top_n)
+    return await refresh_daily_picks(market=market, top_n=top_n, engine=engine)
 
 # ── Prescreen 粗筛接口 ────────────────────────────────
 from datetime import date

@@ -400,6 +400,7 @@ def run_committee_graph(
     market: str,
     trade_date: str,
     top_n: int = _DEFAULT_TOP_N,
+    llm_enabled: bool | None = None,
 ) -> list[Signal]:
     """
     执行 4-Agent 选股委员会管线。
@@ -412,6 +413,8 @@ def run_committee_graph(
         market: 市场代码（A/HK）
         trade_date: 交易日期（YYYY-MM-DD）
         top_n: 输出信号数量上限（默认5）
+        llm_enabled: 覆盖全局 LLM 开关。None=跟随 settings.llm_enabled；
+            True=强制启用 LLM 委员会；False=强制走确定性 fallback
 
     Returns:
         Signal 列表（按置信分降序）
@@ -419,13 +422,14 @@ def run_committee_graph(
     if not candidates:
         return []
 
+    effective_llm_enabled = settings.llm_enabled if llm_enabled is None else llm_enabled
     client = LLMClient(
         primary_model=settings.llm_primary_model,
         backup_model=settings.llm_backup_model,
         timeout_seconds=settings.llm_timeout_seconds,
         max_retries=settings.llm_max_retries,
         transport=build_router_transport(),
-        enabled=settings.llm_enabled,
+        enabled=effective_llm_enabled,
     )
 
     compiled = build_committee_graph(client)

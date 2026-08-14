@@ -27,6 +27,7 @@ from app.engine.auto_executor import auto_execute_signals
 from app.engine.market_hours import is_any_market_hours
 from app.services.agent_config_service import get_agent_config, DEFAULTS as CONFIG_DEFAULTS
 from app.services.daily_picks_service import generate_daily_picks, get_daily_picks as get_daily_picks_cache
+from app.services.daily_backtest_service import run_daily_backtest
 
 logger = logging.getLogger(__name__)
 
@@ -307,25 +308,45 @@ async def _expire_stale_pending():
 
 
 async def _maybe_generate_daily_picks():
-    """每日 8:00-8:30 触发一次每日推荐预生成（复用原因子评分引擎）。
+    """每日 8:00-8:30 触发每日推荐预生成（双引擎）。
 
-    幂等：仅当当日记录不存在时才生成；已存在则跳过。
+    8:00 同时生成两套结果：
+    - factor：原因子评分引擎（确定性，快速兜底）
+    - committee_llm：LangGraph 4-Agent LLM 委员会（C 端默认展示，候选池 top15）
+
+    幂等：仅当当日对应引擎记录不存在时才生成；已存在则跳过。
     手动刷新走 /selection/daily-picks/refresh（source=refresh）。
     """
     now_local = datetime.now()
     if now_local.hour != 8:
         return
+    for engine in ("factor", "committee_llm"):
+        try:
+            existing = await get_daily_picks_cache(market="A", engine=engine, fallback=False)
+            if existing.get("found"):
+                logger.info("[daily-picks] 当日推荐已存在 (engine=%s)，跳过生成", engine)
+                continue
+            logger.info("[daily-picks] 每日 8 点预生成开始 (engine=%s)", engine)
+            result = await generate_daily_picks(market="A", top_n=5, source="scheduler", engine=engine)
+            logger.info("[daily-picks] 预生成结果 (engine=%s): success=%s, picks=%d",
+                        engine, result.get("success"), len(result.get("picks") or []))
+        except Exception as exc:  # noqa: BLE001
+            logger.error("[daily-picks] 预生成异常 (engine=%s): %s", engine, exc)
+
+
+
+
+async def _maybe_run_backtest():
+    """每日 16:30-17:00 触发回测：对到期推荐票回填 T+5/T+20 收益与基准超额。"""
+    now_local = datetime.now()
+    if now_local.hour != 16:
+        return
     try:
-        existing = await get_daily_picks_cache(market="A")
-        if existing.get("found"):
-            logger.info("[daily-picks] 当日推荐已存在，跳过生成")
-            return
-        logger.info("[daily-picks] 每日 8 点预生成开始")
-        result = await generate_daily_picks(market="A", top_n=5, source="scheduler")
-        logger.info("[daily-picks] 预生成结果: success=%s, picks=%d",
-                    result.get("success"), len(result.get("picks") or []))
+        logger.info("[backtest] 每日 16:30 回测开始")
+        result = await run_daily_backtest()
+        logger.info("[backtest] 回测完成: %s", result)
     except Exception as exc:  # noqa: BLE001
-        logger.error("[daily-picks] 预生成异常: %s", exc)
+        logger.error("[backtest] 回测调度异常: %s", exc)
 
 
 async def _run_one_cycle():
@@ -341,8 +362,11 @@ async def _run_one_cycle():
     # 过期清理：超过 24h 的 pending 信号自动标 expired（不依赖交易时段）
     await _expire_stale_pending()
 
-    # 每日 8:00 用原因子评分引擎预生成「每日推荐」（C 端直读缓存，不触发实时计算）
+    # 每日 8:00 双引擎预生成「每日推荐」（factor + committee_llm，C 端直读缓存）
     await _maybe_generate_daily_picks()
+
+    # 每日 16:30 回测：对到期推荐票回填 T+5/T+20 收益与基准超额
+    await _maybe_run_backtest()
 
     # 非交易时段跳过（A 股或港股任一交易时段均允许运行）
     if not is_any_market_hours():

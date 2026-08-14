@@ -12,13 +12,14 @@ class DailyPick(Base):
 
     __tablename__ = "daily_picks"
     __table_args__ = (
-        UniqueConstraint("trade_date", "market", name="uq_daily_picks_date_market"),
+        UniqueConstraint("trade_date", "market", "engine", name="uq_daily_picks_date_market_engine"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     trade_date: Mapped[str] = mapped_column(String(16), nullable=False, index=True, comment="交易日期 YYYY-MM-DD")
     market: Mapped[str] = mapped_column(String(8), nullable=False, default="A", comment="市场: A/HK/all")
     picks_json: Mapped[str] = mapped_column(Text, nullable=False, comment="推荐列表 JSON")
+    engine: Mapped[str] = mapped_column(String(32), nullable=False, default="factor", comment="生成引擎: factor(因子评分)/committee_llm(LLM委员会)")
     source: Mapped[str] = mapped_column(String(32), nullable=False, default="scheduler", comment="生成来源: scheduler/refresh/manual")
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="ok", comment="状态: ok/running/error")
     error_msg: Mapped[str] = mapped_column(Text, nullable=True, comment="生成失败信息")
