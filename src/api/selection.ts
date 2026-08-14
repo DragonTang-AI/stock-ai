@@ -106,21 +106,27 @@ export function fetchCommitteeResults(): Promise<CommitteeResult[]> {
   )
 }
 
-/** 获取每日推荐（直读缓存，不触发实时计算）(GET /selection/daily-picks) */
-export function fetchDailyPicks(): Promise<CommitteeResult[]> {
-  return request<any>('/selection/daily-picks', { method: 'GET' })
-    .then(res => {
-      const raw = res?.data || res?.picks || res || []
-      const list = Array.isArray(raw) ? raw : raw.items || raw.results || []
-      return list.map(normalizeCommitteeResult)
-    })
+/** 获取每日推荐（直读缓存，不触发实时计算）(GET /selection/daily-picks)
+ * engine: committee_llm(LLM委员会,默认)/factor(因子评分)
+ */
+export function fetchDailyPicks(engine: string = 'committee_llm'): Promise<CommitteeResult[]> {
+  return request<any>('/selection/daily-picks', {
+    method: 'GET',
+    params: { market: 'A', engine },
+  }).then(res => {
+    const raw = res?.data || res?.picks || res || []
+    const list = Array.isArray(raw) ? raw : raw.items || raw.results || []
+    return list.map(normalizeCommitteeResult)
+  })
 }
 
-/** 手动刷新每日推荐（强制重新生成）(POST /selection/daily-picks/refresh) */
-export function refreshDailyPicks(): Promise<CommitteeResult[]> {
+/** 手动刷新每日推荐（强制重新生成）(POST /selection/daily-picks/refresh)
+ * engine: committee_llm(LLM委员会,默认)/factor(因子评分)
+ */
+export function refreshDailyPicks(engine: string = 'committee_llm'): Promise<CommitteeResult[]> {
   return request<any>('/selection/daily-picks/refresh', {
     method: 'POST',
-    data: { market: 'A', top_n: 5 },
+    params: { market: 'A', top_n: 5, engine },
   }).then(res => {
     const raw = res?.data || res?.picks || res || []
     const list = Array.isArray(raw) ? raw : raw.items || raw.results || []

@@ -25,6 +25,10 @@
   <!-- 每日推荐：预生成缓存直读 + 手动刷新 -->
   <view v-if="activeTab === 'daily' && !dailyLoading" class="daily-toolbar">
     <view class="daily-toolbar-title">每日推荐（总部每日 8:00 预生成）</view>
+    <view class="engine-switch">
+      <view class="engine-item" :class="{ active: dailyEngine === 'committee_llm' }" @click="switchDailyEngine('committee_llm')">LLM 委员会</view>
+      <view class="engine-item" :class="{ active: dailyEngine === 'factor' }" @click="switchDailyEngine('factor')">因子评分</view>
+    </view>
     <button class="btn-refresh" :disabled="refreshing" @click="handleRefreshDaily">
       {{ refreshing ? '刷新中...' : '刷新' }}
     </button>
@@ -44,7 +48,7 @@
 
     <!-- 选股结果（委员会实时 / 每日推荐缓存共用渲染） -->
     <view v-if="displayResults.length > 0 && (activeTab === 'daily' ? !dailyLoading : !loading)">
-      <view class="section-title">{{ activeTab === 'daily' ? '每日推荐' : 'AI 委员会选股' }}</view>
+      <view class="section-title">{{ activeTab === 'daily' ? ('每日推荐 · ' + (dailyEngine === 'committee_llm' ? 'LLM 委员会' : '因子评分')) : 'AI 委员会选股' }}</view>
 
       <view
         v-for="(item, idx) in displayResults"
@@ -162,6 +166,14 @@ const dailyResults = ref<CommitteeResult[]>([])
 const dailyLoading = ref(false)
 const dailyError = ref('')
 const refreshing = ref(false)
+// 每日推荐引擎：committee_llm(LLM委员会,默认) / factor(因子评分)
+const dailyEngine = ref<'committee_llm' | 'factor'>('committee_llm')
+
+function switchDailyEngine(engine: 'committee_llm' | 'factor') {
+  if (dailyEngine.value === engine) return
+  dailyEngine.value = engine
+  loadDailyPicks()
+}
 
 const displayResults = computed(() => activeTab.value === 'daily' ? dailyResults.value : results.value)
 
@@ -177,7 +189,7 @@ async function loadDailyPicks() {
   dailyLoading.value = true
   dailyError.value = ''
   try {
-    dailyResults.value = await fetchDailyPicks()
+    dailyResults.value = await fetchDailyPicks(dailyEngine.value)
   } catch (e: any) {
     dailyError.value = e?.message || '加载失败'
   } finally {
@@ -190,7 +202,7 @@ async function handleRefreshDaily() {
   refreshing.value = true
   dailyError.value = ''
   try {
-    dailyResults.value = await refreshDailyPicks()
+    dailyResults.value = await refreshDailyPicks(dailyEngine.value)
     uni.showToast({ title: '已刷新', icon: 'success' })
   } catch (e: any) {
     dailyError.value = e?.message || '刷新失败'
@@ -303,6 +315,25 @@ onShow(() => {
   color: #1a1a3e;
   font-weight: 600;
   box-shadow: 0 2rpx 8rpx rgba(0,0,0,.06);
+}
+.engine-switch {
+  display: flex;
+  gap: 8rpx;
+  background: #f2f3f5;
+  border-radius: 999rpx;
+  padding: 4rpx;
+}
+.engine-item {
+  padding: 8rpx 20rpx;
+  font-size: 24rpx;
+  color: #666;
+  border-radius: 999rpx;
+}
+.engine-item.active {
+  background: #ffffff;
+  color: #1a1a1a;
+  font-weight: 600;
+  box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.08);
 }
 .daily-toolbar {
   display: flex;
