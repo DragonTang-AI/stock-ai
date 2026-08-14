@@ -13,6 +13,7 @@ from app.api.v1.admin import users as admin_users
 from app.api.v1.admin import roles as admin_roles
 from app.api.v1.admin import logs as admin_logs
 from app.api.v1.admin import routes as admin_routes
+from app.api.v1.admin import backtest as admin_backtest
 
 app = FastAPI(
     title=f"{settings.app_name} Admin",
@@ -36,3 +37,4 @@ app.include_router(admin_users.router, prefix="/api/v1/admin/users", tags=["后�
 app.include_router(admin_roles.router, prefix="/api/v1/admin/roles", tags=["后台角色"])
 app.include_router(admin_logs.router, prefix="/api/v1/admin/logs", tags=["后台日志"])
 app.include_router(admin_routes.router, prefix="/api/v1/admin", tags=["后台路由"])
+app.include_router(admin_backtest.router, prefix="/api/v1/admin/backtest", tags=["后台回测"])
