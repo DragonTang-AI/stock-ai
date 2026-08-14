@@ -47,6 +47,17 @@ _MENUS = [
                 },
             },
         ],
+    },
+    {
+        "path": "/backtest",
+        "name": "Backtest",
+        "meta": {
+            "title": "回测追踪",
+            "icon": "ep:data-analysis",
+            "rank": 2,
+            "required_perm": "backtest:view",
+        },
+        "children": [],
     }
 ]
 
