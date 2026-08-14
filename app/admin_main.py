@@ -14,6 +14,8 @@ from app.api.v1.admin import roles as admin_roles
 from app.api.v1.admin import logs as admin_logs
 from app.api.v1.admin import routes as admin_routes
 from app.api.v1.admin import backtest as admin_backtest
+from app.api.v1.admin import picks as admin_picks
+from app.api.v1.admin import schedule as admin_schedule
 
 app = FastAPI(
     title=f"{settings.app_name} Admin",
@@ -38,3 +40,5 @@ app.include_router(admin_roles.router, prefix="/api/v1/admin/roles", tags=["后�
 app.include_router(admin_logs.router, prefix="/api/v1/admin/logs", tags=["后台日志"])
 app.include_router(admin_routes.router, prefix="/api/v1/admin", tags=["后台路由"])
 app.include_router(admin_backtest.router, prefix="/api/v1/admin/backtest", tags=["后台回测"])
+app.include_router(admin_picks.router, prefix="/api/v1/admin/picks", tags=["后台推荐"])
+app.include_router(admin_schedule.router, prefix="/api/v1/admin/schedule", tags=["后台调度"])

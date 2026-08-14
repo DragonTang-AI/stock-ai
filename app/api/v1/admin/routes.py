@@ -58,6 +58,28 @@ _MENUS = [
             "required_perm": "backtest:view",
         },
         "children": [],
+    },
+    {
+        "path": "/picks",
+        "name": "Picks",
+        "meta": {
+            "title": "每日推荐",
+            "icon": "ep:star",
+            "rank": 3,
+            "required_perm": "picks:view",
+        },
+        "children": [],
+    },
+    {
+        "path": "/schedule",
+        "name": "Schedule",
+        "meta": {
+            "title": "调度监控",
+            "icon": "ep:alarm-clock",
+            "rank": 4,
+            "required_perm": "schedule:view",
+        },
+        "children": [],
     }
 ]
 
