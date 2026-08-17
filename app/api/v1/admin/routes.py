@@ -99,7 +99,10 @@ def _filter_menu(node: dict, perms: list[str]) -> dict | None:
     filtered_children = [c for c in filtered_children if c is not None]
     if filtered_children or _has_perm(node.get("meta", {}), perms):
         out = dict(node)
-        out["children"] = filtered_children
+        if filtered_children:
+            out["children"] = filtered_children
+        else:
+            out.pop("children", None)
         return out
     return None
 
