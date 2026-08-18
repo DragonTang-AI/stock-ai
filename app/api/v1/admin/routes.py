@@ -156,8 +156,23 @@ _MENUS = [
             },
         ],
     },
+    {
+        "path": "/monitor",
+        "name": "Monitor",
+        "meta": {"title": "系统监控", "icon": "ep:odometer", "rank": 8},
+        "children": [
+            {
+                "path": "/monitor/index",
+                "name": "MonitorIndex",
+                "meta": {
+                    "title": "系统监控",
+                    "icon": "ep:odometer",
+                    "required_perm": "dashboard:view",
+                },
+            },
+        ],
+    },
 ]
-
 
 def _has_perm(meta: dict, perms: list[str]) -> bool:
     required = meta.get("required_perm")

@@ -20,6 +20,7 @@ from app.api.v1.admin import dashboard as admin_dashboard
 from app.api.v1.admin import customers as admin_customers
 from app.api.v1.admin import agents as admin_agents
 from app.api.v1.admin import workspace as admin_workspace
+from app.api.v1.admin import monitor as admin_monitor
 
 app = FastAPI(
     title=f"{settings.app_name} Admin",
@@ -50,3 +51,4 @@ app.include_router(admin_dashboard.router, prefix="/api/v1/admin/dashboard", tag
 app.include_router(admin_customers.router, prefix="/api/v1/admin/customers", tags=["前端用户"])
 app.include_router(admin_agents.router, prefix="/api/v1/admin/agents", tags=["Agent监控"])
 app.include_router(admin_workspace.router, prefix="/api/v1/admin/workspace", tags=["工作台"])
+app.include_router(admin_monitor.router, prefix="/api/v1/admin/monitor", tags=["系统监控"])
