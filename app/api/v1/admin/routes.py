@@ -172,6 +172,22 @@ _MENUS = [
             },
         ],
     },
+    {
+        "path": "/operation-logs",
+        "name": "OperationLogs",
+        "meta": {"title": "操作日志", "icon": "ep:document", "rank": 10},
+        "children": [
+            {
+                "path": "/operation-logs/list",
+                "name": "OperationLogList",
+                "meta": {
+                    "title": "操作日志",
+                    "icon": "ep:document",
+                    "required_perm": "dashboard:view",
+                },
+            },
+        ],
+    },
 ]
 
 def _has_perm(meta: dict, perms: list[str]) -> bool:

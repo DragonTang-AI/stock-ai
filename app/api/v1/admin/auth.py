@@ -19,6 +19,7 @@ from app.core.security import (
 )
 from app.models.admin_role import AdminRole
 from app.models.admin_user import AdminUser
+from app.models.operation_log import OperationLog
 
 router = APIRouter()
 
@@ -62,6 +63,16 @@ async def admin_login(
     if not admin.is_active:
         raise HTTPException(status_code=403, detail="账号已禁用")
     admin.last_login_at = datetime.now(timezone.utc)
+    db.add(
+        OperationLog(
+            user_id=admin.id,
+            username=admin.username,
+            module="login",
+            action="登录后台",
+            detail="登录成功",
+            ip=request.client.host if request.client else "",
+        )
+    )
     await db.commit()
     role = await db.get(AdminRole, admin.role_id)
     token = create_access_token({"sub": str(admin.id), "scope": "admin"})
