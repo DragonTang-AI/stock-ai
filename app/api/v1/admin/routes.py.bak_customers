@@ -15,25 +15,9 @@ router = APIRouter()
 # 菜单定义：meta.required_perm 为访问所需权限（None 表示登录即可见）
 _MENUS = [
     {
-        "path": "/workspace",
-        "name": "Workspace",
-        "meta": {"title": "工作台", "icon": "ep:home-filled", "rank": 1},
-        "children": [
-            {
-                "path": "/workspace/index",
-                "name": "WorkspaceIndex",
-                "meta": {
-                    "title": "工作台",
-                    "icon": "ep:home-filled",
-                    "required_perm": "dashboard:view",
-                },
-            },
-        ],
-    },
-    {
         "path": "/admin",
         "name": "Admin",
-        "meta": {"title": "后台管理", "icon": "ep:setting", "rank": 2},
+        "meta": {"title": "后台管理", "icon": "ep:setting", "rank": 1},
         "children": [
             {
                 "path": "/admin/user/index",
@@ -70,7 +54,7 @@ _MENUS = [
         "meta": {
             "title": "回测追踪",
             "icon": "ep:data-analysis",
-            "rank": 3,
+            "rank": 2,
             "required_perm": "backtest:view",
         },
         "children": [],
@@ -81,7 +65,7 @@ _MENUS = [
         "meta": {
             "title": "每日推荐",
             "icon": "ep:star",
-            "rank": 4,
+            "rank": 3,
             "required_perm": "picks:view",
         },
         "children": [],
@@ -92,70 +76,11 @@ _MENUS = [
         "meta": {
             "title": "调度监控",
             "icon": "ep:alarm-clock",
-            "rank": 5,
+            "rank": 4,
             "required_perm": "schedule:view",
         },
         "children": [],
-    },
-    {
-        "path": "/customers",
-        "name": "Customers",
-        "meta": {
-            "title": "用户管理",
-            "icon": "ep:user-filled",
-            "rank": 6,
-            "required_perm": "customers:view",
-        },
-        "children": [
-            {
-                "path": "/customers/list",
-                "name": "CustomerList",
-                "meta": {"title": "用户列表", "icon": "ep:list", "required_perm": "customers:view"},
-            },
-            {
-                "path": "/customers/stats",
-                "name": "CustomerStats",
-                "meta": {"title": "用户统计", "icon": "ep:data-line", "required_perm": "customers:view"},
-            },
-            {
-                "path": "/customers/detail",
-                "name": "CustomerDetail",
-                "meta": {"title": "用户详情", "icon": "ep:view", "showLink": False, "required_perm": "customers:view"},
-            },
-        ],
-    },
-    {
-        "path": "/agents",
-        "name": "Agents",
-        "meta": {
-            "title": "Agent监控",
-            "icon": "ep:robot",
-            "rank": 7,
-            "required_perm": "agents:view",
-        },
-        "children": [
-            {
-                "path": "/agents/overview",
-                "name": "AgentOverview",
-                "meta": {"title": "总览", "icon": "ep:data-board", "required_perm": "agents:view"},
-            },
-            {
-                "path": "/agents/list",
-                "name": "AgentList",
-                "meta": {"title": "交易员列表", "icon": "ep:list", "required_perm": "agents:view"},
-            },
-            {
-                "path": "/agents/sessions",
-                "name": "AgentSessions",
-                "meta": {"title": "雇佣会话", "icon": "ep:connection", "required_perm": "agents:view"},
-            },
-            {
-                "path": "/agents/detail",
-                "name": "AgentDetail",
-                "meta": {"title": "交易员详情", "icon": "ep:view", "showLink": False, "required_perm": "agents:view"},
-            },
-        ],
-    },
+    }
 ]
 
 
