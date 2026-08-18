@@ -157,17 +157,17 @@ _MENUS = [
         ],
     },
     {
-        "path": "/monitor",
-        "name": "Monitor",
-        "meta": {"title": "系统监控", "icon": "ep:odometer", "rank": 8},
+        "path": "/login-logs",
+        "name": "LoginLogs",
+        "meta": {"title": "登录日志", "icon": "ep:monitor", "rank": 9},
         "children": [
             {
-                "path": "/monitor/index",
-                "name": "MonitorIndex",
+                "path": "/login-logs/list",
+                "name": "LoginLogList",
                 "meta": {
-                    "title": "系统监控",
-                    "icon": "ep:odometer",
-                    "required_perm": "dashboard:view",
+                    "title": "登录日志",
+                    "icon": "ep:monitor",
+                    "required_perm": "customers:view",
                 },
             },
         ],
