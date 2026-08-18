@@ -22,7 +22,7 @@ from app.core.security import (
     verify_password,
     verify_token,
 )
-from app.models.user import User
+from app.models.user import User, UserLoginLog
 from app.models.points import UserPoints, PointsTransaction
 from app.schemas.auth import (
     LoginRequest,
@@ -37,6 +37,32 @@ from app.schemas.auth import (
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+def _detect_platform(ua: str) -> str:
+    u = (ua or "").lower()
+    if "iphone" in u or "ipad" in u or "ios" in u:
+        return "ios"
+    if "android" in u:
+        return "android"
+    if "electron" in u:
+        return "desktop"
+    if "windows" in u:
+        return "windows"
+    if "macintosh" in u or "mac os" in u:
+        return "macos"
+    return "web"
+
+
+def _detect_client(ua: str) -> str:
+    u = (ua or "").lower()
+    if "electron" in u:
+        return "desktop"
+    if "micromessenger" in u or "wxwork" in u:
+        return "wechat"
+    if "mobile" in u or "android" in u or "iphone" in u or "ipad" in u:
+        return "mobile"
+    return "web"
+
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -108,6 +134,7 @@ async def get_current_user_optional(
 @router.post("/login", response_model=TokenResponse)
 async def login(
     body: LoginRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     """
@@ -134,6 +161,19 @@ async def login(
         )
 
     logger.info(f"用户登录成功 user_id={user.id} username={user.username}")
+    # 记录登录日志（活跃统计基础数据）
+    ua = (request.headers.get("user-agent") or "")[:500]
+    db.add(
+        UserLoginLog(
+            user_id=user.id,
+            ip=request.client.host if request.client else None,
+            user_agent=ua,
+            platform=_detect_platform(ua),
+            client=_detect_client(ua),
+            is_register=False,
+        )
+    )
+    await db.commit()
     token_data = {"sub": str(user.id), "username": user.username}
     return TokenResponse(
         access_token=create_access_token(token_data),
@@ -145,6 +185,7 @@ async def login(
 @router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     body: RegisterRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> RegisterResponse:
     """用户注册（V1 仅支持用户名+密码）"""
@@ -191,6 +232,19 @@ async def register(
 
     # 注册即登录：直接签发 token，前端无需二次登录
     logger.info(f"用户注册成功 user_id={user.id} username={body.username} email={body.email}")
+    # 记录注册即登录日志
+    ua = (request.headers.get("user-agent") or "")[:500]
+    db.add(
+        UserLoginLog(
+            user_id=user.id,
+            ip=request.client.host if request.client else None,
+            user_agent=ua,
+            platform=_detect_platform(ua),
+            client=_detect_client(ua),
+            is_register=True,
+        )
+    )
+    await db.commit()
     token_data = {"sub": str(user.id), "username": user.username}
     return RegisterResponse(
         access_token=create_access_token(token_data),

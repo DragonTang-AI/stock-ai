@@ -16,6 +16,8 @@ from app.api.v1.admin import routes as admin_routes
 from app.api.v1.admin import backtest as admin_backtest
 from app.api.v1.admin import picks as admin_picks
 from app.api.v1.admin import schedule as admin_schedule
+from app.api.v1.admin import dashboard as admin_dashboard
+from app.api.v1.admin import customers as admin_customers
 
 app = FastAPI(
     title=f"{settings.app_name} Admin",
@@ -42,3 +44,5 @@ app.include_router(admin_routes.router, prefix="/api/v1/admin", tags=["后台路
 app.include_router(admin_backtest.router, prefix="/api/v1/admin/backtest", tags=["后台回测"])
 app.include_router(admin_picks.router, prefix="/api/v1/admin/picks", tags=["后台推荐"])
 app.include_router(admin_schedule.router, prefix="/api/v1/admin/schedule", tags=["后台调度"])
+app.include_router(admin_dashboard.router, prefix="/api/v1/admin/dashboard", tags=["后台看板"])
+app.include_router(admin_customers.router, prefix="/api/v1/admin/customers", tags=["前端用户"])

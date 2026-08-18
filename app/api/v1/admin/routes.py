@@ -80,7 +80,34 @@ _MENUS = [
             "required_perm": "schedule:view",
         },
         "children": [],
-    }
+    },
+    {
+        "path": "/customers",
+        "name": "Customers",
+        "meta": {
+            "title": "用户管理",
+            "icon": "ep:user-filled",
+            "rank": 5,
+            "required_perm": "customers:view",
+        },
+        "children": [
+            {
+                "path": "/customers/list",
+                "name": "CustomerList",
+                "meta": {"title": "用户列表", "icon": "ep:list", "required_perm": "customers:view"},
+            },
+            {
+                "path": "/customers/stats",
+                "name": "CustomerStats",
+                "meta": {"title": "用户统计", "icon": "ep:data-line", "required_perm": "customers:view"},
+            },
+            {
+                "path": "/customers/detail",
+                "name": "CustomerDetail",
+                "meta": {"title": "用户详情", "icon": "ep:view", "showLink": False, "required_perm": "customers:view"},
+            },
+        ],
+    },
 ]
 
 
