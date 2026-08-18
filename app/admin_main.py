@@ -18,6 +18,8 @@ from app.api.v1.admin import picks as admin_picks
 from app.api.v1.admin import schedule as admin_schedule
 from app.api.v1.admin import dashboard as admin_dashboard
 from app.api.v1.admin import customers as admin_customers
+from app.api.v1.admin import agents as admin_agents
+from app.api.v1.admin import workspace as admin_workspace
 
 app = FastAPI(
     title=f"{settings.app_name} Admin",
@@ -46,3 +48,5 @@ app.include_router(admin_picks.router, prefix="/api/v1/admin/picks", tags=["后�
 app.include_router(admin_schedule.router, prefix="/api/v1/admin/schedule", tags=["后台调度"])
 app.include_router(admin_dashboard.router, prefix="/api/v1/admin/dashboard", tags=["后台看板"])
 app.include_router(admin_customers.router, prefix="/api/v1/admin/customers", tags=["前端用户"])
+app.include_router(admin_agents.router, prefix="/api/v1/admin/agents", tags=["Agent监控"])
+app.include_router(admin_workspace.router, prefix="/api/v1/admin/workspace", tags=["工作台"])

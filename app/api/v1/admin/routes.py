@@ -15,6 +15,22 @@ router = APIRouter()
 # 菜单定义：meta.required_perm 为访问所需权限（None 表示登录即可见）
 _MENUS = [
     {
+        "path": "/workspace",
+        "name": "Workspace",
+        "meta": {"title": "工作台", "icon": "ep:home-filled", "rank": 0},
+        "children": [
+            {
+                "path": "/workspace/index",
+                "name": "WorkspaceIndex",
+                "meta": {
+                    "title": "工作台",
+                    "icon": "ep:home-filled",
+                    "required_perm": "dashboard:view",
+                },
+            },
+        ],
+    },
+    {
         "path": "/admin",
         "name": "Admin",
         "meta": {"title": "后台管理", "icon": "ep:setting", "rank": 1},
@@ -105,6 +121,38 @@ _MENUS = [
                 "path": "/customers/detail",
                 "name": "CustomerDetail",
                 "meta": {"title": "用户详情", "icon": "ep:view", "showLink": False, "required_perm": "customers:view"},
+            },
+        ],
+    },
+    {
+        "path": "/agents",
+        "name": "Agents",
+        "meta": {
+            "title": "Agent监控",
+            "icon": "ep:robot",
+            "rank": 6,
+            "required_perm": "agents:view",
+        },
+        "children": [
+            {
+                "path": "/agents/overview",
+                "name": "AgentOverview",
+                "meta": {"title": "总览", "icon": "ep:data-board", "required_perm": "agents:view"},
+            },
+            {
+                "path": "/agents/list",
+                "name": "AgentList",
+                "meta": {"title": "交易员列表", "icon": "ep:list", "required_perm": "agents:view"},
+            },
+            {
+                "path": "/agents/sessions",
+                "name": "AgentSessions",
+                "meta": {"title": "雇佣会话", "icon": "ep:connection", "required_perm": "agents:view"},
+            },
+            {
+                "path": "/agents/detail",
+                "name": "AgentDetail",
+                "meta": {"title": "交易员详情", "icon": "ep:view", "showLink": False, "required_perm": "agents:view"},
             },
         ],
     },
