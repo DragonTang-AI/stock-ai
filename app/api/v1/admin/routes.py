@@ -188,6 +188,22 @@ _MENUS = [
             },
         ],
     },
+    {
+        "path": "/feedbacks",
+        "name": "Feedbacks",
+        "meta": {"title": "用户反馈", "icon": "ep:chat-dot-round", "rank": 11},
+        "children": [
+            {
+                "path": "/feedbacks/list",
+                "name": "FeedbackList",
+                "meta": {
+                    "title": "用户反馈",
+                    "icon": "ep:chat-dot-round",
+                    "required_perm": "customers:view",
+                },
+            },
+        ],
+    },
 ]
 
 def _has_perm(meta: dict, perms: list[str]) -> bool:
