@@ -21,6 +21,7 @@ from app.api.v1.admin import customers as admin_customers
 from app.api.v1.admin import login_logs as admin_login_logs
 from app.api.v1.admin import operation_logs as admin_operation_logs
 from app.api.v1.admin import feedbacks as admin_feedbacks
+from app.api.v1.admin import broadcasts as admin_broadcasts
 from app.api.v1.admin import agents as admin_agents
 from app.api.v1.admin import workspace as admin_workspace
 from app.api.v1.admin import monitor as admin_monitor
@@ -55,6 +56,7 @@ app.include_router(admin_customers.router, prefix="/api/v1/admin/customers", tag
 app.include_router(admin_login_logs.router, prefix="/api/v1/admin/login-logs", tags=["登录日志"])
 app.include_router(admin_operation_logs.router, prefix="/api/v1/admin/operation-logs", tags=["操作日志"])
 app.include_router(admin_feedbacks.router, prefix="/api/v1/admin/feedbacks", tags=["用户反馈"])
+app.include_router(admin_broadcasts.router, prefix="/api/v1/admin/broadcasts", tags=["广播通知"])
 app.include_router(admin_agents.router, prefix="/api/v1/admin/agents", tags=["Agent监控"])
 app.include_router(admin_workspace.router, prefix="/api/v1/admin/workspace", tags=["工作台"])
 app.include_router(admin_monitor.router, prefix="/api/v1/admin/monitor", tags=["系统监控"])

@@ -204,6 +204,22 @@ _MENUS = [
             },
         ],
     },
+    {
+        "path": "/broadcasts",
+        "name": "Broadcasts",
+        "meta": {"title": "广播通知", "icon": "ep:notification", "rank": 12},
+        "children": [
+            {
+                "path": "/broadcasts/list",
+                "name": "BroadcastList",
+                "meta": {
+                    "title": "播报管理",
+                    "icon": "ep:notification",
+                    "required_perm": "broadcasts:view",
+                },
+            },
+        ],
+    },
 ]
 
 def _has_perm(meta: dict, perms: list[str]) -> bool:
