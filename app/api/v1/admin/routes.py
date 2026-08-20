@@ -220,6 +220,30 @@ _MENUS = [
             },
         ],
     },
+    {
+        "path": "/points",
+        "name": "Points",
+        "meta": {"title": "积分管理", "icon": "ep:coin", "rank": 13, "required_perm": "points:view"},
+        "children": [
+            {
+                "path": "/points/list",
+                "name": "PointsList",
+                "meta": {"title": "积分管理", "icon": "ep:coin", "required_perm": "points:view"},
+            },
+        ],
+    },
+    {
+        "path": "/watchlists",
+        "name": "Watchlists",
+        "meta": {"title": "自选管理", "icon": "ep:star", "rank": 14, "required_perm": "watchlists:view"},
+        "children": [
+            {
+                "path": "/watchlists/list",
+                "name": "WatchlistList",
+                "meta": {"title": "自选管理", "icon": "ep:star", "required_perm": "watchlists:view"},
+            },
+        ],
+    },
 ]
 
 def _has_perm(meta: dict, perms: list[str]) -> bool:
