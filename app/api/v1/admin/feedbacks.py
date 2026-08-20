@@ -107,6 +107,67 @@ async def feedbacks_list(
     return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
+@router.get("/export")
+async def feedbacks_export(
+    keyword: str = "",
+    ftype: str = "",
+    status: str = "",
+    start: str = "",
+    end: str = "",
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_permission(VIEW_PERM)),
+):
+    from app.utils.csv_export import csv_response
+
+    conds = []
+    if keyword:
+        like = f"%{keyword}%"
+        conds.append(
+            Feedback.description.like(like)
+            | Feedback.contact.like(like)
+            | User.username.like(like)
+            | User.email.like(like)
+        )
+    if ftype:
+        conds.append(Feedback.type == ftype)
+    if status:
+        conds.append(Feedback.status == status)
+    if start:
+        conds.append(Feedback.created_at >= start)
+    if end:
+        conds.append(Feedback.created_at <= end + " 23:59:59")
+
+    base = (
+        select(Feedback, User.username, User.email)
+        .outerjoin(User, User.id == Feedback.user_id)
+        .where(*conds)
+    )
+    rows = (
+        (await db.execute(base.order_by(desc(Feedback.created_at)).limit(10000)))
+        .all()
+    )
+
+    headers = ["ID", "用户ID", "用户名", "邮箱", "类型", "描述", "联系方式", "状态", "回复内容", "回复人", "回复时间", "提交时间"]
+    data = [
+        [
+            r[0].id,
+            r[0].user_id,
+            r[1] or "",
+            r[2] or "",
+            r[0].type,
+            r[0].description,
+            r[0].contact or "",
+            r[0].status,
+            r[0].reply or "",
+            r[0].replied_by or "",
+            r[0].replied_at.isoformat() if r[0].replied_at else "",
+            r[0].created_at.isoformat(),
+        ]
+        for r in rows
+    ]
+    return csv_response(f"feedbacks_{datetime.now():%Y%m%d%H%M}.csv", headers, data)
+
+
 @router.get("/stats")
 async def feedbacks_stats(
     days: int = Query(7, ge=1, le=30),

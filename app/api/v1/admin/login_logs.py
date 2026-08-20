@@ -81,6 +81,63 @@ async def login_logs_list(
     return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
+@router.get("/export")
+async def login_logs_export(
+    keyword: str = "",
+    platform: str = "",
+    client: str = "",
+    is_register: str = "",
+    start: str = "",
+    end: str = "",
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_permission(PERM)),
+):
+    from app.utils.csv_export import csv_response
+
+    conds = []
+    if keyword:
+        like = f"%{keyword}%"
+        sub = select(User.id).where(User.username.like(like) | User.nickname.like(like))
+        conds.append(UserLoginLog.user_id.in_(sub))
+    if platform:
+        conds.append(UserLoginLog.platform == platform)
+    if client:
+        conds.append(UserLoginLog.client == client)
+    if is_register in ("true", "false"):
+        conds.append(UserLoginLog.is_register == (is_register == "true"))
+    if start:
+        conds.append(UserLoginLog.login_at >= start)
+    if end:
+        conds.append(UserLoginLog.login_at <= end + " 23:59:59")
+
+    rows = (
+        await db.execute(
+            select(UserLoginLog, User.username, User.email)
+            .outerjoin(User, User.id == UserLoginLog.user_id)
+            .where(*conds)
+            .order_by(desc(UserLoginLog.login_at))
+            .limit(10000)
+        )
+    ).all()
+
+    headers = ["ID", "用户ID", "用户名", "邮箱", "登录时间", "IP", "平台", "客户端", "是否注册"]
+    data = [
+        [
+            r[0].id,
+            r[0].user_id,
+            r[1] or "",
+            r[2] or "",
+            r[0].login_at.isoformat(),
+            r[0].ip or "",
+            r[0].platform or "",
+            r[0].client or "",
+            "是" if r[0].is_register else "否",
+        ]
+        for r in rows
+    ]
+    return csv_response(f"login_logs_{datetime.now():%Y%m%d%H%M}.csv", headers, data)
+
+
 @router.get("/stats")
 async def login_logs_stats(
     days: int = Query(7, ge=1, le=30),

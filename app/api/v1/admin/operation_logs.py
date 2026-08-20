@@ -84,6 +84,65 @@ async def operation_logs_list(
     return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
+@router.get("/export")
+async def operation_logs_export(
+    keyword: str = "",
+    module: str = "",
+    ip: str = "",
+    start: str = "",
+    end: str = "",
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(require_permission(PERM)),
+):
+    from app.utils.csv_export import csv_response
+
+    conds = []
+    if keyword:
+        like = f"%{keyword}%"
+        conds.append(
+            OperationLog.username.like(like)
+            | OperationLog.action.like(like)
+            | OperationLog.detail.like(like)
+        )
+    if module:
+        conds.append(OperationLog.module == module)
+    if ip:
+        conds.append(OperationLog.ip.like(f"%{ip}%"))
+    if start:
+        conds.append(OperationLog.created_at >= start)
+    if end:
+        conds.append(OperationLog.created_at <= end + " 23:59:59")
+
+    rows = (
+        (
+            await db.execute(
+                select(OperationLog)
+                .where(*conds)
+                .order_by(desc(OperationLog.created_at))
+                .limit(10000)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    headers = ["ID", "操作人ID", "操作人", "模块", "动作", "详情", "IP", "时间"]
+    data = [
+        [
+            r.id,
+            r.user_id,
+            r.username,
+            r.module,
+            r.action,
+            r.detail,
+            r.ip,
+            r.created_at.isoformat(),
+        ]
+        for r in rows
+    ]
+    return csv_response(f"operation_logs_{datetime.now():%Y%m%d%H%M}.csv", headers, data)
+
+
 @router.get("/stats")
 async def operation_logs_stats(
     days: int = Query(7, ge=1, le=30),

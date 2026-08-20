@@ -183,6 +183,64 @@ async def customer_list(
     return {"total": total, "page": page, "page_size": page_size, "items": items}
 
 
+@router.get("/export")
+async def customer_export(
+    keyword: str = "",
+    status: str = "",
+    start_date: str = "",
+    end_date: str = "",
+    db: AsyncSession = Depends(get_db),
+    _: AdminUser = Depends(require_permission(PERM_VIEW)),
+):
+    from app.utils.csv_export import csv_response
+
+    conds = []
+    if keyword:
+        like = f"%{keyword}%"
+        conds.append((User.username.ilike(like)) | (User.email.ilike(like)))
+    if status == "active":
+        conds.append(User.is_active.is_(True))
+    elif status == "disabled":
+        conds.append(User.is_active.is_(False))
+    if start_date:
+        conds.append(User.created_at >= datetime.fromisoformat(f"{start_date}T00:00:00"))
+    if end_date:
+        conds.append(User.created_at < datetime.fromisoformat(f"{end_date}T00:00:00") + timedelta(days=1))
+
+    base = select(User)
+    for c in conds:
+        base = base.where(c)
+    rows = (
+        (await db.execute(base.order_by(desc(User.created_at)).limit(10000)))
+        .scalars()
+        .all()
+    )
+    user_ids = [u.id for u in rows]
+    login_agg = await _batch_login_agg(db, user_ids)
+    points_agg = await _batch_points(db, user_ids)
+    orders_agg = await _batch_orders_count(db, user_ids)
+    signals_agg = await _batch_signals_count(db, user_ids)
+    accounts_agg = await _batch_accounts(db, user_ids)
+
+    headers = ["ID", "用户名", "邮箱", "状态", "注册时间", "最近登录", "登录次数", "积分", "总资产", "订单数", "信号数"]
+    data = []
+    for u in rows:
+        data.append([
+            u.id,
+            u.username,
+            u.email or "",
+            "正常" if u.is_active else "已禁用",
+            _f(u.created_at) or "",
+            login_agg.get(u.id, {}).get("last_login_at") or "",
+            login_agg.get(u.id, {}).get("login_count", 0),
+            points_agg.get(u.id, 0),
+            accounts_agg.get(u.id, {}).get("total_balance", 0.0),
+            orders_agg.get(u.id, 0),
+            signals_agg.get(u.id, 0),
+        ])
+    return csv_response(f"customers_{datetime.now():%Y%m%d%H%M}.csv", headers, data)
+
+
 @router.get("/stats")
 async def customer_stats(
     start_date: str = Query("", description="开始日期 YYYY-MM-DD，默认近30天"),
