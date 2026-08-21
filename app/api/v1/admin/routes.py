@@ -25,7 +25,7 @@ _MENUS = [
                 "meta": {
                     "title": "工作台",
                     "icon": "ep:home-filled",
-                    "required_perm": "dashboard:view",
+                    "required_perm": "workspace:view",
                 },
             },
         ],
@@ -147,7 +147,7 @@ _MENUS = [
             {
                 "path": "/agents/sessions",
                 "name": "AgentSessions",
-                "meta": {"title": "雇佣会话", "icon": "ep:connection", "required_perm": "agents:view"},
+                "meta": {"title": "雇佣会话", "icon": "ep:connection", "required_perm": "agents:manage"},
             },
             {
                 "path": "/agents/detail",

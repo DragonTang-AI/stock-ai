@@ -263,7 +263,7 @@ async def agents_engine(
 @router.get("/sessions")
 async def agents_sessions(
     db: AsyncSession = Depends(get_db),
-    _: AdminUser = Depends(require_permission(PERM_VIEW)),
+    _: AdminUser = Depends(require_permission(PERM_MANAGE)),
     status: str = Query("", description="active/expired/stopped 空=全部"),
     keyword: str = Query("", description="用户名/交易员名模糊"),
     page: int = Query(1, ge=1),

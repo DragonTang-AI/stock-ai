@@ -27,7 +27,7 @@ from app.models.user import User, UserLoginLog
 
 router = APIRouter()
 
-PERM = "dashboard:view"
+PERM = "workspace:view"
 
 INTERNAL_BASE = os.getenv("ADMIN_INTERNAL_BASE", "http://127.0.0.1:8000")
 INTERNAL_TOKEN = os.getenv("ADMIN_INTERNAL_TOKEN", "stockai_admin_internal_2026")
