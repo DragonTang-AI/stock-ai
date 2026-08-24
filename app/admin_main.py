@@ -28,6 +28,7 @@ from app.api.v1.admin import monitor as admin_monitor
 from app.api.v1.admin import points as admin_points
 from app.api.v1.admin import watchlists as admin_watchlists
 from app.api.v1.admin import equity as admin_equity
+from app.api.v1.admin import changelogs as admin_changelogs
 
 app = FastAPI(
     title=f"{settings.app_name} Admin",
@@ -66,3 +67,4 @@ app.include_router(admin_monitor.router, prefix="/api/v1/admin/monitor", tags=["
 app.include_router(admin_points.router, prefix="/api/v1/admin/points", tags=["积分管理"])
 app.include_router(admin_watchlists.router, prefix="/api/v1/admin/watchlists", tags=["自选管理"])
 app.include_router(admin_equity.router, prefix="/api/v1/admin/equity", tags=["权益曲线"])
+app.include_router(admin_changelogs.router, prefix="/api/v1/admin/changelogs", tags=["变更日志"])

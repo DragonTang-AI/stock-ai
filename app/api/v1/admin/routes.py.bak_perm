@@ -25,7 +25,7 @@ _MENUS = [
                 "meta": {
                     "title": "工作台",
                     "icon": "ep:home-filled",
-                    "required_perm": "workspace:view",
+                    "required_perm": "dashboard:view",
                 },
             },
         ],
@@ -147,7 +147,7 @@ _MENUS = [
             {
                 "path": "/agents/sessions",
                 "name": "AgentSessions",
-                "meta": {"title": "雇佣会话", "icon": "ep:connection", "required_perm": "agents:manage"},
+                "meta": {"title": "雇佣会话", "icon": "ep:connection", "required_perm": "agents:view"},
             },
             {
                 "path": "/agents/detail",
@@ -241,30 +241,6 @@ _MENUS = [
                 "path": "/watchlists/list",
                 "name": "WatchlistList",
                 "meta": {"title": "自选管理", "icon": "ep:star", "required_perm": "watchlists:view"},
-            },
-        ],
-    },
-    {
-        "path": "/equity",
-        "name": "Equity",
-        "meta": {"title": "权益曲线", "icon": "ep:trend-charts", "rank": 15, "required_perm": "equity:view"},
-        "children": [
-            {
-                "path": "/equity/list",
-                "name": "EquityList",
-                "meta": {"title": "权益曲线", "icon": "ep:trend-charts", "required_perm": "equity:view"},
-            },
-        ],
-    },
-    {
-        "path": "/changelogs",
-        "name": "Changelogs",
-        "meta": {"title": "变更日志", "icon": "ep:edit-pen", "rank": 16, "required_perm": "changelogs:view"},
-        "children": [
-            {
-                "path": "/changelogs/list",
-                "name": "ChangelogList",
-                "meta": {"title": "变更日志", "icon": "ep:edit-pen", "required_perm": "changelogs:view"},
             },
         ],
     },

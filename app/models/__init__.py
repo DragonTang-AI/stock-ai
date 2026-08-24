@@ -18,3 +18,4 @@ from app.models.admin_user import AdminUser  # noqa: F401
 from app.models.admin_role import AdminRole  # noqa: F401
 from app.models.operation_log import OperationLog  # noqa: F401
 from app.models.feedback import Feedback  # noqa: F401
+from app.models.changelog import Changelog  # noqa: F401
