@@ -169,11 +169,22 @@ export function fetchCandidates(params: {
   industry?: string
   sort_by?: 'coarse_score' | 'analyst_score' | 'rank'
 }): Promise<CandidatesResponse> {
+  // 后端 /selection/recommend 原生支持 industry/score_min/score_max/sort_by
+  // sort_by 映射：coarse_score→rank(综合分降序)，analyst_score→change_pct(涨幅降序，后端无分析师分)
+  const sortMap: Record<string, string> = {
+    rank: 'rank',
+    coarse_score: 'rank',
+    analyst_score: 'change_pct',
+  }
   return request<any>('/selection/recommend', {
     method: 'GET',
     params: {
       page: params.page ?? 1,
       page_size: params.page_size ?? 20,
+      industry: params.industry || undefined,
+      score_min: params.score_min,
+      score_max: params.score_max,
+      sort_by: sortMap[params.sort_by || 'rank'] || 'rank',
     },
   }).then(res => {
     const raw = res?.data || res?.picks || res || []
@@ -199,9 +210,12 @@ export function fetchCandidates(params: {
   })
 }
 
-/** 获取行业分布列表（暂无专用端点，从推荐中提取） */
+/** 获取行业分布列表（暂无专用端点，从推荐中提取；拉取 Top50 覆盖全行业） */
 export function fetchIndustries(): Promise<string[]> {
-  return request<any>('/selection/recommend', { method: 'GET' })
+  return request<any>('/selection/recommend', {
+    method: 'GET',
+    params: { top_n: 50 },
+  })
     .then(res => {
       const raw = res?.data || res?.picks || res || []
       const list = Array.isArray(raw) ? raw : raw.items || raw.results || []

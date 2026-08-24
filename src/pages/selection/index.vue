@@ -2,6 +2,17 @@
   <view class="selection-page">
     <!-- 骨架屏 -->
     <LoadingSkeleton v-if="activeTab === 'daily' ? dailyLoading : loading" scene="selection" :rows="3" />
+  <!-- ========== 调度器状态（P2） ========== -->
+  <view class="scheduler-bar" :class="{ active: schedulerRunning }" @click="checkScheduler(true)">
+    <view class="sched-dot" :class="{ pulse: schedulerRunning }"></view>
+    <text class="sched-text">
+      {{ schedulerRunning ? 'AI 引擎运行中' : 'AI 引擎空闲' }}
+    </text>
+    <text v-if="schedLastRun" class="sched-detail">上次 {{ schedLastRun }}</text>
+    <text v-if="schedNextRun" class="sched-detail next">下次 {{ schedNextRun }}</text>
+    <text class="sched-hint">点击刷新</text>
+  </view>
+
   <!-- ========== 搜索入口 ========== -->
   <view class="search-entry" @click="goSearch">
     <text class="search-entry-icon">🔍</text>
@@ -147,6 +158,7 @@ import {
   removeFromWatchlist,
   type CommitteeResult,
 } from '@/api/selection'
+import { request } from '@/utils/request'
 
 
 function goSearch() {
@@ -281,10 +293,37 @@ async function loadResults() {
   }
 }
 
+// ── 调度器状态（P2） ──
+const schedulerRunning = ref(false)
+const schedLastRun = ref('')
+const schedNextRun = ref('')
+
+const checkScheduler = async (manual = false) => {
+  try {
+    const status = await request<any>('/agent-console/scheduler-status')
+    schedulerRunning.value = !!status.running
+    if (status.last_run_at) {
+      const t = new Date(status.last_run_at)
+      schedLastRun.value = `${String(t.getUTCHours()).padStart(2, '0')}:${String(t.getUTCMinutes()).padStart(2, '0')}`
+    } else {
+      schedLastRun.value = ''
+    }
+    if (status.next_run_at) {
+      const t = new Date(status.next_run_at)
+      schedNextRun.value = `${String(t.getUTCHours()).padStart(2, '0')}:${String(t.getUTCMinutes()).padStart(2, '0')}`
+    } else {
+      schedNextRun.value = ''
+    }
+  } catch (e) {
+    if (manual) uni.showToast({ title: '调度状态获取失败', icon: 'none' })
+  }
+}
+
 onMounted(() => {
   // 每日推荐走缓存直读，秒出；委员会实时计算较慢，后台并行加载
   loadDailyPicks()
   loadResults()
+  checkScheduler()
 })
 
 onShow(() => {
@@ -640,6 +679,55 @@ onShow(() => {
   text-align: center;
 
   &::after { border: none; }
+}
+
+/* ── 调度器状态条（P2） ── */
+.scheduler-bar {
+  display: flex;
+  align-items: center;
+  padding: 16rpx 24rpx;
+  background: #111122;
+  border-radius: 12rpx;
+  margin: 16rpx 24rpx 0;
+  gap: 12rpx;
+
+  .sched-dot {
+    width: 12rpx;
+    height: 12rpx;
+    border-radius: 50%;
+    background: #444466;
+
+    &.pulse {
+      background: #27ae60;
+      animation: pulse-dot 2s infinite;
+    }
+  }
+
+  .sched-text {
+    font-size: 22rpx;
+    color: #667788;
+  }
+
+  .sched-detail {
+    font-size: 20rpx;
+    color: #4A6FA5;
+  }
+
+  .sched-detail.next {
+    color: #556677;
+    margin-left: 8rpx;
+  }
+
+  .sched-hint {
+    font-size: 18rpx;
+    color: #333355;
+    margin-left: auto;
+  }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 </style>
 
