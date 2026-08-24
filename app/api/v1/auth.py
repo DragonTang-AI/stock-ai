@@ -38,6 +38,40 @@ from app.schemas.auth import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# ── 注册风控（IP 维度限流，基于 Redis） ──────────────────────────────
+import redis.asyncio as aioredis
+
+_register_redis: aioredis.Redis | None = None
+
+
+def _get_register_redis() -> aioredis.Redis:
+    """懒加载 Redis 客户端（容器内 REDIS_URL 指向 redis 服务）"""
+    global _register_redis
+    if _register_redis is None:
+        _register_redis = aioredis.from_url(settings.redis_url, decode_responses=True)
+    return _register_redis
+
+
+async def _check_register_rate_limit(request: Request) -> None:
+    """同一 IP 1 小时内最多允许 5 次注册成功（防批量刷号薅注册积分）"""
+    ip = request.client.host if request.client else "unknown"
+    key = f"auth:register:ip:{ip}"
+    try:
+        redis = _get_register_redis()
+        count = await redis.incr(key)
+        if count == 1:
+            await redis.expire(key, 3600)
+        if count > 5:
+            logger.warning(f"注册风控触发: 同IP注册次数超限 ip={ip} count={count}")
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="注册过于频繁，请稍后再试",
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:  # Redis 异常不阻塞注册，仅记录
+        logger.warning(f"注册风控检查异常: {exc}")
+
 def _detect_platform(ua: str) -> str:
     u = (ua or "").lower()
     if "iphone" in u or "ipad" in u or "ios" in u:
@@ -189,6 +223,8 @@ async def register(
     db: AsyncSession = Depends(get_db),
 ) -> RegisterResponse:
     """用户注册（V1 仅支持用户名+密码）"""
+    # 注册风控：同 IP 限流
+    await _check_register_rate_limit(request)
     # 检查重复
     existing = await db.execute(
         select(User).where(
