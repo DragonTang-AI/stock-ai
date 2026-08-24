@@ -23,6 +23,10 @@ async def get_recommend(
     strategy: str = Query("momentum", description="策略：momentum(追涨)/reversal(抄底)/balanced(均衡)"),
     min_change_pct: float = Query(-2.0, description="最小涨幅 %（默认 -2.0）"),
     max_change_pct: float = Query(9.0, description="最大涨幅 %（默认 9.0，避开涨停）"),
+    industry: Optional[str] = Query(None, description="行业过滤（如 金融/消费/医药/科技/新能源/制造/材料/通信/农业/港股）"),
+    score_min: Optional[float] = Query(None, ge=0, le=100, description="最低综合评分"),
+    score_max: Optional[float] = Query(None, ge=0, le=100, description="最高综合评分"),
+    sort_by: str = Query("rank", description="排序：rank(综合分降序)/change_pct(涨幅降序)"),
     current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """
@@ -52,6 +56,10 @@ async def get_recommend(
         strategy=strategy,
         min_change_pct=min_change_pct,
         max_change_pct=max_change_pct,
+        industry=industry,
+        score_min=score_min,
+        score_max=score_max,
+        sort_by=sort_by,
     )
     return await recommend_stocks(req)
 

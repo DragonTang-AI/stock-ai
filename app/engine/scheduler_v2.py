@@ -336,6 +336,74 @@ async def _maybe_generate_daily_picks():
 
 
 
+async def _maybe_take_equity_snapshot():
+    """每日 16:00-16:30 记录所有用户资产快照（幂等，按 user+date 唯一）。
+
+    供 C 端绩效面板生成真实权益曲线、夏普比率与最大回撤。
+    仅读取数据库中的账户余额与持仓市值，不触发实时行情请求。
+    """
+    now_local = datetime.now()
+    if now_local.hour != 16 or now_local.minute >= 30:
+        return
+    try:
+        from app.models.user import User
+        from app.models.trading import Account, Position, EquitySnapshot
+        from app.services.trading import INITIAL_BALANCE
+
+        today = now_local.date()
+        async with get_db_context() as db:
+            users_res = await db.execute(select(User.id))
+            user_ids = [r[0] for r in users_res.all()]
+            if not user_ids:
+                return
+
+            acc_res = await db.execute(select(Account).where(Account.user_id.in_(user_ids)))
+            accounts = acc_res.scalars().all()
+            if not accounts:
+                return
+
+            pos_res = await db.execute(
+                select(Position.user_id, func.coalesce(func.sum(Position.market_value), 0))
+                .where(Position.user_id.in_(user_ids))
+                .group_by(Position.user_id)
+            )
+            mv_map = {r[0]: float(r[1]) for r in pos_res.all()}
+
+            snap_res = await db.execute(
+                select(EquitySnapshot.user_id).where(
+                    EquitySnapshot.snapshot_date == today,
+                    EquitySnapshot.user_id.in_(user_ids),
+                )
+            )
+            existing = {r[0] for r in snap_res.all()}
+
+            inserted = 0
+            for acc in accounts:
+                if acc.user_id in existing:
+                    continue
+                mv = mv_map.get(acc.user_id, 0.0)
+                cash = float(acc.balance)
+                total_equity = round(cash + mv, 2)
+                profit = round(total_equity - INITIAL_BALANCE, 2)
+                profit_pct = round(profit / INITIAL_BALANCE * 100, 4)
+                db.add(EquitySnapshot(
+                    user_id=acc.user_id,
+                    account_id=acc.id,
+                    snapshot_date=today,
+                    cash=cash,
+                    market_value=round(mv, 2),
+                    total_equity=total_equity,
+                    profit=profit,
+                    profit_pct=profit_pct,
+                ))
+                inserted += 1
+            await db.commit()
+            if inserted:
+                logger.info("[equity-snapshot] 已记录 %d 个用户资产快照 (%s)", inserted, today)
+    except Exception as e:  # noqa: BLE001
+        logger.error("[equity-snapshot] 快照失败: %s", e)
+
+
 async def _maybe_run_backtest():
     """每日 16:30-17:00 触发回测：对到期推荐票回填 T+5/T+20 收益与基准超额。"""
     now_local = datetime.now()
@@ -367,6 +435,9 @@ async def _run_one_cycle():
 
     # 每日 16:30 回测：对到期推荐票回填 T+5/T+20 收益与基准超额
     await _maybe_run_backtest()
+
+    # 每日 16:00-16:30 资产快照：供 C 端绩效面板生成真实权益曲线/夏普/回撤
+    await _maybe_take_equity_snapshot()
 
     # 非交易时段跳过（A 股或港股任一交易时段均允许运行）
     if not is_any_market_hours():

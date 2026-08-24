@@ -97,6 +97,52 @@ CANDIDATE_POOL = [
     "1810.HK",   # 小米
 ]
 
+# ========== 行业映射（用于 C 端信号筛选栏） ==========
+INDUSTRY_MAP: Dict[str, str] = {
+    # 金融（10）
+    "601318.SH": "金融", "600036.SH": "金融", "601398.SH": "金融", "601939.SH": "金融",
+    "601988.SH": "金融", "600030.SH": "金融", "000001.SZ": "金融", "000166.SZ": "金融",
+    "601628.SH": "金融", "600000.SH": "金融",
+    # 消费（12）
+    "600519.SH": "消费", "000858.SZ": "消费", "000333.SZ": "消费", "000651.SZ": "消费",
+    "600887.SH": "消费", "600690.SH": "消费", "000002.SZ": "消费", "600104.SH": "消费",
+    "601888.SH": "消费", "000895.SZ": "消费", "600600.SH": "消费", "002304.SZ": "消费",
+    # 医药（12）
+    "600276.SH": "医药", "000661.SZ": "医药", "300760.SZ": "医药", "300015.SZ": "医药",
+    "300122.SZ": "医药", "300347.SZ": "医药", "300142.SZ": "医药", "600196.SH": "医药",
+    "600436.SH": "医药", "000538.SZ": "医药", "002007.SZ": "医药", "300601.SZ": "医药",
+    # 科技/电子（14）
+    "000725.SZ": "科技", "002415.SZ": "科技", "002230.SZ": "科技", "000063.SZ": "科技",
+    "000100.SZ": "科技", "002475.SH": "科技", "300033.SZ": "科技", "300124.SZ": "科技",
+    "002049.SZ": "科技", "002371.SZ": "科技", "603986.SH": "科技", "688981.SH": "科技",
+    "688111.SH": "科技",
+    # 新能源/汽车（10）
+    "300750.SZ": "新能源", "601012.SH": "新能源", "002594.SZ": "新能源", "600900.SH": "新能源",
+    "600438.SH": "新能源", "300274.SZ": "新能源", "002129.SZ": "新能源", "601985.SH": "新能源",
+    "600089.SH": "新能源", "300014.SZ": "新能源",
+    # 制造/工业（10）
+    "601800.SH": "制造", "601668.SH": "制造", "000768.SZ": "制造", "600031.SH": "制造",
+    "000338.SZ": "制造", "601766.SH": "制造", "600150.SH": "制造", "002460.SZ": "制造",
+    "002466.SZ": "制造",
+    # 材料/有色（8）
+    "600019.SH": "材料", "600028.SH": "材料", "601857.SH": "材料", "601899.SH": "材料",
+    "600585.SH": "材料", "002709.SZ": "材料", "600309.SH": "材料", "601225.SH": "材料",
+    # 通信/传媒（8）
+    "600050.SH": "通信", "300059.SZ": "通信", "002027.SZ": "通信", "300413.SZ": "通信",
+    "300418.SZ": "通信", "002555.SZ": "通信", "600941.SH": "通信",
+    # 农业/食品（6）
+    "000876.SZ": "农业", "002714.SZ": "农业", "603288.SH": "农业", "002568.SZ": "农业",
+    "000596.SZ": "农业", "603369.SH": "农业",
+    # 港股龙头（5）
+    "0700.HK": "港股", "9988.HK": "港股", "9618.HK": "港股", "9999.HK": "港股", "1810.HK": "港股",
+}
+
+
+def get_industry(symbol: str) -> str:
+    """获取股票行业分类（未知返回 综合）"""
+    return INDUSTRY_MAP.get(symbol, "综合")
+
+
 # 并发和分批
 BATCH_CONCURRENCY = 5
 BATCH_SIZE = 10
@@ -568,7 +614,33 @@ async def recommend_stocks(req: RecommendRequest) -> RecommendResponse:
             total, factors = score_result
             scored.append((quote, total, factors))
 
-    scored.sort(key=lambda x: x[1], reverse=True)
+    # 行业过滤
+    industry_filter = getattr(req, "industry", None)
+    if industry_filter:
+        scored = [
+            x for x in scored
+            if get_industry(x[0].symbol) == industry_filter
+        ]
+
+    # 评分区间过滤
+    score_min = getattr(req, "score_min", None)
+    score_max = getattr(req, "score_max", None)
+    if score_min is not None or score_max is not None:
+        filtered = []
+        for quote, total, factors in scored:
+            if score_min is not None and total < score_min:
+                continue
+            if score_max is not None and total > score_max:
+                continue
+            filtered.append((quote, total, factors))
+        scored = filtered
+
+    # 排序
+    sort_by = getattr(req, "sort_by", "rank")
+    if sort_by == "change_pct":
+        scored.sort(key=lambda x: x[0].change_pct, reverse=True)
+    else:
+        scored.sort(key=lambda x: x[1], reverse=True)
     top = scored[: req.top_n]
 
     picks = []
@@ -584,6 +656,7 @@ async def recommend_stocks(req: RecommendRequest) -> RecommendResponse:
             score=total,
             factors=factors,
             market="A" if quote.symbol.endswith((".SH", ".SZ")) else "HK",
+            industry=get_industry(quote.symbol),
         ))
 
     return RecommendResponse(

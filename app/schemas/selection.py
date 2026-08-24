@@ -25,6 +25,7 @@ class StockPick(BaseModel):
     score: float = Field(..., description="综合评分（0~100）")
     factors: List[PickFactor] = Field(..., description="因子得分明细")
     market: str = Field(..., description="市场：A/HK")
+    industry: Optional[str] = Field(None, description="行业分类")
 
 
 class RecommendRequest(BaseModel):
@@ -34,6 +35,10 @@ class RecommendRequest(BaseModel):
     strategy: str = Field("momentum", description="策略：momentum(追涨)/reversal(抄底)/balanced(均衡)")
     min_change_pct: float = Field(-2.0, description="最小涨幅 %")
     max_change_pct: float = Field(9.0, description="最大涨幅 %（避开涨停）")
+    industry: Optional[str] = Field(None, description="行业过滤（如 金融/消费/医药/科技/新能源/制造/材料/通信/农业/港股）")
+    score_min: Optional[float] = Field(None, ge=0, le=100, description="最低综合评分")
+    score_max: Optional[float] = Field(None, ge=0, le=100, description="最高综合评分")
+    sort_by: str = Field("rank", description="排序：rank(综合分降序)/change_pct(涨幅降序)")
 
 
 class RecommendResponse(BaseModel):

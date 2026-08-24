@@ -204,22 +204,56 @@ async def get_equity_curve(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    收益率曲线
-    
-    基于账户初始资金 + 当前总资产计算。
-    TODO: 未来接入历史每日快照后生成完整曲线。
+    收益率曲线（基于每日资产快照，含当前实时权益）
+
+    数据源：
+    - 历史点：equity_snapshots 每日快照（调度器 16:00-16:30 自动落库）
+    - 最新点：实时计算（账户余额 + 持仓实时市值）
+    - 基准：初始资金 10w 平线（V1 无指数基准数据，前端用收益% 展示）
     """
+    from datetime import timedelta as _td
+    from sqlalchemy import select as _select
+    from app.models.trading import EquitySnapshot
     from app.services.trading import INITIAL_BALANCE, get_or_create_account, get_positions
+
+    # 期限 → 起始日期
+    today = datetime.now().date()
+    period_days = {"1w": 7, "1m": 30, "3m": 90, "6m": 180, "1y": 365, "all": 3650}
+    start_date = today - _td(days=period_days.get(period, 30))
+
     account = await get_or_create_account(db, current_user)
     positions = await get_positions(db, current_user)
     total_market_value = sum(p.market_value for p in positions)
     total_equity = float(account.balance) + total_market_value
-    
-    today = datetime.now().strftime("%Y-%m-%d")
+
+    # 历史快照
+    snap_rows = (await db.execute(
+        _select(EquitySnapshot)
+        .where(
+            EquitySnapshot.user_id == current_user.id,
+            EquitySnapshot.snapshot_date >= start_date,
+        )
+        .order_by(EquitySnapshot.snapshot_date)
+    )).scalars().all()
+
     points = [
-        {"date": "start", "equity": INITIAL_BALANCE, "benchmark": INITIAL_BALANCE},
-        {"date": today, "equity": round(total_equity, 2), "benchmark": round(total_equity, 2)},
+        {"date": "start", "equity": INITIAL_BALANCE, "benchmark": INITIAL_BALANCE}
     ]
+    for s in snap_rows:
+        points.append({
+            "date": s.snapshot_date.strftime("%Y-%m-%d"),
+            "equity": round(float(s.total_equity), 2),
+            "benchmark": round(float(s.total_equity), 2),
+        })
+    # 去重最新日期，避免与实时点重复
+    last_date = points[-1]["date"] if len(points) > 1 else None
+    today_str = today.strftime("%Y-%m-%d")
+    if last_date != today_str:
+        points.append({
+            "date": today_str,
+            "equity": round(total_equity, 2),
+            "benchmark": round(total_equity, 2),
+        })
     return {"success": True, "data": points}
 
 
@@ -308,10 +342,48 @@ async def get_statistics(
     # 单只最大盈亏
     max_profit = max((p.profit for p in positions), default=0)
     max_loss = min((p.profit for p in positions), default=0)
-    
-    # 最大回撤（简化为总收益跌幅，TODO：接入逐日追踪）
-    max_drawdown = 0 if total_return >= 0 else round(abs(total_return) / INITIAL_BALANCE * 100, 2)
-    
+
+    # ── 基于每日资产快照计算真实夏普比率与最大回撤 ──
+    from sqlalchemy import select as _sel
+    from app.models.trading import EquitySnapshot
+    snap_rows = (await db.execute(
+        _sel(EquitySnapshot)
+        .where(EquitySnapshot.user_id == current_user.id)
+        .order_by(EquitySnapshot.snapshot_date)
+    )).scalars().all()
+
+    equity_seq = [float(s.total_equity) for s in snap_rows]
+    # 补上实时权益作为最新点
+    equity_seq.append(total_equity)
+
+    sharpe = 0.0
+    max_drawdown = 0.0
+    if len(equity_seq) >= 3:
+        # 日收益率序列（简单相邻比）
+        daily_rets = []
+        for i in range(1, len(equity_seq)):
+            prev = equity_seq[i - 1]
+            if prev > 0:
+                daily_rets.append(equity_seq[i] / prev - 1.0)
+        if daily_rets:
+            n = len(daily_rets)
+            mean_r = sum(daily_rets) / n
+            var_r = sum((r - mean_r) ** 2 for r in daily_rets) / n
+            std_r = var_r ** 0.5
+            if std_r > 1e-12:
+                # 年化：A股约 250 交易日
+                sharpe = round((mean_r / std_r) * (250 ** 0.5), 4)
+            # 最大回撤：峰值回撤的最大值（百分比）
+            peak = equity_seq[0]
+            for v in equity_seq:
+                if v > peak:
+                    peak = v
+                if peak > 0:
+                    dd = (peak - v) / peak * 100.0
+                    if dd > max_drawdown:
+                        max_drawdown = dd
+            max_drawdown = round(max_drawdown, 4)
+
     return {
         "success": True,
         "data": {
@@ -319,7 +391,7 @@ async def get_statistics(
             "profitLossRatio": profit_loss_ratio,
             "maxSingleProfit": round(max_profit, 2),
             "maxSingleLoss": round(max_loss, 2),
-            "sharpeRatio": 0,
+            "sharpeRatio": sharpe,
             "maxDrawdown": max_drawdown,
         },
     }
