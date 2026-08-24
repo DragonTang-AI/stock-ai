@@ -244,6 +244,18 @@ _MENUS = [
             },
         ],
     },
+    {
+        "path": "/equity",
+        "name": "Equity",
+        "meta": {"title": "权益曲线", "icon": "ep:trend-charts", "rank": 15, "required_perm": "equity:view"},
+        "children": [
+            {
+                "path": "/equity/list",
+                "name": "EquityList",
+                "meta": {"title": "权益曲线", "icon": "ep:trend-charts", "required_perm": "equity:view"},
+            },
+        ],
+    },
 ]
 
 def _has_perm(meta: dict, perms: list[str]) -> bool:

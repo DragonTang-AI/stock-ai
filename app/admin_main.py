@@ -27,6 +27,7 @@ from app.api.v1.admin import workspace as admin_workspace
 from app.api.v1.admin import monitor as admin_monitor
 from app.api.v1.admin import points as admin_points
 from app.api.v1.admin import watchlists as admin_watchlists
+from app.api.v1.admin import equity as admin_equity
 
 app = FastAPI(
     title=f"{settings.app_name} Admin",
@@ -64,3 +65,4 @@ app.include_router(admin_workspace.router, prefix="/api/v1/admin/workspace", tag
 app.include_router(admin_monitor.router, prefix="/api/v1/admin/monitor", tags=["系统监控"])
 app.include_router(admin_points.router, prefix="/api/v1/admin/points", tags=["积分管理"])
 app.include_router(admin_watchlists.router, prefix="/api/v1/admin/watchlists", tags=["自选管理"])
+app.include_router(admin_equity.router, prefix="/api/v1/admin/equity", tags=["权益曲线"])
