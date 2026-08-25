@@ -16,6 +16,7 @@
       <!-- 统计信息 -->
       <view class="stats-bar">
         <text class="stats-text">共 {{ total }} 只候选股票</text>
+        <text v-if="cacheLabel" class="cache-tip">{{ cacheLabel }}</text>
       </view>
 
       <!-- 筛选工具栏 -->
@@ -200,6 +201,8 @@ const hasMore = ref(false)
 const loading = ref(false)
 const loadingMore = ref(false)
 const error = ref('')
+const CACHE_KEY = 'stockai_candidates_cache_v1'
+const cacheLabel = ref('')
 
 // 筛选
 const scoreRanges = [
@@ -325,19 +328,51 @@ async function loadCandidates(reset: boolean = false) {
       sort_by: sortBy.value,
     })
 
+    const data = res.items || res
     if (reset) {
-      items.value = res
+      items.value = data
+      if (data.length > 0) {
+        try {
+          uni.setStorageSync(CACHE_KEY, { items: data, ts: Date.now() })
+        } catch (e) {
+          console.error('[SelectionCandidates] 缓存写入失败', e)
+        }
+        cacheLabel.value = ''
+      } else {
+        applyFallbackCache('暂无最新数据，展示缓存')
+      }
     } else {
-      items.value = [...items.value, ...res]
+      items.value = [...items.value, ...data]
     }
     total.value = items.value.length
-    hasMore.value = res.length >= 20
+    hasMore.value = data.length >= 20
   } catch (e: any) {
-    error.value = e?.message || '加载失败'
+    if (reset && !applyFallbackCache('数据获取失败，展示缓存')) {
+      error.value = e?.message || '加载失败'
+    }
   } finally {
     loading.value = false
     loadingMore.value = false
   }
+}
+
+// 请求失败/为空时降级读取上次成功缓存
+function applyFallbackCache(prefix: string): boolean {
+  try {
+    const cached = uni.getStorageSync(CACHE_KEY)
+    if (cached && Array.isArray(cached.items) && cached.items.length > 0) {
+      items.value = cached.items
+      total.value = cached.items.length
+      hasMore.value = false
+      const d = new Date(cached.ts)
+      const pad = (n: number) => String(n).padStart(2, '0')
+      cacheLabel.value = `${prefix} · 更新于 ${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+      return true
+    }
+  } catch (e) {
+    console.error('[SelectionCandidates] 缓存读取失败', e)
+  }
+  return false
 }
 
 async function loadIndustries() {
@@ -409,6 +444,13 @@ onMounted(() => {
 .stats-text {
   font-size: $font-size-xs;
   color: $text-hint;
+}
+
+.cache-tip {
+  display: block;
+  margin-top: 8rpx;
+  font-size: $font-size-xs;
+  color: #b8860b;
 }
 
 // ---- 筛选栏 ----
