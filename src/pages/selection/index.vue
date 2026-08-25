@@ -145,7 +145,7 @@
 
 <script setup lang="ts">
 import Disclaimer from '@/components/compliance/Disclaimer.vue'
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
 import { trackPageView, trackAction } from '@/utils/tracker'
@@ -319,11 +319,22 @@ const checkScheduler = async (manual = false) => {
   }
 }
 
+let schedPollTimer: ReturnType<typeof setInterval> | null = null
+
 onMounted(() => {
   // 每日推荐走缓存直读，秒出；委员会实时计算较慢，后台并行加载
   loadDailyPicks()
   loadResults()
   checkScheduler()
+  // 调度状态 30 秒轮询
+  schedPollTimer = setInterval(() => checkScheduler(), 30000)
+})
+
+onUnmounted(() => {
+  if (schedPollTimer) {
+    clearInterval(schedPollTimer)
+    schedPollTimer = null
+  }
 })
 
 onShow(() => {
