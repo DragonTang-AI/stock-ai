@@ -35,7 +35,7 @@
 
   <!-- 每日推荐：预生成缓存直读 + 手动刷新 -->
   <view v-if="activeTab === 'daily' && !dailyLoading" class="daily-toolbar">
-    <view class="daily-toolbar-title">每日推荐（总部每日 8:00 预生成）</view>
+    <view class="daily-toolbar-title">每日推荐（下次预生成 {{ dailyCountdown }}）</view>
     <view class="engine-switch">
       <view class="engine-item" :class="{ active: dailyEngine === 'committee_llm' }" @click="switchDailyEngine('committee_llm')">LLM 委员会</view>
       <view class="engine-item" :class="{ active: dailyEngine === 'factor' }" @click="switchDailyEngine('factor')">因子评分</view>
@@ -48,7 +48,7 @@
   <!-- 每日推荐：空状态 -->
   <view v-if="activeTab === 'daily' && !dailyLoading && !dailyError && dailyResults.length === 0" class="state-view">
     <text class="state-text">当日推荐尚未生成</text>
-    <text class="state-hint">总部每日 8:00 自动预生成，也可点击上方「刷新」立即生成</text>
+    <text class="state-hint">下次预生成：{{ dailyCountdown }}，也可点击上方「刷新」立即生成</text>
   </view>
 
   <!-- 每日推荐：错误 -->
@@ -297,6 +297,8 @@ async function loadResults() {
 const schedulerRunning = ref(false)
 const schedLastRun = ref('')
 const schedNextRun = ref('')
+const nextRunTs = ref(0)
+const dailyCountdown = ref('')
 
 const checkScheduler = async (manual = false) => {
   try {
@@ -311,15 +313,40 @@ const checkScheduler = async (manual = false) => {
     if (status.next_run_at) {
       const t = new Date(status.next_run_at)
       schedNextRun.value = `${String(t.getUTCHours()).padStart(2, '0')}:${String(t.getUTCMinutes()).padStart(2, '0')}`
+      nextRunTs.value = t.getTime()
+      updateDailyCountdown()
     } else {
       schedNextRun.value = ''
+      nextRunTs.value = 0
+      dailyCountdown.value = ''
     }
   } catch (e) {
     if (manual) uni.showToast({ title: '调度状态获取失败', icon: 'none' })
   }
 }
 
+// 每日推荐下次预生成倒计时（1 秒粒度）
+function updateDailyCountdown() {
+  if (!nextRunTs.value) {
+    dailyCountdown.value = ''
+    return
+  }
+  const diff = nextRunTs.value - Date.now()
+  if (diff <= 0) {
+    dailyCountdown.value = '即将开始'
+    return
+  }
+  const totalSec = Math.floor(diff / 1000)
+  const h = Math.floor(totalSec / 3600)
+  const m = Math.floor((totalSec % 3600) / 60)
+  const s = totalSec % 60
+  dailyCountdown.value = h > 0
+    ? `${h}小时${String(m).padStart(2, '0')}分${String(s).padStart(2, '0')}秒`
+    : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+}
+
 let schedPollTimer: ReturnType<typeof setInterval> | null = null
+let countdownTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
   // 每日推荐走缓存直读，秒出；委员会实时计算较慢，后台并行加载
@@ -328,12 +355,17 @@ onMounted(() => {
   checkScheduler()
   // 调度状态 30 秒轮询
   schedPollTimer = setInterval(() => checkScheduler(), 30000)
+  countdownTimer = setInterval(() => updateDailyCountdown(), 1000)
 })
 
 onUnmounted(() => {
   if (schedPollTimer) {
     clearInterval(schedPollTimer)
     schedPollTimer = null
+  }
+  if (countdownTimer) {
+    clearInterval(countdownTimer)
+    countdownTimer = null
   }
 })
 
