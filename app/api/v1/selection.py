@@ -89,8 +89,10 @@ async def post_daily_picks_refresh(
 ) -> dict:
     """
     每日推荐手动刷新：强制重新生成当日结果并落库（默认 LLM 委员会引擎）。
+    登录用户刷新成功后自动写入一条通知中心消息。
     """
-    return await refresh_daily_picks(market=market, top_n=top_n, engine=engine)
+    user_id = current_user.id if current_user else None
+    return await refresh_daily_picks(market=market, top_n=top_n, engine=engine, notify_user_id=user_id)
 
 # ── Prescreen 粗筛接口 ────────────────────────────────
 from datetime import date

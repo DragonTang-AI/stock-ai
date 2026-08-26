@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_scheduler_db_context
+from app.models.agent import Notification
 from app.models.daily_pick import DailyPick
 from app.models.pick_tracking import PickTracking
 from app.schemas.selection import RecommendRequest
@@ -91,6 +92,7 @@ async def generate_daily_picks(
     top_n: int = DEFAULT_TOP_N,
     source: str = "scheduler",
     engine: str = ENGINE_FACTOR,
+    notify_user_ids: list[int] | None = None,
 ) -> dict:
     """按指定引擎生成每日推荐并持久化（upsert）。
 
@@ -145,6 +147,27 @@ async def generate_daily_picks(
                 record_id = record.id
             # 回测数据源：逐票写入 pick_tracking（upsert）
             await _track_picks(db, trade_date_str, market, engine, picks)
+
+            # 通知中心联动：生成成功后向指定用户写入通知
+            if notify_user_ids:
+                try:
+                    source_label = "每日推荐已更新" if source == "scheduler" else "每日推荐已刷新"
+                    pick_str = "、".join(
+                        f"{p.get('name') or p.get('symbol_name')}({p.get('symbol')})"
+                        for p in picks[:5] if p.get("symbol")
+                    )
+                    content = f"今日推荐：{pick_str}" if pick_str else "今日推荐已生成，点击查看详情"
+                    for uid in notify_user_ids:
+                        db.add(Notification(
+                            user_id=uid,
+                            type="selection",
+                            title=source_label,
+                            content=content,
+                            channel="inbox",
+                        ))
+                    logger.info("[daily-picks] 通知中心联动: 写入 %d 条通知 (source=%s)", len(notify_user_ids), source)
+                except Exception:  # noqa: BLE001
+                    logger.exception("[daily-picks] 写入通知失败")
             await db.commit()
 
         logger.info("[daily-picks] 生成完成: engine=%s, %d 只 (record_id=%s)", engine, len(picks), record_id)
@@ -222,9 +245,15 @@ async def get_daily_picks(
     }
 
 
-async def refresh_daily_picks(market: str = DEFAULT_MARKET, top_n: int = DEFAULT_TOP_N, engine: str = ENGINE_COMMITTEE_LLM) -> dict:
+async def refresh_daily_picks(market: str = DEFAULT_MARKET, top_n: int = DEFAULT_TOP_N, engine: str = ENGINE_COMMITTEE_LLM, notify_user_id: int | None = None) -> dict:
     """用户手动刷新：强制重新生成当日推荐（默认 LLM 委员会引擎）。"""
-    return await generate_daily_picks(market=market, top_n=top_n, source="refresh", engine=engine)
+    return await generate_daily_picks(
+        market=market,
+        top_n=top_n,
+        source="refresh",
+        engine=engine,
+        notify_user_ids=[notify_user_id] if notify_user_id else None,
+    )
 
 
 async def _get_record(db: AsyncSession, trade_date: str, market: str, engine: str) -> DailyPick | None:

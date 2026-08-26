@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_scheduler_db_context as get_db_context
 from app.models.agent import UserAgent, AgentTrader, AgentSignal, AgentConfig, Notification
+from app.models.user import User
 from app.engine import signal_generator
 from app.engine.auto_executor import auto_execute_signals
 from app.engine.market_hours import is_any_market_hours
@@ -327,7 +328,20 @@ async def _maybe_generate_daily_picks():
                 logger.info("[daily-picks] 当日推荐已存在 (engine=%s)，跳过生成", engine)
                 continue
             logger.info("[daily-picks] 每日 8 点预生成开始 (engine=%s)", engine)
-            result = await generate_daily_picks(market="A", top_n=5, source="scheduler", engine=engine)
+            # 通知中心联动：仅 C 端默认展示引擎(committee_llm)生成成功后通知所有活跃用户
+            notify_user_ids = None
+            if engine == "committee_llm":
+                try:
+                    async with get_db_context() as n_db:
+                        rows = (await n_db.execute(
+                            select(User.id).where(User.is_active == True)  # noqa: E712
+                        )).scalars().all()
+                    notify_user_ids = list(rows)
+                    logger.info("[daily-picks] 待通知活跃用户 %d 人", len(notify_user_ids))
+                except Exception:  # noqa: BLE001
+                    logger.exception("[daily-picks] 查询活跃用户失败，跳过通知")
+                    notify_user_ids = None
+            result = await generate_daily_picks(market="A", top_n=5, source="scheduler", engine=engine, notify_user_ids=notify_user_ids)
             logger.info("[daily-picks] 预生成结果 (engine=%s): success=%s, picks=%d",
                         engine, result.get("success"), len(result.get("picks") or []))
         except Exception as exc:  # noqa: BLE001
