@@ -341,7 +341,7 @@ async def _maybe_generate_daily_picks():
                 except Exception:  # noqa: BLE001
                     logger.exception("[daily-picks] 查询活跃用户失败，跳过通知")
                     notify_user_ids = None
-            result = await generate_daily_picks(market="A", top_n=5, source="scheduler", engine=engine, notify_user_ids=notify_user_ids)
+            result = await generate_daily_picks(market="A", top_n=10, source="scheduler", engine=engine, notify_user_ids=notify_user_ids)
             logger.info("[daily-picks] 预生成结果 (engine=%s): success=%s, picks=%d",
                         engine, result.get("success"), len(result.get("picks") or []))
         except Exception as exc:  # noqa: BLE001

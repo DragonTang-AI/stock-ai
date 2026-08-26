@@ -29,7 +29,7 @@ from app.services.selection import recommend_stocks
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TOP_N = 5
+DEFAULT_TOP_N = 10
 DEFAULT_MARKET = "A"
 
 # 引擎标识
