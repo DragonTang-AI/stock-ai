@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 _TOP_CONFIDENCE_THRESHOLD = 70
 _HOLD_CONFIDENCE_THRESHOLD = 50
-_DEFAULT_TOP_N = 5
+_DEFAULT_TOP_N = 10
 _VALID_ACTIONS = {a.value for a in ActionType}
 _REASON_CODE_SET = set(REASON_CODE_VOCAB)  # 字符串集合，供 orchestrator 使用
 

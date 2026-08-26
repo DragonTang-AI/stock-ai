@@ -46,7 +46,7 @@ async def run_committee_analysis(
         limit=candidate_limit,
     )
 
-    effective_signal_limit = max(1, min(signal_limit, 5))
+    effective_signal_limit = max(1, min(signal_limit, 10))
 
     # Step 2: 4-Agent 管线（PrescreenCandidate → Signal）
     signals: list[Signal] = run_committee_graph(
