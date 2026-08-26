@@ -192,11 +192,19 @@
     </view>
 
     <!-- 持仓 Tab -->
-    <scroll-view v-if="activeTab === 'positions'" class="content" scroll-y>
+    <scroll-view
+      v-if="activeTab === 'positions'"
+      class="content"
+      scroll-y
+      refresher-enabled
+      :refresher-triggered="refreshing"
+      @refresherrefresh="onPullRefresh"
+    >
       <view v-if="positions.length === 0" class="empty-state">
         <text class="empty-icon">&#x1F4ED;</text>
         <text class="empty-text">暂无持仓</text>
         <text class="empty-sub">点击下方"交易"按钮开始模拟下单</text>
+        <button class="btn-go-selection" @click="goSelection">去选股</button>
       </view>
 
       <view v-else>
@@ -219,7 +227,10 @@
             <text class="pos-cost">成本 {{ formatMoney(pos.cost_price, 2) }}</text>
           </view>
           <view class="pos-right">
-            <text class="pos-pnl" :class="pos.profit >= 0 ? 'up' : 'down'">
+            <text
+              class="pos-pnl"
+              :class="[pos.profit >= 0 ? 'up' : 'down', pnlFlash[pos.symbol] || '']"
+            >
               {{ formatSigned(pos.profit, 2) }}
             </text>
             <text class="pos-qty">{{ pos.quantity }}股 / 可卖{{ pos.available }}</text>
@@ -613,6 +624,8 @@ const isLoading = ref(false)
 const submitting = ref(false)
 const account = ref<AccountInfo | null>(null)
 const positions = ref<PositionItem[]>([])
+const refreshing = ref(false)
+const pnlFlash = ref<Record<string, string>>({})
 const orders = ref<OrderItem[]>([])
 const ordersPage = ref(1)
 const ordersTotal = ref(0)
@@ -1077,8 +1090,35 @@ async function switchMarket(market: string) {
 async function refreshAll() {
   touchRefreshKey('portfolio')
   isLoading.value = true
+  // 盈亏动画：快照旧值，加载后对比
+  const prevMap = new Map<string, number>()
+  positions.value.forEach(p => prevMap.set(p.symbol, p.profit ?? 0))
   await Promise.all([loadAccount(), loadPositions(), loadAnalytics()])
+  const flash: Record<string, string> = {}
+  positions.value.forEach(p => {
+    const prev = prevMap.get(p.symbol)
+    const cur = p.profit ?? 0
+    if (prev !== undefined && cur !== prev) {
+      flash[p.symbol] = cur > prev ? 'flash-up' : 'flash-down'
+    }
+  })
+  pnlFlash.value = flash
+  if (Object.keys(flash).length > 0) {
+    setTimeout(() => { pnlFlash.value = {} }, 2000)
+  }
   isLoading.value = false
+}
+
+// 下拉刷新
+async function onPullRefresh() {
+  refreshing.value = true
+  await refreshAll()
+  refreshing.value = false
+}
+
+// 空持仓引导 → 去选股
+function goSelection() {
+  uni.switchTab({ url: '/pages/selection/index' })
 }
 
 async function handleTopup() {
@@ -1200,6 +1240,12 @@ onShow(() => {
   border: none; padding: 8rpx 20rpx; border-radius: 20rpx;
   &::after { border: none; }
 }
+.btn-go-selection {
+  margin-top: 24rpx; font-size: $font-size-sm; color: #fff;
+  background: linear-gradient(135deg, #F59E0B, #F97316);
+  border: none; padding: 12rpx 40rpx; border-radius: 32rpx; font-weight: 600;
+  &::after { border: none; }
+}
 .btn-topup {
   font-size: $font-size-xs; color: #fff; background: linear-gradient(135deg, #F59E0B, #F97316);
   border: none; padding: 8rpx 20rpx; border-radius: 20rpx; font-weight: 600;
@@ -1268,6 +1314,16 @@ onShow(() => {
 .pos-right { text-align: right; flex-shrink: 0; }
 .pos-pnl { font-size: $font-size-lg; font-weight: 700;
   &.up { color: $color-up; } &.down { color: $color-down; }
+  &.flash-up { animation: pnl-flash-up 1.2s ease-out; }
+  &.flash-down { animation: pnl-flash-down 1.2s ease-out; }
+}
+@keyframes pnl-flash-up {
+  0% { transform: scale(1.35); color: #FFB020; }
+  100% { transform: scale(1); }
+}
+@keyframes pnl-flash-down {
+  0% { transform: scale(1.35); color: #4FD8A0; }
+  100% { transform: scale(1); }
 }
 .pos-qty { font-size: $font-size-xs; color: $text-hint; display: block; margin-top: 4rpx; }
 
