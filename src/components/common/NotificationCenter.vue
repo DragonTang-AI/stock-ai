@@ -130,7 +130,11 @@ async function handleClick(item: NotificationItem) {
       item.read = true
     } catch { /* 静默失败 */ }
   }
-  // 跳转逻辑
+  // 跳转逻辑：每日推荐通知 → 选股页（tabBar 用 switchTab）
+  if (item.type === 'selection') {
+    uni.switchTab({ url: '/pages/selection/index' })
+    return
+  }
   if (item.data?.url) {
     uni.navigateTo({ url: item.data.url })
   }
