@@ -126,7 +126,7 @@ export function fetchDailyPicks(engine: string = 'committee_llm'): Promise<Commi
 export function refreshDailyPicks(engine: string = 'committee_llm'): Promise<CommitteeResult[]> {
   return request<any>('/selection/daily-picks/refresh', {
     method: 'POST',
-    params: { market: 'A', top_n: 5, engine },
+    params: { market: 'A', top_n: 10, engine },
   }).then(res => {
     const raw = res?.data || res?.picks || res || []
     const list = Array.isArray(raw) ? raw : raw.items || raw.results || []
