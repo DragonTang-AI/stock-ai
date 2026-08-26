@@ -70,10 +70,8 @@
 
     <!-- 搜索中状态 -->
     <view v-if="query" class="search-results">
-      <!-- 加载中 -->
-      <view v-if="loading" class="result-state">
-        <text class="result-state-text">搜索中...</text>
-      </view>
+      <!-- 加载中：骨架屏 -->
+      <SkeletonScreen v-if="loading" type="list" :count="6" />
 
       <!-- 有结果 -->
       <view v-else-if="results.length > 0" class="result-list">
@@ -128,6 +126,7 @@ import { ref, onMounted } from 'vue'
 import { searchStocks, type SearchResult } from '@/api/market'
 import { fetchQuotes } from '@/api/market'
 import { formatMoney, formatPercent } from '@/utils/format'
+import SkeletonScreen from '@/components/common/SkeletonScreen.vue'
 
 const HISTORY_KEY = 'ai-stock:search-history'
 const MAX_HISTORY = 10

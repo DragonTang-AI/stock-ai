@@ -939,15 +939,15 @@ async function confirmSubmitOrder() {
   } catch (e: any) {
     const code = e.errorCode || ''
     if (code === 'INSUFFICIENT_BALANCE') {
-      uni.showToast({ title: '余额不足，买不起', icon: 'none', duration: 2500 })
+      uni.showToast({ title: '余额不足，买不起', icon: 'none', duration: 2000 })
     } else if (code === 'INSUFFICIENT_AVAILABLE') {
-      uni.showToast({ title: 'T+1 限制：今天买的明天才能卖', icon: 'none', duration: 2500 })
+      uni.showToast({ title: 'T+1 限制：今天买的明天才能卖', icon: 'none', duration: 2000 })
     } else if (code === 'NO_POSITION') {
       uni.showToast({ title: '未持有该股票', icon: 'none' })
     } else if (code === 'SYMBOL_NOT_FOUND') {
       uni.showToast({ title: '股票代码不存在', icon: 'none' })
     } else {
-      uni.showToast({ title: e.detail || e.message || '下单失败', icon: 'none', duration: 2500 })
+      uni.showToast({ title: e.detail || e.message || '下单失败', icon: 'none', duration: 2000 })
     }
   } finally {
     submitting.value = false
@@ -1126,7 +1126,7 @@ async function handleTopup() {
   topupSubmitting.value = true
   try {
     const res = await topupAccount(topupAmount.value, activeMarket.value)
-    uni.showToast({ title: res.message || '充值成功', icon: 'success', duration: 2000 })
+    uni.showToast({ title: res.message || '充值成功', icon: 'success' })
     uni.vibrateShort({ type: 'medium' })
     showTopupModal.value = false
     await loadAccount()

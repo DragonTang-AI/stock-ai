@@ -510,7 +510,7 @@ async function handlePlaceOrder() {
   } catch (e: any) {
     const msg = getTradeErrorMessage(e)
     tradeError.value = msg
-    uni.showToast({ title: msg, icon: 'none', duration: 3500 })
+    uni.showToast({ title: msg, icon: 'none', duration: 2000 })
   } finally {
     tradeSubmitting.value = false
   }
