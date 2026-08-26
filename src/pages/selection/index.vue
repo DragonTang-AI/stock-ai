@@ -45,6 +45,14 @@
     </button>
   </view>
 
+  <!-- AI 委员会选股：预生成缓存直读 + 手动刷新 -->
+  <view v-if="activeTab === 'committee' && !loading" class="daily-toolbar">
+    <view class="daily-toolbar-title">AI 委员会选股（每日预生成列表）</view>
+    <button class="btn-refresh" :disabled="committeeRefreshing" @click="handleRefreshCommittee">
+      {{ committeeRefreshing ? '刷新中...' : '刷新' }}
+    </button>
+  </view>
+
   <!-- 每日推荐：空状态 -->
   <view v-if="activeTab === 'daily' && !dailyLoading && !dailyError && dailyResults.length === 0" class="state-view">
     <text class="state-text">当日推荐尚未生成</text>
@@ -130,8 +138,8 @@
 
     <!-- 委员会：空状态 -->
     <view v-if="activeTab !== 'daily' && !loading && !error && results.length === 0" class="state-view">
-      <text class="state-text">暂无选股结果</text>
-      <text class="state-hint">每日收盘后 AI 委员会将自动生成分析</text>
+      <text class="state-text">当日推荐尚未生成</text>
+      <text class="state-hint">每日收盘后 AI 引擎自动预生成，也可点击上方「刷新」立即生成</text>
     </view>
 
     <!-- 委员会：错误 -->
@@ -151,7 +159,6 @@ import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
 import { trackPageView, trackAction } from '@/utils/tracker'
 import { formatPercent } from '@/utils/format'
 import {
-  fetchCommitteeResults,
   fetchDailyPicks,
   refreshDailyPicks,
   addToWatchlist,
@@ -206,6 +213,23 @@ async function loadDailyPicks() {
     dailyError.value = e?.message || '加载失败'
   } finally {
     dailyLoading.value = false
+  }
+}
+
+const committeeRefreshing = ref(false)
+
+async function handleRefreshCommittee() {
+  if (committeeRefreshing.value) return
+  committeeRefreshing.value = true
+  error.value = ''
+  try {
+    results.value = await refreshDailyPicks('committee_llm')
+    uni.showToast({ title: '已刷新', icon: 'success' })
+  } catch (e: any) {
+    error.value = e?.message || '刷新失败'
+    uni.showToast({ title: '刷新失败', icon: 'none' })
+  } finally {
+    committeeRefreshing.value = false
   }
 }
 
@@ -285,7 +309,8 @@ async function loadResults() {
   loading.value = true
   error.value = ''
   try {
-    results.value = await fetchCommitteeResults()
+    // 默认直读每日预生成列表（committee_llm），秒出；手动刷新才触发重新生成
+    results.value = await fetchDailyPicks('committee_llm')
   } catch (e: any) {
     error.value = e?.message || '加载失败'
   } finally {
