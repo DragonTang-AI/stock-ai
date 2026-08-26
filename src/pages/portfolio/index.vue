@@ -1596,7 +1596,6 @@ onShow(() => {
   font-size: 26rpx;
   color: var(--color-primary, #4A90E2);
 }
-</style>
 /* Topup Modal */
 .topup-modal-mask {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -1642,3 +1641,4 @@ onShow(() => {
   &::after { border: none; }
   &[disabled] { opacity: 0.5; }
 }
+</style>
