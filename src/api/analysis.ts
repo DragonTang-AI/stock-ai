@@ -59,18 +59,19 @@ export function fetchStatistics(): Promise<StatisticsData> {
   )
 }
 
-/** 获取收益率曲线 → /portfolio/analytics */
+/** 获取收益率曲线 → /portfolio/equity_curve */
 export function fetchEquityCurve(period: string): Promise<EquityCurveData> {
   return cachedRequest(
-    'analysis:equityCurve',
-    () => request<any>('/portfolio/analytics', {
+    'analysis:equityCurve:v2',
+    () => request<any>('/portfolio/equity_curve', {
       method: 'GET',
       params: { period },
     }).then(res => {
       const d = res?.data || res || {}
-      const dates = d.dates || d.equity_curve?.map((p: any) => p.date) || []
-      const equity = d.equity || d.equity_curve?.map((p: any) => p.value) || []
-      const benchmark = d.benchmark || d.equity_curve?.map((p: any) => p.benchmark)
+      const list = Array.isArray(d) ? d : (d.points || d.equity_curve || [])
+      const dates = list.map((p: any) => p.date)
+      const equity = list.map((p: any) => p.equity)
+      const benchmark = list.map((p: any) => p.benchmark)
       return {
         dates,
         equity,
@@ -82,16 +83,16 @@ export function fetchEquityCurve(period: string): Promise<EquityCurveData> {
   )
 }
 
-/** 获取归因分析 → /portfolio/analytics */
+/** 获取归因分析 → /portfolio/attribution */
 export function fetchAttribution(period: string): Promise<{ items: AttributionItem[] }> {
   return cachedRequest(
-    'analysis:attribution',
-    () => request<any>('/portfolio/analytics', {
+    'analysis:attribution:v2',
+    () => request<any>('/portfolio/attribution', {
       method: 'GET',
       params: { period },
     }).then(res => {
       const d = res?.data || res || {}
-      const raw = d.attribution || d.items || []
+      const raw = Array.isArray(d) ? d : (d.attribution || d.items || [])
       return {
         items: raw.map((item: any) => ({
           label: item.label || item.name || '',
