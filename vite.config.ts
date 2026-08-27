@@ -8,7 +8,10 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, 'src'),
       '@antv/f2': resolve(__dirname, 'node_modules/@antv/f2/lib/index.js'),
-    },
+      '@antv/util/lib/type/is-array': resolve(__dirname, 'node_modules/@antv/util/lib/is-array.js'),
+      '@antv/util/lib/type/is-nil': resolve(__dirname, 'node_modules/@antv/util/lib/is-nil.js'),
+      '@antv/util/lib/array/merge': resolve(__dirname, 'node_modules/@antv/util/lib/merge.js'),
+      '@antv/util/lib/math/max-by': resolve(__dirname, 'node_modules/@antv/util/lib/max-by.js'),    },
   },
   server: {
     port: 5173,
