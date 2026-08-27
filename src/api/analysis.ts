@@ -21,11 +21,11 @@ export interface EquityCurveData {
   dates: string[]; equity: number[]; benchmark?: number[]
 }
 
-/** 获取看板概览 → /portfolio/analytics */
+/** 获取看板概览 → /portfolio/summary */
 export function fetchDashboardSummary(): Promise<DashboardSummary> {
   return cachedRequest(
-    'analysis:dashboardSummary',
-    () => request<any>('/portfolio/analytics', { method: 'GET' })
+    'analysis:dashboardSummary:v2',
+    () => request<any>('/portfolio/summary', { method: 'GET' })
       .then(res => {
         const d = res?.data || res || {}
         return {
@@ -40,11 +40,11 @@ export function fetchDashboardSummary(): Promise<DashboardSummary> {
   )
 }
 
-/** 获取统计指标 → /portfolio/analytics */
+/** 获取统计指标 → /portfolio/statistics */
 export function fetchStatistics(): Promise<StatisticsData> {
   return cachedRequest(
-    'analysis:statistics',
-    () => request<any>('/portfolio/analytics', { method: 'GET' })
+    'analysis:statistics:v2',
+    () => request<any>('/portfolio/statistics', { method: 'GET' })
       .then(res => {
         const d = res?.data || res || {}
         return {
