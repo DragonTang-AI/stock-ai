@@ -348,7 +348,7 @@ function goDetail(code: string) {
 
 onMounted(() => {
   fetchMarketData('A')
-  pollTimer = setInterval(() => fetchMarketData(currentMarket.value), 30000)
+  pollTimer = setInterval(() => fetchMarketData(activeMarket.value), 30000)
 })
 
 onUnmounted(() => {
