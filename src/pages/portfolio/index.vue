@@ -757,7 +757,7 @@ function isHKMarketHours(): boolean {
 /** 根据当前市场判断交易时段 */
 function isCurrentMarketHours(): boolean {
   if (activeMarket.value === 'HK') return isHKMarketHours()
-  return isCurrentMarketHours()
+  return isMarketHours()
 }
 
 // ─── 交易面板逻辑 ───
