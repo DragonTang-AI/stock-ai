@@ -573,9 +573,11 @@
       </view>
     </view>
   </view>
-</template>
-
-<script setup lang="ts">
+  <!-- #ifdef H5 -->
+  <CustomTabBar current="/pages/portfolio/index" />
+  <!-- #endif -->
+</template><script setup lang="ts">
+import CustomTabBar from '@/components/common/CustomTabBar.vue'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { trackPageView } from '@/utils/tracker'
@@ -1168,7 +1170,7 @@ onShow(() => {
 
 </script>
 <style lang="scss" scoped>
-.portfolio-page { min-height: 100vh; background: $bg-page; padding-bottom: env(safe-area-inset-bottom); }
+.portfolio-page { min-height: 100vh; background: $bg-page; padding-bottom: calc(160rpx + env(safe-area-inset-bottom)); }
 
 /* Offline Banner */
 .offline-banner {

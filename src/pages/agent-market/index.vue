@@ -95,9 +95,13 @@
       <text class="arrow">&gt;</text>
     </view>
   </view>
+  <!-- #ifdef H5 -->
+  <CustomTabBar current="/pages/agent-market/index" />
+  <!-- #endif -->
 </template>
 
 <script setup lang="ts">
+import CustomTabBar from '@/components/common/CustomTabBar.vue'
 import { ref, onMounted, onUnmounted } from 'vue'
 import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'

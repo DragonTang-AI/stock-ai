@@ -157,9 +157,13 @@
 
     <Disclaimer />
   </view>
+  <!-- #ifdef H5 -->
+  <CustomTabBar current="/pages/market/index" />
+  <!-- #endif -->
 </template>
 
 <script setup lang="ts">
+import CustomTabBar from '@/components/common/CustomTabBar.vue'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
 import ErrorPage from '@/components/common/ErrorPage.vue'
@@ -359,6 +363,7 @@ onUnmounted(() => {
 .market-page {
   min-height: 100vh;
   background: var(--bg-page, #f5f5f7);
+  padding-bottom: calc(160rpx + env(safe-area-inset-bottom));
 }
 
 .market-content {

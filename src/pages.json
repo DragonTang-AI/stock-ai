@@ -270,6 +270,9 @@
     }
   },
   "tabBar": {
+    // #ifdef H5
+    "custom": true,
+    // #endif
     "color": "#999999",
     "selectedColor": "#4A90E2",
     "borderStyle": "black",
@@ -285,8 +288,8 @@
       {
         "pagePath": "pages/agent-market/index",
         "text": "交易员",
-        "iconPath": "static/tabbar/selection.png",
-        "selectedIconPath": "static/tabbar/selection-active.png"
+        "iconPath": "static/tabbar/agent-market.png",
+        "selectedIconPath": "static/tabbar/agent-market-active.png"
       },
       {
         "pagePath": "pages/selection/index",

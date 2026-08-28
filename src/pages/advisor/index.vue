@@ -180,9 +180,11 @@
       </view>
     </view>
   </view>
-</template>
-
-<script setup lang="ts">
+  <!-- #ifdef H5 -->
+  <CustomTabBar current="/pages/advisor/index" />
+  <!-- #endif -->
+</template><script setup lang="ts">
+import CustomTabBar from '@/components/common/CustomTabBar.vue'
 import { ref, nextTick, onMounted } from 'vue'
 import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
 import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
@@ -304,7 +306,7 @@ onPullDownRefresh(async () => {
 </script>
 
 <style lang="scss" scoped>
-.advisor-page { min-height: 100vh; background: $bg-page; padding-bottom: calc(120rpx + env(safe-area-inset-bottom)); }
+.advisor-page { min-height: 100vh; background: $bg-page; padding-bottom: calc(160rpx + env(safe-area-inset-bottom)); }
 
 /* ===== 诊断面板样式（保留原有） ===== */
 .temperature-bar {

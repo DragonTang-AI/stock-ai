@@ -149,9 +149,13 @@
     </view>
   </view>
   <Disclaimer />
+  <!-- #ifdef H5 -->
+  <CustomTabBar current="/pages/selection/index" />
+  <!-- #endif -->
 </template>
 
 <script setup lang="ts">
+import CustomTabBar from '@/components/common/CustomTabBar.vue'
 import Disclaimer from '@/components/compliance/Disclaimer.vue'
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
@@ -401,6 +405,8 @@ onShow(() => {
 
 <style lang="scss" scoped>
 .selection-page {
+  min-height: 100vh;
+  padding-bottom: calc(160rpx + env(safe-area-inset-bottom));
 .page-tabs {
   display: flex;
   margin: 16rpx 24rpx;

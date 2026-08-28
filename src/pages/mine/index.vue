@@ -92,9 +92,11 @@
     </view>
     </view>
   </view>
-</template>
-
-<script setup lang="ts">
+  <!-- #ifdef H5 -->
+  <CustomTabBar current="/pages/mine/index" />
+  <!-- #endif -->
+</template><script setup lang="ts">
+import CustomTabBar from '@/components/common/CustomTabBar.vue'
 import { computed, onMounted, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import SkeletonScreen from '@/components/common/SkeletonScreen.vue'
@@ -179,7 +181,7 @@ async function handleLogout() {
 .mine-page {
   min-height: 100vh;
   background: $bg-page;
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: calc(160rpx + env(safe-area-inset-bottom));
 }
 
 .user-card {
