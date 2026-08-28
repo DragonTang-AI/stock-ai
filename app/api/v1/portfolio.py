@@ -38,7 +38,7 @@ from app.schemas.trading import (
     StatisticsResponse,
 )
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, timezone
 from app.services.trading import (
     get_account_info,
     get_positions_summary,
@@ -293,23 +293,70 @@ async def get_dashboard_summary(
     from app.services.trading import INITIAL_BALANCE, get_or_create_account, get_positions
     account = await get_or_create_account(db, current_user)
     positions = await get_positions(db, current_user)
-    
+
     total_market_value = sum(p.market_value for p in positions)
     total_equity = float(account.balance) + total_market_value
-    total_return = round(total_equity - INITIAL_BALANCE, 2)
-    total_return_pct = round(total_return / INITIAL_BALANCE * 100, 4) if INITIAL_BALANCE > 0 else 0
-    
+    total_deposited = float(account.total_deposited) if account.total_deposited else INITIAL_BALANCE
+    total_return = round(total_equity - total_deposited, 2)
+    total_return_pct = round(total_return / total_deposited * 100, 4) if total_deposited > 0 else 0
+
+    # 年化收益：按账户创建天数年化
+    annualized_return = total_return_pct
+    if account.created_at:
+        days = max((datetime.now(timezone.utc) - account.created_at).days, 1)
+        annualized_return = round(total_return_pct / days * 365, 4)
+
     winning = [p for p in positions if p.profit > 0]
     win_rate = round(len(winning) / len(positions) * 100, 2) if positions else 0
-    
+
+    # 基于每日资产快照计算夏普比率与最大回撤（与 /statistics 同口径）
+    from sqlalchemy import select as _sel
+    from app.models.trading import EquitySnapshot
+    snap_rows = (await db.execute(
+        _sel(EquitySnapshot)
+        .where(EquitySnapshot.user_id == current_user.id)
+        .order_by(EquitySnapshot.snapshot_date)
+    )).scalars().all()
+
+    equity_seq = [float(s.total_equity) for s in snap_rows]
+    equity_seq.append(total_equity)
+
+    sharpe = 0.0
+    max_drawdown = 0.0
+    if len(equity_seq) >= 3:
+        # 日收益率序列（简单相邻比）
+        daily_rets = []
+        for i in range(1, len(equity_seq)):
+            prev = equity_seq[i - 1]
+            if prev > 0:
+                daily_rets.append(equity_seq[i] / prev - 1.0)
+        if daily_rets:
+            n = len(daily_rets)
+            mean_r = sum(daily_rets) / n
+            var_r = sum((r - mean_r) ** 2 for r in daily_rets) / n
+            std_r = var_r ** 0.5
+            if std_r > 1e-12:
+                # 年化：A股约 250 交易日
+                sharpe = round((mean_r / std_r) * (250 ** 0.5), 4)
+            # 最大回撤：峰值回撤的最大值（百分比）
+            peak = equity_seq[0]
+            for v in equity_seq:
+                if v > peak:
+                    peak = v
+                if peak > 0:
+                    dd = (peak - v) / peak * 100.0
+                    if dd > max_drawdown:
+                        max_drawdown = dd
+            max_drawdown = round(max_drawdown, 4)
+
     return {
         "success": True,
         "data": {
             "totalReturn": total_return_pct,
-            "annualizedReturn": total_return_pct,
+            "annualizedReturn": annualized_return,
             "beatBenchmark": 0,
-            "sharpeRatio": 0,
-            "maxDrawdown": 0,
+            "sharpeRatio": sharpe,
+            "maxDrawdown": max_drawdown,
             "winRate": win_rate,
         },
     }
