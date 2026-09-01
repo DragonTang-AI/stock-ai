@@ -59,6 +59,7 @@ async def analyze(
     model_name: str = DEFAULT_MODEL_NAME,
     model_provider: str = DEFAULT_MODEL_PROVIDER,
     timeout: int | None = None,
+    portfolio_override: dict | None = None,
 ) -> dict[str, Any]:
     """
     调用 ai-hedge-fund 分析一组股票
@@ -114,6 +115,15 @@ async def analyze(
                 t: {"long": 0.0, "short": 0.0} for t in tickers
             },
         }
+        if portfolio_override:
+            # P2-04: 注入真实持仓与现金，大师组合基于持仓决策加/减仓
+            if portfolio_override.get("positions"):
+                merged_pos = dict(portfolio["positions"])
+                merged_pos.update(portfolio_override["positions"])
+                portfolio["positions"] = merged_pos
+            for k in ("cash", "equity", "margin_requirement", "margin_used"):
+                if k in portfolio_override:
+                    portfolio[k] = float(portfolio_override[k])
 
         end_date = date.today().strftime("%Y-%m-%d")
         start_date = (date.today() - timedelta(days=90)).strftime("%Y-%m-%d")

@@ -284,10 +284,34 @@ async def _generate_real_signals(
     errors = []
 
     try:
+        # P2-04: 读取真实持仓，注入分析链路 → 大师组合基于持仓决策加/减仓
+        from app.engine.risk_manager import _get_current_positions
+        positions_raw = await _get_current_positions(db, hire_id)
+        positions: dict[str, dict[str, Any]] = {}
+        held_value = 0.0
+        for sym, p in positions_raw.items():
+            qty = int(p.get("quantity") or 0)
+            cost = float(p.get("cost_price") or 0)
+            positions[sym] = {
+                "long": qty,
+                "short": 0,
+                "long_cost_basis": cost,
+                "short_cost_basis": 0.0,
+                "short_margin_used": 0.0,
+            }
+            held_value += qty * cost
+        portfolio_override = {
+            "cash": max(0.0, total_capital - held_value),
+            "equity": total_capital,
+            "positions": positions,
+        }
+        logger.info("P2-04 持仓注入 hire=%s positions=%d cash=%.2f equity=%.2f", hire_id, len(positions), portfolio_override["cash"], total_capital)
+
         # 调用 ai-hedge-fund 分析
         result = await hedge_fund_client.analyze(
             tickers=tickers,
             agents=agents,
+            portfolio_override=portfolio_override,
         )
 
         if not result["success"]:
