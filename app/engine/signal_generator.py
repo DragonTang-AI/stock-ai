@@ -94,21 +94,88 @@ async def generate_signals(
     agent_config = await get_agent_config(db, hire_id)
     ticker_limit = agent_config.analyze_ticker_limit if agent_config and agent_config.analyze_ticker_limit is not None else CONFIG_DEFAULTS.get("analyze_ticker_limit", 10)
 
-    # 3. 获取股票池（A+H 混合，各至少留 2 只给分析引擎）
-    stock_list = await market_data.get_stock_list(db, limit=ticker_limit)
-    _a_stocks = [s for s in stock_list if not _is_hk_symbol(s["symbol"])]
-    _h_stocks = [s for s in stock_list if _is_hk_symbol(s["symbol"])]
+    # 3. 动态股票池（P2-03 整改：接腾讯行情接口）
+    # 3.1 读取人格偏好与风控过滤参数（agent_configs，回退 hire）
+    style = str(getattr(agent_config, "trading_style", None) or getattr(hire, "trading_style", None) or "steady")
+    exclude_st = bool(getattr(agent_config, "exclude_st", getattr(hire, "exclude_st", True)))
+    min_avg_amount = float(getattr(agent_config, "min_avg_amount", None) or getattr(hire, "min_avg_amount", None) or 0)
+    mcap_min = getattr(agent_config, "market_cap_min", None)
+    if mcap_min is None:
+        mcap_min = getattr(hire, "market_cap_min", None)
+    mcap_max = getattr(agent_config, "market_cap_max", None)
+    if mcap_max is None:
+        mcap_max = getattr(hire, "market_cap_max", None)
+    mcap_min = float(mcap_min) if mcap_min is not None else None
+    mcap_max = float(mcap_max) if mcap_max is not None else None
+    cfg_markets = getattr(agent_config, "markets", None)
+    hire_markets = cfg_markets if cfg_markets else (getattr(hire, "markets", None) or [])
+    markets: list[str] = []
+    for m in (hire_markets if isinstance(hire_markets, (list, dict)) else []):
+        if isinstance(m, dict):
+            m = m.get("name") or m.get("market") or ""
+        markets.append("HK" if "港" in str(m) else "A")
+    if not markets:
+        markets = ["A", "HK"]
+
+    # 3.2 拉取动态候选（A 股腾讯排行，港股腾讯行情池），失败 fallback 静态池
+    a_candidates: list[dict[str, Any]] = []
+    h_candidates: list[dict[str, str]] = []
+    pool_source = "static"
+    try:
+        if "A" in markets:
+            a_candidates = await market_data.fetch_tencent_rank_quotes(
+                count=max(ticker_limit * 4, 40)
+            )
+        if "HK" in markets:
+            try:
+                from app.integrations.market_data.tencent import fetch_hk_ranking
+                hk_quotes = await fetch_hk_ranking(limit=max(ticker_limit * 2, 20))
+                h_candidates = [{"symbol": q.symbol, "name": q.name} for q in hk_quotes if getattr(q, "symbol", None)]
+            except Exception:
+                h_candidates = []
+            if not h_candidates:
+                h_candidates = list(market_data.HK_STOCK_POOL)
+        pool_source = "dynamic" if (a_candidates or h_candidates) else "static"
+    except Exception:
+        logger.exception("腾讯动态池获取异常")
+
+    # 3.3 A 股：过滤 + 人格风格排序（trading_style 参与选股）
+    a_filtered: list[dict[str, str]] = []
+    for q in a_candidates:
+        name = str(q.get("name", ""))
+        if exclude_st and ("ST" in name.upper() or "退" in name):
+            continue
+        if min_avg_amount > 0 and float(q.get("amount") or 0) < min_avg_amount:
+            continue
+        if mcap_min is not None and float(q.get("market_cap") or 0) < mcap_min:
+            continue
+        if mcap_max is not None and float(q.get("market_cap") or 0) > mcap_max:
+            continue
+        a_filtered.append({"symbol": str(q["symbol"]), "name": name})
+    a_filtered = _rank_by_style(a_candidates, a_filtered, style)
+    if not a_filtered and "A" in markets:
+        a_filtered = [s for s in market_data.HOT_A_STOCKS if not (exclude_st and ("ST" in s["name"].upper() or "退" in s["name"]))]
+
+    # 3.4 限制抽样：人格筛选后从候选中随机抽样，避免固定取前5只
+    sample_n = min(5, max(1, ticker_limit))
     tickers: list[str] = []
     ticker_map: dict[str, str] = {}
-    for i in range(min(5, len(stock_list))):
-        if _a_stocks and (i % 3 != 2 or not _h_stocks):
-            s = _a_stocks.pop(0)
-        elif _h_stocks:
-            s = _h_stocks.pop(0)
-        else:
-            s = _a_stocks.pop(0)
-        tickers.append(s["symbol"])
-        ticker_map[s["symbol"]] = s["name"]
+    if "HK" in markets and h_candidates:
+        hk_n = min(len(h_candidates), max(1, sample_n // 3))
+        hk_pick = random.sample(h_candidates, hk_n)
+        a_n = min(len(a_filtered), sample_n - hk_n)
+        a_pick = random.sample(a_filtered, a_n) if a_n > 0 else []
+        for s in a_pick + hk_pick:
+            tickers.append(s["symbol"])
+            ticker_map[s["symbol"]] = s["name"]
+    elif a_filtered:
+        a_n = min(len(a_filtered), sample_n)
+        for s in random.sample(a_filtered, a_n):
+            tickers.append(s["symbol"])
+            ticker_map[s["symbol"]] = s["name"]
+
+    if not tickers:
+        return {"signals": [], "source": "mock", "rejected_count": 0, "error": "动态池为空，无候选股票"}
 
     # P1: 风控总资金（config 已在前面获取）
     total_capital = (
@@ -132,6 +199,46 @@ async def generate_signals(
         return await _generate_mock_signals(
             db, hire_id, user_id, trader.id, tickers, ticker_map, total_capital, agent_config=agent_config
         )
+
+
+def _rank_by_style(
+    candidates: list[dict[str, Any]],
+    filtered: list[dict[str, str]],
+    style: str,
+) -> list[dict[str, str]]:
+    """
+    按交易人格（trading_style）对动态候选排序：
+    - aggressive  激进：动量优先（涨幅/换手率）
+    - value       价值：低 PE（剔除亏损）优先
+    - steady      稳健：大盘蓝筹（市值大、波动温和）优先
+    - growth      成长：中高涨幅 + 成交活跃
+    - balanced    均衡：维持腾讯默认成交额排序
+    只对 filtered 中的股票排序，返回排好序的 symbol/name 列表。
+    """
+    if not filtered:
+        return filtered
+    q_by_symbol = {q.get("symbol"): q for q in candidates}
+
+    def getf(sym: str, key: str, default: float = 0.0) -> float:
+        try:
+            return float((q_by_symbol.get(sym) or {}).get(key, default) or default)
+        except (TypeError, ValueError):
+            return default
+
+    style = (style or "balanced").lower()
+    if style == "aggressive":
+        filtered = sorted(filtered, key=lambda s: getf(s["symbol"], "change_pct"), reverse=True)
+    elif style == "value":
+        def pe_key(s):
+            pe = getf(s["symbol"], "pe_ttm")
+            return (1, pe) if pe > 0 else (2, 999999.0)   # 正 PE 优先，其次绝对值小
+        filtered = sorted(filtered, key=pe_key)
+    elif style == "steady":
+        filtered = sorted(filtered, key=lambda s: getf(s["symbol"], "market_cap"), reverse=True)
+    elif style == "growth":
+        filtered = sorted(filtered, key=lambda s: (getf(s["symbol"], "change_pct", -10) * 0.6 + getf(s["symbol"], "turnover_rate") * 0.4), reverse=True)
+    # balanced / 其它：保持腾讯成交额排序
+    return filtered
 
 
 def _is_hk_symbol(symbol: str) -> bool:

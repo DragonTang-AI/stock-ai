@@ -12,10 +12,14 @@ from datetime import date, datetime
 from typing import Any
 
 import httpx
+import logging
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import time
 from app.core.database import get_db
+
+logger = logging.getLogger(__name__)
 
 
 # ── 热门 A 股股票池（Phase 2 原有的 + 扩展）──
@@ -83,6 +87,136 @@ async def get_stock_list(db: AsyncSession, limit: int = 10, markets: list[str] |
         a_size = (limit + 1) // 2
         hk_size = limit - a_size
         return HOT_A_STOCKS[:a_size] + HK_STOCK_POOL[:hk_size]
+    return pool[:limit]
+
+
+# ── 腾讯行情动态股票池（P2-03 整改：接腾讯行情接口）──
+
+_TENCENT_RANK_URL = "https://proxy.finance.qq.com/cgi/cgi-bin/rank/hs/getBoardRankList"
+_tencent_rank_cache: dict[str, Any] = {"data": [], "ts": 0.0}
+_TENCENT_RANK_TTL = 60.0  # 60s 缓存，避免频繁请求
+
+
+async def fetch_tencent_rank_quotes(count: int = 100) -> list[dict[str, Any]]:
+    """
+    腾讯 getBoardRankList 获取全市场 A 股实时排行（按成交额倒序）。
+
+    返回列表项字段：
+        symbol / name / price / change_pct / volume / amount(元) /
+        pe_ttm / market_cap(元) / float_market_cap(元) / turnover_rate(%)
+    接口失败返回 []，由调用方决定 fallback。
+    """
+    now = time.time()
+    if now - _tencent_rank_cache["ts"] < _TENCENT_RANK_TTL and _tencent_rank_cache["data"]:
+        return _tencent_rank_cache["data"][:count]
+
+    url = f"{_TENCENT_RANK_URL}?board_code=aStock&sort_type=volume&direct=down&offset=0&count={count}"
+    headers = {"Referer": "https://gu.qq.com/", "User-Agent": "Mozilla/5.0"}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(url, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+        rank_list = (data.get("data") or {}).get("rank_list") or []
+        quotes: list[dict[str, Any]] = []
+        for r in rank_list:
+            code = r.get("code", "")
+            if not code.startswith(("sh", "sz")):
+                continue
+            symbol = code[2:]
+            try:
+                price = float(r.get("zxj") or 0)
+                change_pct = float(r.get("zdf") or 0)
+                volume = float(r.get("volume") or 0)
+                amount_wan = float(r.get("turnover") or 0)      # 成交额(万)
+                pe_ttm = float(r.get("pe_ttm") or 0)
+                mcap_yi = float(r.get("zsz") or 0)              # 总市值(亿)
+                fmcap_yi = float(r.get("ltsz") or 0)            # 流通市值(亿)
+                hsl = float(r.get("hsl") or 0)                  # 换手率(%)
+            except (TypeError, ValueError):
+                continue
+            quotes.append({
+                "symbol": symbol,
+                "name": r.get("name", symbol),
+                "price": price,
+                "change_pct": change_pct,
+                "volume": volume,
+                "amount": amount_wan * 10000,
+                "pe_ttm": pe_ttm,
+                "market_cap": mcap_yi * 1e8,
+                "float_market_cap": fmcap_yi * 1e8,
+                "turnover_rate": hsl,
+            })
+        if quotes:
+            _tencent_rank_cache["data"] = quotes
+            _tencent_rank_cache["ts"] = now
+        return quotes
+    except Exception:
+        logger.exception("腾讯排行接口请求失败")
+        return []
+
+
+async def get_dynamic_stock_list(
+    db: AsyncSession,
+    limit: int = 10,
+    markets: list[str] | None = None,
+    exclude_st: bool = True,
+    min_avg_amount: float = 0.0,
+    market_cap_min: float | None = None,
+    market_cap_max: float | None = None,
+) -> list[dict[str, str]]:
+    """
+    动态股票池（腾讯行情驱动）：
+    - A 股：腾讯 getBoardRankList 全市场实时排行（按成交额）
+    - 港股：腾讯 qt.gtimg.cn 行情池（HK_STOCK_POOL）
+    动态接口失败时自动 fallback 静态池。
+    """
+    if markets is None:
+        markets = ["A", "HK"]
+
+    pool: list[dict[str, str]] = []
+    a_dynamic_ok = False
+
+    if "A" in markets:
+        quotes = await fetch_tencent_rank_quotes(count=max(limit * 3, 60))
+        a_pool: list[dict[str, str]] = []
+        for q in quotes:
+            name = str(q.get("name", ""))
+            if exclude_st and ("ST" in name.upper() or "退" in name):
+                continue
+            if min_avg_amount > 0 and float(q.get("amount") or 0) < min_avg_amount:
+                continue
+            if market_cap_min is not None and float(q.get("market_cap") or 0) < market_cap_min:
+                continue
+            if market_cap_max is not None and float(q.get("market_cap") or 0) > market_cap_max:
+                continue
+            a_pool.append({"symbol": str(q["symbol"]), "name": name})
+        if a_pool:
+            pool.extend(a_pool)
+            a_dynamic_ok = True
+
+    if "HK" in markets:
+        hk_pool: list[dict[str, str]] = []
+        try:
+            from app.integrations.market_data.tencent import fetch_hk_ranking
+            hk_quotes = await fetch_hk_ranking(limit=max(limit * 2, 20))
+            hk_pool = [{"symbol": q.symbol, "name": q.name} for q in hk_quotes if getattr(q, "symbol", None)]
+        except Exception:
+            hk_pool = []
+        if not hk_pool:
+            hk_pool = list(HK_STOCK_POOL)
+        pool.extend(hk_pool)
+
+    if not a_dynamic_ok and "A" in markets:
+        pool = list(HOT_A_STOCKS) + [s for s in pool if s["symbol"].upper().endswith(".HK")]
+
+    # 多市场交叉采样
+    if "A" in markets and "HK" in markets:
+        a_stocks = [s for s in pool if not s["symbol"].upper().endswith(".HK")]
+        h_stocks = [s for s in pool if s["symbol"].upper().endswith(".HK")]
+        a_size = (limit + 1) // 2
+        hk_size = limit - a_size
+        return a_stocks[:a_size] + h_stocks[:hk_size]
     return pool[:limit]
 
 
