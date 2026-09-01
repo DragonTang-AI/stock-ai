@@ -186,6 +186,23 @@
       }
     },
     {
+      "path": "pages/agent-market/live-board",
+      "style": {
+        "navigationBarTitleText": "实时交易大屏",
+        "enablePullDownRefresh": true,
+        "animationType": "slide-in-right",
+        "animationDuration": 250
+      }
+    },
+    {
+      "path": "pages/agent-market/signal-detail",
+      "style": {
+        "navigationBarTitleText": "信号详情",
+        "enablePullDownRefresh": false,
+        "animationType": "slide-in-bottom",
+        "animationDuration": 300
+      }
+    },    {
       "path": "pages/agent-market/my-agents",
       "style": {
         "navigationBarTitleText": "我的交易员",,

@@ -216,6 +216,57 @@ export function getEquityCurve(hireId: number): Promise<EquityCurvePoint[]> {
   return request<EquityCurvePoint[]>('/agent-console/' + hireId + '/equity-curve')
 }
 
+// ── 实时交易大屏看板 API ──
+
+export interface LiveBoardAgentStatus {
+  hire_id: number
+  trader_id: string
+  trader_name: string
+  trader_tag: string
+  status: string
+  runtime_status: string
+  runtime_label: string
+  management_mode: string
+  current_pnl: number
+  allocated_capital: number | null
+  last_action: string | null
+  last_action_at: string | null
+}
+
+export interface LiveBoardTrade {
+  id: number
+  hire_id: number
+  trader_id: string
+  trader_name: string
+  symbol: string
+  symbol_name: string
+  market: string
+  action: string
+  price: number
+  quantity: number
+  confidence: number
+  reasoning: string | null
+  exec_status: string
+  created_at: string
+}
+
+export interface LiveBoardResponse {
+  agents: LiveBoardAgentStatus[]
+  trades: LiveBoardTrade[]
+  scheduler_running: boolean
+  market_state: string
+}
+
+/** 获取实时交易大屏看板 */
+export function getLiveBoard(): Promise<LiveBoardResponse> {
+  return request<LiveBoardResponse>('/agent-console/live-board')
+}
+
+/** 获取单条信号详情（含决策理由） */
+export function getSignalDetail(signalId: number): Promise<ConsoleSignal> {
+  return request<ConsoleSignal>('/agent-console/signals/' + signalId)
+}
+
 /** 切换管理模式 */
 export function switchMode(hireId: number, mode: string): Promise<any> {
   return request('/agent/my-agents/' + hireId + '/mode', {

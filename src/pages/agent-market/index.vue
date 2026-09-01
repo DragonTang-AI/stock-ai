@@ -11,6 +11,51 @@
       </view>
     </view>
 
+    <!-- 实时交易大屏看板入口 -->
+    <view class="live-board-entry" @click="goLiveBoard">
+      <view class="entry-left">
+        <view class="entry-icon">
+          <text class="entry-icon-text">实时</text>
+        </view>
+        <view class="entry-info">
+          <text class="entry-title">实时交易大屏看板</text>
+          <text class="entry-sub">{{ runningAgents.length > 0 ? `${runningAgents.length} 位交易员运行中` : '暂无运行中的交易员' }}</text>
+        </view>
+      </view>
+      <view class="entry-right">
+        <text class="entry-arrow">进入 ›</text>
+      </view>
+    </view>
+
+    <!-- 运行中的交易员状态区 -->
+    <view class="runtime-status-section" v-if="liveAgents.length > 0">
+      <view class="runtime-header">
+        <text class="runtime-title">我的交易员状态</text>
+        <text class="runtime-hint">{{ marketState === 'trading' ? '交易时段' : '非交易时段' }}</text>
+      </view>
+      <scroll-view scroll-x class="runtime-scroll" :show-scrollbar="false">
+        <view class="runtime-list">
+          <view
+            v-for="ag in liveAgents"
+            :key="ag.hire_id"
+            class="runtime-card"
+            @click="goLiveBoard"
+          >
+            <view class="rt-avatar">
+              <text class="rt-avatar-text">{{ ag.trader_name[0] }}</text>
+            </view>
+            <view class="rt-info">
+              <text class="rt-name">{{ ag.trader_name }}</text>
+              <view class="rt-badge" :class="'rt-' + ag.runtime_status">
+                <view class="rt-dot"></view>
+                <text>{{ ag.runtime_label }}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+
     <!-- 交易员市场标题 -->
     <view class="section-header">
       <text class="section-title">交易员市场</text>
@@ -102,10 +147,10 @@
 
 <script setup lang="ts">
 import CustomTabBar from '@/components/common/CustomTabBar.vue'
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
-import { getAgentMarket, getMyAgents, type AgentTrader } from '@/api/agent'
+import { getAgentMarket, getMyAgents, getLiveBoard, type AgentTrader } from '@/api/agent'
 import { getPointsBalance, dailyCheckin } from '@/api/points'
 import { formatPercent } from '@/utils/format'
 import { useShowRefresh, touchRefreshKey } from '@/utils/refresh-cache'
@@ -113,6 +158,10 @@ import { useShowRefresh, touchRefreshKey } from '@/utils/refresh-cache'
 const agents = ref<AgentTrader[]>([])
 const pointsBalance = ref(0)
 const hiredIds = ref(new Set<string>())
+const liveAgents = ref<any[]>([])
+const marketState = ref('off_hours')
+
+const runningAgents = computed(() => liveAgents.value.filter((a: any) => a.status === 'active'))
 
 const formatPct = (v: number | null | undefined) => {
   if (v == null) return '--'
@@ -138,6 +187,13 @@ const loadData = async () => {
     )
   } catch (e) {
     console.error('加载交易员市场失败', e)
+  }
+  try {
+    const live = await getLiveBoard()
+    liveAgents.value = live.agents || []
+    marketState.value = live.market_state || 'off_hours'
+  } catch (e) {
+    // 看板状态失败不阻塞市场加载
   }
   try {
     const bal = await getPointsBalance()
@@ -167,6 +223,10 @@ const goDetail = (id: string) => {
 
 const goMyAgents = () => {
   uni.navigateTo({ url: '/pages/agent-market/my-agents' })
+}
+
+const goLiveBoard = () => {
+  uni.navigateTo({ url: '/pages/agent-market/live-board' })
 }
 onMounted(() => {
   pollTimer = setInterval(loadData, 30000)
@@ -241,6 +301,161 @@ onPullDownRefresh(() => {
     color: #667788;
     margin-top: 6rpx;
   }
+}
+
+/* 实时交易大屏看板入口 */
+.live-board-entry {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, #1a1a3e 0%, #16213e 100%);
+  border-radius: 16rpx;
+  padding: 28rpx 32rpx;
+  margin-bottom: 24rpx;
+  border: 1rpx solid rgba(74, 144, 226, 0.25);
+
+  .entry-left {
+    display: flex;
+    align-items: center;
+    gap: 20rpx;
+
+    .entry-icon {
+      width: 76rpx;
+      height: 76rpx;
+      border-radius: 18rpx;
+      background: linear-gradient(135deg, #4A90E2, #7B68EE);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      .entry-icon-text {
+        font-size: 22rpx;
+        font-weight: 700;
+        color: #fff;
+      }
+    }
+    .entry-info {
+      .entry-title {
+        font-size: 30rpx;
+        font-weight: 600;
+        color: #ffffff;
+        display: block;
+      }
+      .entry-sub {
+        font-size: 22rpx;
+        color: #667788;
+        margin-top: 6rpx;
+      }
+    }
+  }
+  .entry-right {
+    .entry-arrow {
+      font-size: 26rpx;
+      color: #4A90E2;
+    }
+  }
+}
+
+/* 运行中的交易员状态区 */
+.runtime-status-section {
+  background: #16162a;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 28rpx;
+  border: 1rpx solid rgba(74, 144, 226, 0.12);
+
+  .runtime-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 18rpx;
+
+    .runtime-title {
+      font-size: 28rpx;
+      font-weight: 600;
+      color: #ffffff;
+    }
+    .runtime-hint {
+      font-size: 22rpx;
+      color: #556677;
+    }
+  }
+  .runtime-scroll {
+    white-space: nowrap;
+  }
+  .runtime-list {
+    display: flex;
+    gap: 16rpx;
+  }
+  .runtime-card {
+    display: inline-flex;
+    align-items: center;
+    gap: 12rpx;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 14rpx;
+    padding: 16rpx 20rpx;
+
+    .rt-avatar {
+      width: 52rpx;
+      height: 52rpx;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #4A90E2, #7B68EE);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      .rt-avatar-text {
+        font-size: 24rpx;
+        font-weight: 700;
+        color: #fff;
+      }
+    }
+    .rt-info {
+      .rt-name {
+        font-size: 24rpx;
+        font-weight: 600;
+        color: #ffffff;
+        display: block;
+      }
+      .rt-badge {
+        display: flex;
+        align-items: center;
+        gap: 6rpx;
+        font-size: 18rpx;
+        margin-top: 4rpx;
+
+        .rt-dot {
+          width: 10rpx;
+          height: 10rpx;
+          border-radius: 50%;
+        }
+        &.rt-trading {
+          color: #2ecc71;
+          .rt-dot { background: #2ecc71; animation: pulse 1.6s infinite; }
+        }
+        &.rt-resting {
+          color: #95a5a6;
+          .rt-dot { background: #95a5a6; }
+        }
+        &.rt-paused {
+          color: #e67e22;
+          .rt-dot { background: #e67e22; }
+        }
+        &.rt-configuring {
+          color: #f1c40f;
+          .rt-dot { background: #f1c40f; }
+        }
+        &.rt-expired {
+          color: #e74c3c;
+          .rt-dot { background: #e74c3c; }
+        }
+      }
+    }
+  }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 .agent-list {
