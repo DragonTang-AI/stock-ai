@@ -256,3 +256,43 @@ class DeactivateAgentResponse(BaseModel):
     user_agent_id: int
     status: str
     message: str
+
+# ── 实时交易大屏看板 Schemas ──
+
+class LiveBoardAgentStatus(BaseModel):
+    hire_id: int
+    trader_id: str
+    trader_name: str
+    trader_tag: str = ""
+    status: str
+    runtime_status: str
+    runtime_label: str
+    management_mode: str
+    current_pnl: float | None = None
+    allocated_capital: float | None = None
+    last_action: str | None = None
+    last_action_at: datetime | None = None
+
+
+class LiveBoardTrade(BaseModel):
+    id: int
+    hire_id: int
+    trader_id: str
+    trader_name: str
+    symbol: str
+    symbol_name: str
+    market: str
+    action: str
+    price: float
+    quantity: int
+    confidence: int
+    reasoning: str | None = None
+    exec_status: str
+    created_at: datetime
+
+
+class LiveBoardResponse(BaseModel):
+    agents: list[LiveBoardAgentStatus] = []
+    trades: list[LiveBoardTrade] = []
+    scheduler_running: bool = False
+    market_state: str = ""

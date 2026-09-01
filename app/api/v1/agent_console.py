@@ -16,6 +16,9 @@ from app.schemas.agent import (
     ConsoleTradeResponse,
     EquityCurvePoint,
     SignalConfirmRequest,
+    LiveBoardAgentStatus,
+    LiveBoardTrade,
+    LiveBoardResponse,
 )
 from app.api.v1.auth import get_current_user
 from app.schemas.trading import OrderRequest
@@ -624,3 +627,161 @@ async def get_scheduler_status():
     """获取调度器运行状态"""
     from app.engine.scheduler_v2 import get_status
     return get_status()
+
+
+# ── 实时交易大屏看板 ──
+
+@router.get("/live-board", response_model=LiveBoardResponse)
+async def get_live_board(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """实时交易大屏看板：当前用户所有交易员的实时运行状态 + 最近成交记录"""
+    # 1. 我的交易员（含 agent 信息）
+    q = (
+        select(UserAgent, AgentTrader)
+        .outerjoin(AgentTrader, AgentTrader.id == UserAgent.agent_id)
+        .where(UserAgent.user_id == current_user.id)
+        .order_by(UserAgent.hired_at.desc())
+    )
+    rows = (await db.execute(q)).all()
+
+    hire_ids = [ua.id for ua, _ in rows]
+
+    # 2. 每个 hire 最近一条信号（last_action 摘要）
+    last_sig_by_hire: dict[int, AgentSignal] = {}
+    if hire_ids:
+        last_rows = await db.execute(
+            select(AgentSignal)
+            .where(AgentSignal.hire_id.in_(hire_ids))
+            .order_by(AgentSignal.hire_id, AgentSignal.created_at.desc())
+        )
+        for sig in last_rows.scalars().all():
+            if sig.hire_id not in last_sig_by_hire:
+                last_sig_by_hire[sig.hire_id] = sig
+
+    # 3. 实时盈亏
+    pnl_by_hire: dict[int, float] = {}
+    if hire_ids:
+        pnl_rows = await db.execute(
+            select(AgentPortfolio.hire_id, func.coalesce(func.sum(AgentPortfolio.unrealized_pnl), 0))
+            .where(AgentPortfolio.hire_id.in_(hire_ids))
+            .group_by(AgentPortfolio.hire_id)
+        )
+        pnl_by_hire = {hid: float(pnl) for hid, pnl in pnl_rows.all()}
+
+    # 4. 组装交易员状态
+    in_hours = is_any_market_hours()
+    agents_status = []
+    for ua, agent in rows:
+        last_sig = last_sig_by_hire.get(ua.id)
+        last_action = None
+        last_action_at = None
+        if last_sig:
+            act_text = "买入" if last_sig.action == "buy" else "卖出"
+            last_action = f"{act_text} {last_sig.symbol_name or last_sig.symbol}"
+            last_action_at = last_sig.created_at
+
+        if ua.status == "active":
+            if in_hours:
+                runtime_status, runtime_label = "trading", "交易中"
+            else:
+                runtime_status, runtime_label = "resting", "休息中（非交易期）"
+        elif ua.status == "paused":
+            runtime_status, runtime_label = "paused", "已暂停"
+        elif ua.status == "configuring":
+            runtime_status, runtime_label = "configuring", "待配置"
+        else:
+            runtime_status, runtime_label = "expired", "已到期"
+
+        agents_status.append(LiveBoardAgentStatus(
+            hire_id=ua.id,
+            trader_id=ua.agent_id,
+            trader_name=agent.code_name if agent else ua.agent_id,
+            trader_tag=agent.tag if agent else "",
+            status=ua.status,
+            runtime_status=runtime_status,
+            runtime_label=runtime_label,
+            management_mode=ua.management_mode,
+            current_pnl=pnl_by_hire.get(ua.id, float(ua.current_pnl) if ua.current_pnl else 0.0),
+            allocated_capital=float(ua.allocated_capital) if ua.allocated_capital else None,
+            last_action=last_action,
+            last_action_at=last_action_at,
+        ))
+
+    # 5. 最近成交记录（哪个 agent 交易了什么）
+    trades_rows = await db.execute(
+        select(AgentSignal, AgentTrader.code_name)
+        .join(AgentTrader, AgentTrader.id == AgentSignal.trader_id)
+        .where(
+            and_(
+                AgentSignal.user_id == current_user.id,
+                AgentSignal.exec_status.in_(["confirmed", "auto_executed"]),
+            )
+        )
+        .order_by(desc(AgentSignal.created_at))
+        .limit(100)
+    )
+    trades = [
+        LiveBoardTrade(
+            id=sig.id,
+            hire_id=sig.hire_id,
+            trader_id=sig.trader_id,
+            trader_name=code_name,
+            symbol=sig.symbol,
+            symbol_name=sig.symbol_name,
+            market=sig.market,
+            action=sig.action,
+            price=float(sig.price),
+            quantity=sig.quantity,
+            confidence=sig.confidence,
+            reasoning=sig.reasoning,
+            exec_status=sig.exec_status,
+            created_at=sig.created_at,
+        )
+        for sig, code_name in trades_rows.all()
+    ]
+
+    from app.engine.scheduler_v2 import is_running
+    return LiveBoardResponse(
+        agents=agents_status,
+        trades=trades,
+        scheduler_running=is_running(),
+        market_state="trading" if in_hours else "off_hours",
+    )
+
+
+# ── 信号详情（决策理由） ──
+
+@router.get("/signals/{signal_id}", response_model=ConsoleSignalResponse)
+async def get_signal_detail(
+    signal_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """单条信号详情，含决策理由（看板点击记录进入详情）"""
+    result = await db.execute(
+        select(AgentSignal).where(
+            and_(AgentSignal.id == signal_id, AgentSignal.user_id == current_user.id)
+        )
+    )
+    sig = result.scalar_one_or_none()
+    if not sig:
+        raise HTTPException(status_code=404, detail="信号不存在")
+    return ConsoleSignalResponse(
+        id=sig.id,
+        hire_id=sig.hire_id,
+        trader_id=sig.trader_id,
+        symbol=sig.symbol,
+        symbol_name=sig.symbol_name,
+        market=sig.market,
+        action=sig.action,
+        price=float(sig.price),
+        quantity=sig.quantity,
+        confidence=sig.confidence,
+        reasoning=sig.reasoning,
+        exec_status=sig.exec_status,
+        created_at=sig.created_at,
+        updated_at=sig.updated_at,
+    )
+
