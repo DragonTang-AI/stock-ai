@@ -605,6 +605,7 @@ async def generate_signals(
             trader_id=hire.agent_id,
             symbol=sig["symbol"],
             symbol_name=sig.get("name", sig["symbol"]),
+            market=sig.get("market", ""),
             action=sig["action"],
             price=float(sig.get("price", 0)),
             quantity=sig.get("quantity", 100),

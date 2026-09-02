@@ -17,7 +17,7 @@ from typing import Any
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.agent import AgentTrader, UserAgent, AgentSignal
+from app.models.agent import AgentTrader, UserAgent, AgentSignal, AgentPortfolio
 from app.engine import hedge_fund_client, market_data, risk_manager
 
 logger = logging.getLogger(__name__)
@@ -173,6 +173,25 @@ async def generate_signals(
         for s in random.sample(a_filtered, a_n):
             tickers.append(s["symbol"])
             ticker_map[s["symbol"]] = s["name"]
+
+    # P2-04b: 强制并入当前持仓，确保大师组合能对持仓标的做加/减仓决策
+    # （候选池原本只取行情排行 Top N，持仓股未必在候选内，持仓决策形同虚设）
+    try:
+        pos_rows = (
+            await db.execute(
+                select(AgentPortfolio.symbol, AgentPortfolio.symbol_name).where(
+                    AgentPortfolio.hire_id == hire_id, AgentPortfolio.quantity > 0
+                )
+            )
+        ).all()
+        for _sym, _sname in pos_rows:
+            if _sym and _sym not in tickers:
+                tickers.append(_sym)
+                ticker_map.setdefault(_sym, _sname or _sym)
+        if pos_rows:
+            logger.info("持仓并入候选池 +%d 只: %s", len(pos_rows), tickers)
+    except Exception as _e:  # noqa: BLE001
+        logger.warning("持仓并入候选池失败: %s", _e)
 
     if not tickers:
         return {"signals": [], "source": "mock", "rejected_count": 0, "error": "动态池为空，无候选股票"}
