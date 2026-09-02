@@ -253,9 +253,17 @@ export interface LiveBoardTrade {
   created_at: string
 }
 
+export interface LiveBoardAgentCurve {
+  hire_id: number
+  trader_id: string
+  trader_name: string
+  points: EquityCurvePoint[]
+}
+
 export interface LiveBoardResponse {
   agents: LiveBoardAgentStatus[]
   trades: LiveBoardTrade[]
+  agent_curves: LiveBoardAgentCurve[]
   scheduler_running: boolean
   market_state: string
 }

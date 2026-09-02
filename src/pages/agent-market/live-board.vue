@@ -58,6 +58,28 @@
       </view>
     </view>
 
+    <!-- 资金走势（近30日已实现盈亏累计） -->
+    <view class="curve-section">
+      <view class="section-title-row">
+        <text class="section-title">资金走势</text>
+        <text class="section-sub">近30日已实现盈亏累计</text>
+      </view>
+      <view v-if="curveHires.length === 0" class="curve-empty">
+        <text class="empty-text">暂无资金曲线</text>
+        <text class="empty-sub">交易员完成止盈/止损平仓后，这里将展示已实现盈亏走势</text>
+      </view>
+      <view v-else class="curve-card">
+        <view class="curve-legend">
+          <view v-for="ch in curveHires" :key="ch.hire_id" class="legend-item">
+            <view class="legend-dot" :style="{ background: curveColor(ch.hire_id) }"></view>
+            <text class="legend-name">{{ ch.trader_name }}</text>
+            <text class="legend-pnl" :class="curveLast(ch) >= 0 ? 'pnl-up' : 'pnl-down'">{{ formatPnl(curveLast(ch)) }}</text>
+          </view>
+        </view>
+        <view id="equityChart" class="curve-canvas"></view>
+      </view>
+    </view>
+
     <!-- 实时成交记录 -->
     <view class="trades-section">
       <view class="section-title-row">
@@ -116,12 +138,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { onPullDownRefresh } from '@dcloudio/uni-app'
-import { getLiveBoard, type LiveBoardResponse, type LiveBoardTrade } from '@/api/agent'
+import { getLiveBoard, type LiveBoardResponse, type LiveBoardTrade, type LiveBoardAgentCurve } from '@/api/agent'
 import { formatPercent } from '@/utils/format'
+import F2 from '@antv/f2'
 
-const board = ref<LiveBoardResponse>({ agents: [], trades: [], scheduler_running: false, market_state: 'off_hours' })
+const board = ref<LiveBoardResponse>({ agents: [], trades: [], agent_curves: [], scheduler_running: false, market_state: 'off_hours' })
 const isLoading = ref(true)
 
 const agents = computed(() => board.value.agents)
@@ -129,12 +152,22 @@ const trades = computed(() => board.value.trades)
 const marketState = computed(() => board.value.market_state)
 const schedulerRunning = computed(() => board.value.scheduler_running)
 const activeCount = computed(() => board.value.agents.filter((a: any) => a.status === 'active').length)
+const agentCurves = computed(() => board.value.agent_curves || [])
+const CURVE_COLORS = ['#4A90E2', '#7B68EE', '#f39c12', '#2ecc71', '#e67e22', '#1abc9c', '#e84393']
+const curveColor = (hireId: number) => {
+  const idx = agentCurves.value.findIndex((c: LiveBoardAgentCurve) => c.hire_id === hireId)
+  return CURVE_COLORS[(idx >= 0 ? idx : 0) % CURVE_COLORS.length]
+}
+const curveHires = computed(() => (agentCurves.value || []).filter((c: LiveBoardAgentCurve) => c.points.length >= 2))
+const curveLast = (c: LiveBoardAgentCurve) => (c.points.length > 0 ? c.points[c.points.length - 1].equity : 0)
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const loadData = async () => {
   try {
     board.value = await getLiveBoard()
+    await nextTick()
+    setTimeout(() => renderEquityChart(), 60)
   } catch (e: any) {
     uni.showToast({ title: e?.message || '看板加载失败', icon: 'none' })
   } finally {
@@ -197,6 +230,66 @@ onUnmounted(() => {
 onPullDownRefresh(() => {
   loadData().then(() => uni.stopPullDownRefresh())
 })
+
+let equityChart: any = null
+
+const renderEquityChart = () => {
+  if (curveHires.value.length === 0) return
+  const container = document.getElementById('equityChart')
+  if (!container) return
+
+  if (equityChart) {
+    try { equityChart.destroy() } catch (e) { /* ignore */ }
+    equityChart = null
+  }
+  container.innerHTML = ''
+  const canvas = document.createElement('canvas')
+  container.appendChild(canvas)
+
+  const w = container.clientWidth || 340
+  const h = 300
+
+  const chart = new F2.Chart({
+    el: canvas,
+    pixelRatio: window.devicePixelRatio || 1,
+    width: w,
+    height: h,
+    padding: [28, 56, 36, 8]
+  })
+
+  const source: any[] = []
+  curveHires.value.forEach((ch: LiveBoardAgentCurve) => {
+    ch.points.forEach((p) => {
+      source.push({ date: p.date, name: ch.trader_name, value: p.equity })
+    })
+  })
+  if (source.length === 0) return
+
+  chart.source(source, {
+    date: { range: [0, 1] },
+    value: { tickCount: 5 }
+  })
+  chart.axis('date', {
+    label: { fontSize: 9, fill: '#556677', formatter: (v: string) => String(v).slice(5) },
+    line: { stroke: 'rgba(255,255,255,0.1)' }
+  })
+  chart.axis('value', {
+    label: { fontSize: 10, fill: '#667788' },
+    grid: { stroke: 'rgba(255,255,255,0.06)' },
+    line: null
+  })
+  chart.tooltip({
+    showCrosshairs: true,
+    crosshairsStyle: { stroke: 'rgba(255,255,255,0.15)' }
+  })
+  chart.line()
+    .position('date*value')
+    .color('name', curveHires.value.map((ch: LiveBoardAgentCurve) => curveColor(ch.hire_id)))
+    .size(2)
+  chart.render()
+
+  equityChart = chart
+}
 </script>
 
 <style scoped lang="scss">
@@ -502,6 +595,66 @@ onPullDownRefresh(() => {
         color: #556677;
       }
     }
+  }
+}
+
+.curve-section {
+  margin-bottom: 36rpx;
+}
+.curve-card {
+  background: #16162a;
+  border-radius: 16rpx;
+  padding: 24rpx 16rpx;
+  border: 1rpx solid rgba(74, 144, 226, 0.15);
+}
+.curve-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20rpx;
+  padding: 0 8rpx 16rpx;
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 10rpx;
+    .legend-dot {
+      width: 16rpx;
+      height: 16rpx;
+      border-radius: 50%;
+    }
+    .legend-name {
+      font-size: 22rpx;
+      color: #c8d6e5;
+    }
+    .legend-pnl {
+      font-size: 20rpx;
+      font-weight: 600;
+      &.pnl-up { color: #e74c3c; }
+      &.pnl-down { color: #2ecc71; }
+    }
+  }
+}
+.curve-canvas {
+  width: 100%;
+  height: 300px;
+  position: relative;
+}
+.curve-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64rpx 0;
+  background: #16162a;
+  border-radius: 16rpx;
+  color: #999;
+  .empty-text {
+    font-size: 28rpx;
+    color: #8899aa;
+  }
+  .empty-sub {
+    font-size: 22rpx;
+    color: #556677;
+    margin-top: 10rpx;
   }
 }
 
