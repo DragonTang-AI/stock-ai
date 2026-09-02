@@ -118,7 +118,7 @@
         <view class="sig-head">
           <view class="sig-stock">
             <text class="sig-symbol">{{ sig.symbol }}</text>
-            <text class="mkt-tag" :class="sig.market === HK ? tag-hk : tag-a">{{ sig.market === HK ? 港股 : A股 }}</text>
+            <text class="mkt-tag" :class="marketTag(sig.market)">{{ marketLabel(sig.market) }}</text>
             <text class="sig-name">{{ sig.symbol_name }}</text>
           </view>
           <view class="sig-action-row">
@@ -189,7 +189,7 @@
       <view v-for="pos in portfolios" :key="pos.id" class="portfolio-card">
         <view class="pos-head">
           <text class="pos-symbol">{{ pos.symbol }}</text>
-          <text class="mkt-tag" :class="pos.market === HK ? tag-hk : tag-a">{{ pos.market === HK ? 港股 : A股 }}</text>
+          <text class="mkt-tag" :class="marketTag(pos.market)">{{ marketLabel(pos.market) }}</text>
           <text class="pos-name">{{ pos.symbol_name }}</text>
           <text class="pos-pnl" :class="(pos.unrealized_pnl || 0) >= 0 ? 'up' : 'down'">
             {{ formatPct(pos.unrealized_pnl || 0) }}
@@ -230,7 +230,7 @@
           </view>
           <view class="trade-info">
             <text class="trade-symbol">{{ trade.symbol }}</text>
-            <text class="mkt-tag" :class="trade.market === HK ? tag-hk : tag-a">{{ trade.market === HK ? 港股 : A股 }}</text>
+            <text class="mkt-tag" :class="marketTag(trade.market)">{{ marketLabel(trade.market) }}</text>
             <text class="trade-name">{{ trade.symbol_name }}</text>
           </view>
         </view>
@@ -551,6 +551,9 @@ const formatTime = (t: string | null) => {
   const min = String(bj.getUTCMinutes()).padStart(2, '0')
   return `${y}-${m}-${day} ${h}:${min}`
 }
+
+const marketLabel = (m: string) => (m === HK ? 港股 : A股)
+const marketTag = (m: string) => (m === HK ? tag-hk : tag-a)
 
 const formatRelative = (t: string | null) => {
   if (!t) return ''
