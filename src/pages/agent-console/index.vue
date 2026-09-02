@@ -118,7 +118,7 @@
         <view class="sig-head">
           <view class="sig-stock">
             <text class="sig-symbol">{{ sig.symbol }}</text>
-            <text class="mkt-tag" :class="marketTag(sig.market)">{{ marketLabel(sig.market) }}</text>
+            <text class="mkt-tag" :class="sig.marketTag">{{ sig.marketLabel }}</text>
             <text class="sig-name">{{ sig.symbol_name }}</text>
           </view>
           <view class="sig-action-row">
@@ -189,7 +189,7 @@
       <view v-for="pos in portfolios" :key="pos.id" class="portfolio-card">
         <view class="pos-head">
           <text class="pos-symbol">{{ pos.symbol }}</text>
-          <text class="mkt-tag" :class="marketTag(pos.market)">{{ marketLabel(pos.market) }}</text>
+          <text class="mkt-tag" :class="pos.marketTag">{{ pos.marketLabel }}</text>
           <text class="pos-name">{{ pos.symbol_name }}</text>
           <text class="pos-pnl" :class="(pos.unrealized_pnl || 0) >= 0 ? 'up' : 'down'">
             {{ formatPct(pos.unrealized_pnl || 0) }}
@@ -230,7 +230,7 @@
           </view>
           <view class="trade-info">
             <text class="trade-symbol">{{ trade.symbol }}</text>
-            <text class="mkt-tag" :class="marketTag(trade.market)">{{ marketLabel(trade.market) }}</text>
+            <text class="mkt-tag" :class="trade.marketTag">{{ trade.marketLabel }}</text>
             <text class="trade-name">{{ trade.symbol_name }}</text>
           </view>
         </view>
@@ -313,6 +313,7 @@
 import { ref, computed, onMounted, onUnmounted } from "vue"
 import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import SkeletonScreen from '@/components/common/SkeletonScreen.vue'
+import { decorateMarket } from '@/utils/market'
 import {
   getConsoleOverview,
   getSignals,
@@ -456,19 +457,19 @@ const loadSignals = async () => {
     if (filterSymbol.value) filters.symbol = filterSymbol.value
     if (filterDateFrom.value) filters.date_from = filterDateFrom.value
     if (filterDateTo.value) filters.date_to = filterDateTo.value
-    signals.value = await getSignals(hireId.value, Object.keys(filters).length ? filters : undefined)
+    signals.value = decorateMarket(await getSignals(hireId.value, Object.keys(filters).length ? filters : undefined))
   } catch (e) { /* ignore */ }
 }
 
 const loadPortfolio = async () => {
   try {
-    portfolios.value = await getAgentPortfolio(hireId.value)
+    portfolios.value = decorateMarket(await getAgentPortfolio(hireId.value))
   } catch (e) { /* ignore */ }
 }
 
 const loadTrades = async () => {
   try {
-    trades.value = await getAgentTrades(hireId.value)
+    trades.value = decorateMarket(await getAgentTrades(hireId.value))
   } catch (e) { /* ignore */ }
 }
 
@@ -551,9 +552,6 @@ const formatTime = (t: string | null) => {
   const min = String(bj.getUTCMinutes()).padStart(2, '0')
   return `${y}-${m}-${day} ${h}:${min}`
 }
-
-const marketLabel = (m: string) => (m === HK ? 港股 : A股)
-const marketTag = (m: string) => (m === HK ? tag-hk : tag-a)
 
 const formatRelative = (t: string | null) => {
   if (!t) return ''
