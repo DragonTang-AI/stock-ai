@@ -168,6 +168,14 @@ class EquityCurvePoint(BaseModel):
     daily_pnl: float = 0
 
 
+class LiveBoardAgentCurve(BaseModel):
+    """大屏单交易员资金曲线（按日已实现盈亏累计）"""
+    hire_id: int
+    trader_id: str = ""
+    trader_name: str = ""
+    points: list[EquityCurvePoint] = []
+
+
 AgentTraderDetail.model_rebuild()
 
 
@@ -296,5 +304,6 @@ class LiveBoardTrade(BaseModel):
 class LiveBoardResponse(BaseModel):
     agents: list[LiveBoardAgentStatus] = []
     trades: list[LiveBoardTrade] = []
+    agent_curves: list[LiveBoardAgentCurve] = []
     scheduler_running: bool = False
     market_state: str = ""

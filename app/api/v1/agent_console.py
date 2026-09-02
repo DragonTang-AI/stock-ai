@@ -18,6 +18,7 @@ from app.schemas.agent import (
     SignalConfirmRequest,
     LiveBoardAgentStatus,
     LiveBoardTrade,
+    LiveBoardAgentCurve,
     LiveBoardResponse,
 )
 from app.api.v1.auth import get_current_user
@@ -520,57 +521,14 @@ async def get_equity_curve(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """按日汇总的权益曲线数据"""
-    await _get_hire_or_404(db, hire_id, current_user.id)
-
-    # 获取所有已执行信号，按日汇总模拟权益变化
-    q = (
-        select(
-            func.date(AgentSignal.updated_at).label("trade_date"),
-            func.sum(
-                case(
-                    (AgentSignal.action == "buy", -func.coalesce(AgentSignal.price, 0) * AgentSignal.quantity),
-                    (AgentSignal.action == "sell", func.coalesce(AgentSignal.price, 0) * AgentSignal.quantity),
-                    else_=0,
-                )
-            ).label("daily_pnl"),
-        )
-        .where(
-            and_(
-                AgentSignal.hire_id == hire_id,
-                AgentSignal.exec_status.in_(["confirmed", "auto_executed"]),
-            )
-        )
-        .group_by(func.date(AgentSignal.updated_at))
-        .order_by(func.date(AgentSignal.updated_at))
+    """按日汇总的资金曲线（FIFO 成本配对，equity=累计已实现盈亏；无数据返回空列表，不再生成模拟数据）"""
+    hire = await _get_hire_or_404(db, hire_id, current_user.id)
+    curves = await _build_agent_curves(
+        db, current_user.id, [hire_id],
+        name_map={hire_id: (hire.agent_id, "")},
+        lookback_days=None,
     )
-    rows = (await db.execute(q)).all()
-
-    equity = 0.0
-    points = []
-    for row in rows:
-        equity += float(row.daily_pnl)
-        points.append(EquityCurvePoint(
-            date=str(row.trade_date),
-            equity=round(equity, 2),
-            daily_pnl=round(float(row.daily_pnl), 2),
-        ))
-
-    # 如果数据为空，补充一些模拟起点数据
-    if not points:
-        base = 100000
-        for i in range(7):
-            d = date.today()
-            from datetime import timedelta
-            d = d - timedelta(days=6 - i)
-            equity = base + i * 500
-            points.append(EquityCurvePoint(
-                date=str(d),
-                equity=equity,
-                daily_pnl=500 if i > 0 else 0,
-            ))
-
-    return points
+    return curves[0].points if curves else []
 
 
 # ── 信号生成（支持 ai-hedge-fund 真实引擎 + mock fallback）──
@@ -746,12 +704,112 @@ async def get_live_board(
     ]
 
     from app.engine.scheduler_v2 import is_running
+
+    # 6. 资金曲线（近 30 天累计已实现盈亏，FIFO 口径）
+    agent_curves = await _build_agent_curves(
+        db, current_user.id, hire_ids,
+        name_map={ua.id: (ua.agent_id, agent.code_name if agent else ua.agent_id) for ua, agent in rows},
+        lookback_days=30,
+    )
+
     return LiveBoardResponse(
         agents=agents_status,
         trades=trades,
+        agent_curves=agent_curves,
         scheduler_running=is_running(),
         market_state="trading" if in_hours else "off_hours",
     )
+
+
+# ── 资金曲线辅助 ──
+
+async def _build_agent_curves(db, user_id, hire_ids, name_map=None, lookback_days=30):
+    """按 hire 汇总资金曲线：FIFO 成本配对逐笔核算已实现盈亏，
+    equity=自窗口内首笔成交日起的累计已实现盈亏（北京自然日，无成交日延续前值）。
+    返回 LiveBoardAgentCurve 列表；窗口内无任何已执行成交的 hire 不返回。
+    name_map: hire_id -> (trader_id, trader_name)
+    """
+    from collections import defaultdict, deque
+    from datetime import timedelta
+
+    if not hire_ids:
+        return []
+    rows = (
+        await db.execute(
+            select(
+                AgentSignal.hire_id,
+                AgentSignal.symbol,
+                AgentSignal.action,
+                AgentSignal.price,
+                AgentSignal.quantity,
+                AgentSignal.updated_at,
+            )
+            .where(
+                and_(
+                    AgentSignal.user_id == user_id,
+                    AgentSignal.hire_id.in_(hire_ids),
+                    AgentSignal.exec_status.in_(["confirmed", "auto_executed"]),
+                )
+            )
+            .order_by(AgentSignal.created_at)
+        )
+    ).all()
+    if not rows:
+        return []
+
+    tz = timezone(timedelta(hours=8))  # 北京时间自然日
+    today = datetime.now(tz).date()
+    start = today - timedelta(days=lookback_days) if lookback_days else None
+
+    by_hire = defaultdict(list)
+    for hire_id, symbol, action, price, quantity, updated_at in rows:
+        by_hire[hire_id].append((symbol, action, float(price), int(quantity), updated_at))
+
+    curves = []
+    name_map = name_map or {}
+    for hire_id, items in by_hire.items():
+        lots = defaultdict(deque)          # symbol -> [(qty, price)]
+        day_realized = defaultdict(float)
+        day_seen = set()
+        for symbol, action, price, quantity, updated_at in items:
+            d = updated_at.astimezone(tz).date()
+            if start and d < start:
+                continue
+            day_seen.add(d)
+            if action == "buy":
+                lots[symbol].append([quantity, price])
+            elif action == "sell":
+                remain = quantity
+                while remain > 0 and lots[symbol]:
+                    lot = lots[symbol][0]
+                    take = min(remain, lot[0])
+                    day_realized[d] += (price - lot[1]) * take
+                    lot[0] -= take
+                    remain -= take
+                    if lot[0] <= 0:
+                        lots[symbol].popleft()
+        if not day_seen:
+            continue
+        first = min(day_seen)
+        acc = 0.0
+        points = []
+        d = first
+        while d <= today:
+            acc += float(day_realized.get(d, 0.0))
+            points.append(EquityCurvePoint(
+                date=d.isoformat(),
+                equity=round(acc, 2),
+                daily_pnl=round(float(day_realized.get(d, 0.0)), 2),
+            ))
+            d += timedelta(days=1)
+        trader_id, trader_name = name_map.get(hire_id, ("", f"交易员{hire_id}"))
+        curves.append(LiveBoardAgentCurve(
+            hire_id=hire_id,
+            trader_id=trader_id or "",
+            trader_name=trader_name or f"交易员{hire_id}",
+            points=points,
+        ))
+    return curves
 
 
 # ── 信号详情（决策理由） ──
