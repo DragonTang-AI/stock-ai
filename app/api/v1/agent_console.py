@@ -790,6 +790,9 @@ async def _build_agent_curves(db, user_id, hire_ids, name_map=None, lookback_day
                         lots[symbol].popleft()
         if not day_seen:
             continue
+        # 窗口内若完全没有平仓/盈亏变化（equity 恒 0），不返回空泛的 0 平线
+        if not any(abs(v) > 1e-9 for v in day_realized.values()):
+            continue
         first = min(day_seen)
         acc = 0.0
         points = []
