@@ -137,6 +137,7 @@ class ConsolePortfolioResponse(BaseModel):
     hire_id: int
     symbol: str
     symbol_name: str
+    market: str = ""
     quantity: int
     avg_cost: float
     current_price: float | None = None
@@ -151,6 +152,7 @@ class ConsoleTradeResponse(BaseModel):
     id: int
     symbol: str
     symbol_name: str
+    market: str = ""
     action: str
     price: float
     quantity: int
