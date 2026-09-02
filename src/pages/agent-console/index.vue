@@ -118,6 +118,7 @@
         <view class="sig-head">
           <view class="sig-stock">
             <text class="sig-symbol">{{ sig.symbol }}</text>
+            <text class="mkt-tag" :class="sig.market === HK ? tag-hk : tag-a">{{ sig.market === HK ? 港股 : A股 }}</text>
             <text class="sig-name">{{ sig.symbol_name }}</text>
           </view>
           <view class="sig-action-row">
@@ -188,6 +189,7 @@
       <view v-for="pos in portfolios" :key="pos.id" class="portfolio-card">
         <view class="pos-head">
           <text class="pos-symbol">{{ pos.symbol }}</text>
+          <text class="mkt-tag" :class="pos.market === HK ? tag-hk : tag-a">{{ pos.market === HK ? 港股 : A股 }}</text>
           <text class="pos-name">{{ pos.symbol_name }}</text>
           <text class="pos-pnl" :class="(pos.unrealized_pnl || 0) >= 0 ? 'up' : 'down'">
             {{ formatPct(pos.unrealized_pnl || 0) }}
@@ -228,6 +230,7 @@
           </view>
           <view class="trade-info">
             <text class="trade-symbol">{{ trade.symbol }}</text>
+            <text class="mkt-tag" :class="trade.market === HK ? tag-hk : tag-a">{{ trade.market === HK ? 港股 : A股 }}</text>
             <text class="trade-name">{{ trade.symbol_name }}</text>
           </view>
         </view>
@@ -1217,4 +1220,24 @@ const formatRelative = (t: string | null) => {
 .perf-history-sharpe { font-size: 12px; color: #999; }
 .perf-history-win { font-size: 12px; color: #999; margin-left: auto; }
 
+.mkt-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20rpx;
+  line-height: 1;
+  padding: 6rpx 10rpx;
+  border-radius: 6rpx;
+  margin-left: 10rpx;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.tag-a {
+  color: #2f7d4f;
+  background: rgba(47, 125, 79, 0.12);
+}
+.tag-hk {
+  color: #b3541e;
+  background: rgba(179, 84, 30, 0.12);
+}
 </style>

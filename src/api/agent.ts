@@ -124,6 +124,7 @@ export interface ConsoleSignal {
   trader_id: string
   symbol: string
   symbol_name: string
+  market: string
   action: string
   price: number
   quantity: number
@@ -139,6 +140,7 @@ export interface ConsolePortfolio {
   hire_id: number
   symbol: string
   symbol_name: string
+  market: string
   quantity: number
   avg_cost: number
   current_price: number | null
@@ -150,6 +152,7 @@ export interface ConsoleTrade {
   id: number
   symbol: string
   symbol_name: string
+  market: string
   action: string
   price: number
   quantity: number
