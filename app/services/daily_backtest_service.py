@@ -8,6 +8,7 @@
 - 基准：A股 = 沪深300 (000300.SH)，港股 = 恒生指数 (HSI)
 """
 import logging
+from sqlalchemy import case
 from datetime import date, datetime, timezone
 
 from sqlalchemy import select
@@ -77,7 +78,7 @@ async def run_daily_backtest() -> dict:
         result = await db.execute(
             select(PickTracking).where(
                 PickTracking.t5_return.is_(None) | PickTracking.t20_return.is_(None)
-            ).order_by(PickTracking.trade_date.desc()).limit(100)
+            ).order_by(case((PickTracking.t5_return.is_(None), 0), else_=1), PickTracking.trade_date.asc()).limit(200)
         )
         records = result.scalars().all()
         stats["scanned"] = len(records)
