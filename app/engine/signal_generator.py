@@ -368,7 +368,9 @@ async def _generate_real_signals(
 
         logger.info("DEBUG candidate_signals count=%s", len(candidate_signals))
         if not candidate_signals:
-            return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map, total_capital, agent_config=agent_config)
+            # P0-3c: 引擎决策解析后无可交易信号（观望/hold/动作非法）→ 返回空，禁止 mock 顶替
+            logger.info("ai-hedge-fund 决策无可解析信号，返回空（真实观望）")
+            return {"signals": [], "source": "ai_hedge_fund", "rejected_count": 0, "error": "no_parseable_decision"}
 
         # 补充实时价格
         prices = await market_data.get_batch_prices([s["symbol"] for s in candidate_signals])
