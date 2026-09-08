@@ -8,8 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, case, desc
 from app.core.database import get_db
 from app.models.user import User
-from app.models.agent import AgentTrader, UserAgent, AgentSignal, AgentPortfolio
+from app.models.agent import AgentTrader, UserAgent, AgentSignal, AgentPortfolio, AgentConfig
 from app.schemas.agent import (
+    ConsoleHireDetailResponse,
     ConsoleOverviewResponse,
     ConsoleSignalResponse,
     ConsolePortfolioResponse,
@@ -847,5 +848,36 @@ async def get_signal_detail(
         exec_status=sig.exec_status,
         created_at=sig.created_at,
         updated_at=sig.updated_at,
+    )
+
+
+# ── 雇佣详情（供绩效面板等获取 agent_id）──
+
+@router.get("/{hire_id}", response_model=ConsoleHireDetailResponse)
+async def get_console_hire_detail(
+    hire_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    hire = await _get_hire_or_404(db, hire_id, current_user.id)
+    trader = None
+    agent_result = await db.execute(
+        select(AgentTrader).where(AgentTrader.id == hire.agent_id)
+    )
+    trader = agent_result.scalar_one_or_none()
+    cfg_result = await db.execute(
+        select(AgentConfig.config_source).where(AgentConfig.hire_id == hire.id)
+    )
+    cfg_src = cfg_result.scalar_one_or_none()
+    return ConsoleHireDetailResponse(
+        hire_id=hire.id,
+        agent_id=hire.agent_id,
+        trader_name=trader.code_name if trader else "--",
+        trader_tag=trader.tag if trader else "",
+        management_mode=hire.management_mode,
+        status=hire.status,
+        hired_at=hire.hired_at,
+        expires_at=hire.expires_at,
+        config_source=cfg_src or "default",
     )
 

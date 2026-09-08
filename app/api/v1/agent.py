@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from app.core.database import get_db
 from app.models.user import User
-from app.models.agent import AgentTrader, UserAgent, AgentPerformance, AgentPortfolio, AgentConfig
+from app.models.agent import AgentTrader, UserAgent, AgentPerformance, AgentPortfolio, AgentConfig, AgentSignal
 from app.models.points import UserPoints, PointsTransaction
 from app.schemas.agent import (
     AgentTraderResponse,
@@ -318,6 +318,15 @@ async def list_my_agents(
             if ua.current_pnl is None or abs(float(ua.current_pnl) - calc) > 0.01:
                 ua.current_pnl = calc
         await db.commit()
+        # P3: 每 hire 待决策信号数（供"建议"入口角标）
+        sig_rows = await db.execute(
+            select(AgentSignal.hire_id, sqfunc.count(AgentSignal.id))
+            .where(AgentSignal.hire_id.in_(hire_ids), AgentSignal.exec_status == "pending")
+            .group_by(AgentSignal.hire_id)
+        )
+        pending_by_hire = {hid: int(cnt) for hid, cnt in sig_rows.all()}
+    else:
+        pending_by_hire = {}
 
     items = []
     for ua, agent in rows:
@@ -332,6 +341,7 @@ async def list_my_agents(
             hired_at=ua.hired_at,
             expires_at=ua.expires_at,
             config_source=config_by_hire.get(ua.id, "default"),
+            pending_count=pending_by_hire.get(ua.id, 0),
         ))
     return items
 
