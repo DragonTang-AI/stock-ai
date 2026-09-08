@@ -23,6 +23,10 @@ from app.engine import hedge_fund_client, market_data, risk_manager
 logger = logging.getLogger(__name__)
 
 
+# P0-3: 单轮信号落库上限（按置信度取 Top-N），防止信号流噪音堆积
+SIGNAL_SAVE_LIMIT = 5
+
+
 # ── Phase 2 模拟信号股市理由池（兼容现有 fallback）──
 
 MOCK_REASONS_BUY = [
@@ -391,6 +395,8 @@ async def _generate_real_signals(
         # 写入信号
         today = date.today()
         saved_orm = []
+        # P0-3 信号噪音治理：每轮仅落库高置信度前 SIGNAL_SAVE_LIMIT 条，避免 pending 堆积过期刷屏
+        passed = sorted(passed, key=lambda s: float(s.get("confidence", 0) or 0), reverse=True)[:SIGNAL_SAVE_LIMIT]
         for sig in passed:
             db_signal = AgentSignal(
                 hire_id=hire_id,
@@ -505,6 +511,8 @@ async def _generate_mock_signals(
 
     # 写入信号
     saved_orm = []
+    # P0-3 信号噪音治理：每轮仅落库高置信度前 SIGNAL_SAVE_LIMIT 条，避免 pending 堆积过期刷屏
+    passed = sorted(passed, key=lambda s: float(s.get("confidence", 0) or 0), reverse=True)[:SIGNAL_SAVE_LIMIT]
     for sig in passed:
         # P2-11: mock 演示模式信号强制 pending，禁止 full_managed 自动执行
         db_signal = AgentSignal(
