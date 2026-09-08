@@ -135,6 +135,25 @@ async def _process_single_hire_impl(hire: dict) -> dict[str, Any]:
                     "reason": f"距上次生成仅 {(now - last_time).total_seconds():.0f}s",
                 }
 
+            # P0-3b: pending 去重节流：该 hire 已有 24h 内未决 pending 时本轮跳过，
+            # 避免 advisory 用户不确认时仍按 10min 节奏持续堆积垃圾信号
+            _pend_result = await db.execute(
+                select(func.count()).select_from(AgentSignal).where(
+                    AgentSignal.hire_id == hire_id,
+                    AgentSignal.exec_status == "pending",
+                    AgentSignal.created_at >= now - timedelta(hours=24),
+                )
+            )
+            _pend_cnt = _pend_result.scalar() or 0
+            if _pend_cnt > 0:
+                return {
+                    "hire_id": hire_id,
+                    "trader_name": trader_name,
+                    "mode": management_mode,
+                    "status": "skipped",
+                    "reason": f"已有 {_pend_cnt} 条未决 pending(24h内)，节流跳过",
+                }
+
             # 生成信号（带超时）
             gen_result = await asyncio.wait_for(
                 signal_generator.generate_signals(
