@@ -345,8 +345,9 @@ async def _generate_real_signals(
         decisions = result.get("decisions", {})
         logger.info("DEBUG decisions type=%s len=%s value=%s", type(decisions).__name__, len(decisions) if hasattr(decisions, "__len__") else "N/A", str(decisions)[:500])
         if not decisions:
-            logger.info("ai-hedge-fund 未产生交易决策，切换 mock")
-            return await _generate_mock_signals(db, hire_id, user_id, trader_id, tickers, ticker_map, total_capital, agent_config=agent_config)
+            # P0-3c: 引擎理性无决策（震荡/观望）→ 返回空，禁止 mock 顶替，保证信号流真实
+            logger.info("ai-hedge-fund 无交易决策，返回空信号（真实观望）")
+            return {"signals": [], "source": "ai_hedge_fund", "rejected_count": 0, "error": "engine_no_decisions"}
 
         # 解析 decisions → 信号
         # decisions 格式：{"ticker": {"action": "buy", "quantity": 100, ...}, ...}
@@ -383,14 +384,11 @@ async def _generate_real_signals(
         if not passed and rejected:
             no_pos_sells = [r for r in rejected if "未持有" in r.get("reject_reason", "")]
             if no_pos_sells:
-                logger.warning(
-                    "真实引擎 %d 条信号全部被拒（含 %d 条空仓卖出），回退 mock",
+                logger.info(
+                    "真实引擎 %d 条信号全部被拒（含 %d 条空仓卖出），返回空（真实空仓观望）",
                     len(rejected), len(no_pos_sells),
                 )
-                return await _generate_mock_signals(
-                    db, hire_id, user_id, trader_id, tickers, ticker_map, total_capital,
-                    agent_config=agent_config,
-                )
+                return {"signals": [], "source": "ai_hedge_fund", "rejected_count": len(rejected), "error": "risk_rejected"}
 
         # 写入信号
         today = date.today()
