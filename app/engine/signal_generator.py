@@ -405,6 +405,7 @@ async def _generate_real_signals(
                 confidence=sig["confidence"],
                 reasoning=sig.get("reasoning", ""),
                 exec_status="pending",  # advisory 默认 pending；full_managed 在端点层自动执行
+                signal_source="ai_hedge_fund",
                 created_at=datetime.now(timezone.utc),
             )
             db.add(db_signal)
@@ -518,7 +519,8 @@ async def _generate_mock_signals(
             quantity=sig["quantity"],
             confidence=sig["confidence"],
             reasoning=sig.get("reasoning", ""),
-            exec_status="pending",  # mock 演示模式始终 pending；advisory 前端可确认，full_managed 由 auto_executor 拦截
+            exec_status="pending",  # mock 演示模式始终 pending；advisory 前端可确认，full_managed 由调度层拦截自动执行
+            signal_source="mock",
             created_at=datetime.now(timezone.utc),
         )
         db.add(db_signal)

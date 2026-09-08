@@ -185,33 +185,24 @@ async def _process_single_hire_impl(hire: dict) -> dict[str, Any]:
                     "status": "no_signals",
                 }
 
-            # P2-11: mock 演示模式仅禁止自动卖出（防 mock 假卖出），允许 buy 信号自动建仓
+            # P0-2: mock 硬约束 —— 演示(mock)信号一律不自动下单，无论 buy/sell，全托管也只落库待人工确认
             if management_mode == "full_managed" and demo_mode:
-                sell_signals = [s for s in signals if s.get("action") == "sell"]
-                buy_signals = [s for s in signals if s.get("action") == "buy"]
-                if sell_signals and not buy_signals:
-                    logger.warning(
-                        "调度 #%d [%s] full_managed 收到演示卖出信号，禁止自动下单（source=mock）",
-                        hire_id, trader_name,
-                    )
-                    return {
-                        "hire_id": hire_id,
-                        "trader_name": trader_name,
-                        "mode": management_mode,
-                        "source": source,
-                        "demo_mode": True,
-                        "signals_count": len(signals),
-                        "executed_count": 0,
-                        "pending_count": len(signals),
-                        "failed_count": 0,
-                        "status": "demo_mode_skipped",
-                    }
-                if sell_signals:
-                    signals = buy_signals
-                    logger.warning(
-                        "调度 #%d [%s] full_managed mock 过滤 %d 条卖出信号，保留 %d 条买入自动执行",
-                        hire_id, trader_name, len(sell_signals), len(buy_signals),
-                    )
+                logger.warning(
+                    "调度 #%d [%s] full_managed 收到演示(mock)信号 %d 条，禁止自动下单，全部保留 pending（source=%s）",
+                    hire_id, trader_name, len(signals), source,
+                )
+                return {
+                    "hire_id": hire_id,
+                    "trader_name": trader_name,
+                    "mode": management_mode,
+                    "source": source,
+                    "demo_mode": True,
+                    "signals_count": len(signals),
+                    "executed_count": 0,
+                    "pending_count": len(signals),
+                    "failed_count": 0,
+                    "status": "demo_mode_skipped",
+                }
 
             # 自动执行
             exec_result = await auto_execute_signals(
@@ -428,12 +419,21 @@ async def _maybe_take_equity_snapshot():
 
 
 async def _maybe_run_backtest():
-    """每日 16:30-17:00 触发回测：对到期推荐票回填 T+5/T+20 收益与基准超额。"""
+    """每日 16:00-17:30 触发回测：对到期推荐票回填 T+5/T+20 收益与基准超额。
+
+    P1-2 调度补偿：
+    - 原实现精确匹配 hour==16，服务若在该小时内抖动/重启即整日错过回填；
+      现放宽为 16:00-17:30 宽窗口（含 17 点前半小时），错过 16 点整也能当日补跑。
+    - run_daily_backtest 天然幂等（仅回填 t5/t20 NULL 字段），周期重复触发只补漏、不重复计。
+    - STOCKAI_FORCE_BACKTEST=1 时无条件补跑，供运维当日完全错过窗口后手工追填。
+    """
     now_local = datetime.now()
-    if now_local.hour != 16:
+    force = os.environ.get("STOCKAI_FORCE_BACKTEST") == "1"
+    in_window = (now_local.hour == 16) or (now_local.hour == 17 and now_local.minute < 30)
+    if not (force or in_window):
         return
     try:
-        logger.info("[backtest] 每日 16:30 回测开始")
+        logger.info("[backtest] 回测调度触发 force=%s window=%s", force, in_window)
         result = await run_daily_backtest()
         logger.info("[backtest] 回测完成: %s", result)
     except Exception as exc:  # noqa: BLE001

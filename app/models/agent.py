@@ -105,6 +105,10 @@ class AgentSignal(Base):
     confidence: Mapped[int] = mapped_column(Integer, nullable=False, default=50)
     reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
     exec_status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    signal_source: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="ai_hedge_fund", default="ai_hedge_fund",
+        comment="信号来源: ai_hedge_fund(真实引擎) / mock(演示模式)",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

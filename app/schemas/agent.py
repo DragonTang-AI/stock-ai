@@ -84,6 +84,7 @@ class UserAgentResponse(BaseModel):
     hired_at: datetime
     expires_at: datetime | None = None
     config_source: str = "default"
+    pending_count: int = 0
 
     class Config:
         from_attributes = True
@@ -94,6 +95,18 @@ class UpdateManagementModeRequest(BaseModel):
 
 
 # ── 控制台 Schemas ──
+
+class ConsoleHireDetailResponse(BaseModel):
+    hire_id: int
+    agent_id: str
+    trader_name: str = ""
+    trader_tag: str = ""
+    management_mode: str
+    status: str
+    hired_at: datetime | None = None
+    expires_at: datetime | None = None
+    config_source: str = "default"
+
 
 class ConsoleOverviewResponse(BaseModel):
     hire_id: int
@@ -121,6 +134,7 @@ class ConsoleSignalResponse(BaseModel):
     confidence: int
     reasoning: str | None = None
     exec_status: str
+    signal_source: str = "ai_hedge_fund"
     created_at: datetime
     updated_at: datetime | None = None
 
