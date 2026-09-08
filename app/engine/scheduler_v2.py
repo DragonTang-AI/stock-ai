@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from datetime import datetime, time as dt_time, timedelta, timezone
 from typing import Any
@@ -357,7 +358,7 @@ async def _maybe_take_equity_snapshot():
     仅读取数据库中的账户余额与持仓市值，不触发实时行情请求。
     """
     now_local = datetime.now()
-    if now_local.hour != 16 or now_local.minute >= 30:
+    if os.environ.get("STOCKAI_FORCE_SNAPSHOT") != "1" and (now_local.hour != 16 or now_local.minute >= 30):
         return
     try:
         from app.models.user import User
@@ -391,8 +392,16 @@ async def _maybe_take_equity_snapshot():
             )
             existing = {r[0] for r in snap_res.all()}
 
-            inserted = 0
+            # 同一用户多账户时按 user 去重（每日每用户一条快照，唯一约束 uq_snapshot_user_date）
+            seen_users: set[int] = set()
+            dedup_accounts = []
             for acc in accounts:
+                if acc.user_id in seen_users:
+                    continue
+                seen_users.add(acc.user_id)
+                dedup_accounts.append(acc)
+            inserted = 0
+            for acc in dedup_accounts:
                 if acc.user_id in existing:
                     continue
                 mv = mv_map.get(acc.user_id, 0.0)

@@ -196,7 +196,7 @@ class EquitySnapshot(Base):
     market_value: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, comment="持仓市值")
     total_equity: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, comment="总资产 = 现金 + 市值")
     profit: Mapped[float] = mapped_column(Numeric(18, 2), default=0.0, nullable=False, comment="总盈亏（相对初始 10w）")
-    profit_pct: Mapped[float] = mapped_column(Numeric(8, 4), default=0.0, nullable=False)
+    profit_pct: Mapped[float] = mapped_column(Numeric(12, 4), default=0.0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
