@@ -73,6 +73,16 @@ class HireAgentResponse(BaseModel):
     message: str = "雇佣成功"
 
 
+class RenewAgentResponse(BaseModel):
+    hire_id: int
+    agent_id: str
+    points_spent: int
+    balance_after: int
+    status: str
+    expires_at: datetime | None = None
+    message: str = "续费成功"
+
+
 class UserAgentResponse(BaseModel):
     id: int
     agent_id: str

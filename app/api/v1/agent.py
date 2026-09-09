@@ -15,6 +15,7 @@ from app.schemas.agent import (
     AgentPerformanceDetailResponse,
     HireAgentRequest,
     HireAgentResponse,
+    RenewAgentResponse,
     UserAgentResponse,
     UpdateManagementModeRequest,
     AgentConfigRequest,
@@ -276,6 +277,109 @@ async def hire_agent(
         balance_after=user_pts.balance,
         management_mode=req.management_mode,
         expires_at=expires_at,
+    )
+
+
+# ── 续费交易员 ──
+
+
+@router.post("/market/{hire_id}/renew", response_model=RenewAgentResponse)
+async def renew_agent(
+    hire_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """续费雇佣关系：扣积分并延长 30 天。
+
+    - 允许：active/paused/configuring 提前续费；到期自动过期(expires_at 已过)的 hire 续费后恢复调度
+    - 拒绝：主动终止（status=expired 但 expires_at 未到，持仓已被清理）的 hire，需重新雇佣
+    """
+    from datetime import datetime, timedelta, timezone
+    now = datetime.now(timezone.utc)
+
+    # 查雇佣关系（归属校验）
+    hire_result = await db.execute(
+        select(UserAgent).where(
+            and_(UserAgent.id == hire_id, UserAgent.user_id == current_user.id)
+        )
+    )
+    ua = hire_result.scalar_one_or_none()
+    if not ua:
+        logger.warning(f"续费失败: 雇佣关系不存在 user_id={current_user.id} hire_id={hire_id}")
+        raise HTTPException(status_code=404, detail="雇佣关系不存在")
+
+    # 查交易员
+    agent_result = await db.execute(
+        select(AgentTrader).where(AgentTrader.id == ua.agent_id)
+    )
+    agent = agent_result.scalar_one_or_none()
+    if not agent or not agent.is_active:
+        logger.warning(f"续费失败: 交易员不存在或已下架 user_id={current_user.id} hire_id={hire_id}")
+        raise HTTPException(status_code=400, detail="该交易员已下架，无法续费")
+
+    if ua.status not in ("active", "paused", "configuring", "expired"):
+        raise HTTPException(status_code=400, detail=f"当前状态({ua.status})不支持续费")
+
+    if ua.status == "expired":
+        # 区分：到期自动过期(expires_at<=now 可续) vs 主动终止(expires_at>now 不可续，持仓已清理)
+        if ua.expires_at is None or ua.expires_at > now:
+            raise HTTPException(status_code=400, detail="该雇佣已主动终止，如需继续请重新雇佣")
+
+    # 积分校验与扣费
+    pts_result = await db.execute(
+        select(UserPoints).where(UserPoints.user_id == current_user.id)
+    )
+    user_pts = pts_result.scalar_one_or_none()
+    if not user_pts:
+        user_pts = UserPoints(user_id=current_user.id)
+        db.add(user_pts)
+        await db.flush()
+
+    cost = agent.hire_price_points
+    if user_pts.balance < cost:
+        logger.warning(f"续费失败: 积分不足 user_id={current_user.id} hire_id={hire_id} need={cost} balance={user_pts.balance}")
+        raise HTTPException(status_code=400, detail=f"积分不足，续费需要 {cost} 积分，当前余额 {user_pts.balance}")
+
+    # 扣积分 + 流水
+    user_pts.balance -= cost
+    user_pts.total_spent += cost
+    tx = PointsTransaction(
+        user_id=current_user.id,
+        amount=-cost,
+        balance_after=user_pts.balance,
+        tx_type="renew_agent",
+        reference_id=str(ua.id),
+        description=f"续费交易员「{agent.code_name}·{agent.tag}」30天",
+    )
+    db.add(tx)
+
+    # 有效期：未到期从原到期日顺延，已到期从今天重计
+    base = ua.expires_at if (ua.expires_at and ua.expires_at > now) else now
+    new_expires_at = base + timedelta(days=30)
+
+    # 状态流转：到期恢复调度（配置齐全才 active，否则回到待配置）
+    if ua.status == "expired":
+        cfg_result = await db.execute(
+            select(AgentConfig).where(AgentConfig.hire_id == ua.id)
+        )
+        cfg = cfg_result.scalar_one_or_none()
+        ua.status = "active" if (cfg and cfg.config_source == "user") else "configuring"
+    ua.expires_at = new_expires_at
+    ua.updated_at = now
+    await db.commit()
+
+    logger.info(
+        f"续费交易员成功 user_id={current_user.id} hire_id={ua.id} cost={cost} "
+        f"balance_after={user_pts.balance} new_expires_at={new_expires_at} status={ua.status}"
+    )
+    return RenewAgentResponse(
+        hire_id=ua.id,
+        agent_id=agent.id,
+        points_spent=cost,
+        balance_after=user_pts.balance,
+        status=ua.status,
+        expires_at=new_expires_at,
+        message="续费成功",
     )
 
 
