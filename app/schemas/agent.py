@@ -177,6 +177,8 @@ class ConsoleTradeResponse(BaseModel):
     symbol: str
     symbol_name: str
     market: str = ""
+    trader_id: str = ""
+    trader_name: str = ""
     action: str
     price: float
     quantity: int
@@ -184,6 +186,19 @@ class ConsoleTradeResponse(BaseModel):
     reasoning: str | None = None
     exec_status: str
     executed_at: datetime | None = None
+
+
+class ConsoleLedgerGroup(BaseModel):
+    """单个交易员的账本持仓分组（AgentPortfolio 记账口径）"""
+    hire_id: int
+    trader_id: str = ""
+    trader_name: str = ""
+    trader_tag: str = ""
+    status: str = ""
+    management_mode: str = ""
+    total_market_value: float = 0
+    total_unrealized_pnl: float = 0
+    positions: list[ConsolePortfolioResponse] = []
 
 
 class EquityCurvePoint(BaseModel):

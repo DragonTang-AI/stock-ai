@@ -15,6 +15,7 @@ from app.schemas.agent import (
     ConsoleSignalResponse,
     ConsolePortfolioResponse,
     ConsoleTradeResponse,
+    ConsoleLedgerGroup,
     EquityCurvePoint,
     SignalConfirmRequest,
     LiveBoardAgentStatus,
@@ -439,6 +440,82 @@ async def ignore_signal(
     return {"success": True, "signal_id": signal_id, "message": "信号已忽略"}
 
 
+# ── 交易员账本持仓（按交易员分组，AgentPortfolio 记账口径） ──
+
+@router.get("/ledger-portfolios", response_model=list[ConsoleLedgerGroup])
+async def get_ledger_portfolios(
+    market: str = Query(default="A"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """当前用户各交易员账本持仓，按交易员分组。
+
+    与持仓页「账户总持仓」（positions 表，账户级）区分：
+    账本持仓只反映各交易员自身决策形成的持仓，用于明确归属。
+    """
+    rows = (
+        await db.execute(
+            select(UserAgent, AgentTrader)
+            .outerjoin(AgentTrader, AgentTrader.id == UserAgent.agent_id)
+            .where(UserAgent.user_id == current_user.id)
+            .order_by(UserAgent.hired_at.desc())
+        )
+    ).all()
+
+    hire_ids = [ua.id for ua, _ in rows]
+    if not hire_ids:
+        return []
+
+    pf_rows = (
+        await db.execute(
+            select(AgentPortfolio)
+            .where(and_(AgentPortfolio.hire_id.in_(hire_ids), AgentPortfolio.quantity > 0))
+            .order_by(desc(AgentPortfolio.market_value))
+        )
+    ).scalars().all()
+
+    by_hire: dict = {}
+    for p in pf_rows:
+        m = "HK" if p.symbol.endswith(".HK") else "A"
+        if market and m != market:
+            continue
+        by_hire.setdefault(p.hire_id, []).append(p)
+
+    groups = []
+    for ua, agent in rows:
+        items = by_hire.get(ua.id)
+        if not items:
+            continue
+        groups.append(
+            ConsoleLedgerGroup(
+                hire_id=ua.id,
+                trader_id=ua.agent_id,
+                trader_name=agent.code_name if agent else ua.agent_id,
+                trader_tag=agent.tag if agent else "",
+                status=ua.status,
+                management_mode=ua.management_mode,
+                total_market_value=round(sum(float(p.market_value or 0) for p in items), 2),
+                total_unrealized_pnl=round(sum(float(p.unrealized_pnl or 0) for p in items), 2),
+                positions=[
+                    ConsolePortfolioResponse(
+                        id=p.id,
+                        hire_id=p.hire_id,
+                        symbol=p.symbol,
+                        symbol_name=p.symbol_name,
+                        market="HK" if p.symbol.endswith(".HK") else "A",
+                        quantity=p.quantity,
+                        avg_cost=float(p.avg_cost),
+                        current_price=float(p.current_price) if p.current_price else None,
+                        market_value=float(p.market_value) if p.market_value else None,
+                        unrealized_pnl=float(p.unrealized_pnl) if p.unrealized_pnl else None,
+                    )
+                    for p in items
+                ],
+            )
+        )
+    return groups
+
+
 # ── 当前持仓 ──
 
 @router.get("/{hire_id}/portfolio", response_model=list[ConsolePortfolioResponse])
@@ -483,8 +560,10 @@ async def get_agent_trades(
 ):
     await _get_hire_or_404(db, hire_id, current_user.id)
 
+    # 带出执行交易员（AgentSignal.trader_id -> AgentTrader.code_name）
     q = (
-        select(AgentSignal)
+        select(AgentSignal, AgentTrader.code_name)
+        .outerjoin(AgentTrader, AgentTrader.id == AgentSignal.trader_id)
         .where(
             and_(
                 AgentSignal.hire_id == hire_id,
@@ -494,7 +573,7 @@ async def get_agent_trades(
         .order_by(desc(AgentSignal.updated_at))
         .limit(limit)
     )
-    rows = (await db.execute(q)).scalars().all()
+    rows = (await db.execute(q)).all()
 
     return [
         ConsoleTradeResponse(
@@ -509,8 +588,10 @@ async def get_agent_trades(
             reasoning=row.reasoning,
             exec_status=row.exec_status,
             executed_at=row.updated_at,
+            trader_id=str(row.trader_id) if row.trader_id else "",
+            trader_name=code_name or "",
         )
-        for row in rows
+        for row, code_name in rows
     ]
 
 
