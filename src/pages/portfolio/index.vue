@@ -260,7 +260,10 @@
           <text class="empty-sub">交易员建仓后，其账本持仓将显示在此</text>
         </view>
         <view v-else>
-          <view v-for="g in ledgerGroups" :key="g.hire_id" class="ledger-group">
+          <view v-if="activeLedgerGroups.length > 0" class="ledger-section-head">
+            <text class="ledger-section-title">进行中账本（{{ activeLedgerGroups.length }}）</text>
+          </view>
+          <view v-for="g in activeLedgerGroups" :key="g.hire_id" class="ledger-group">
             <view class="ledger-head">
               <view class="ledger-head-left">
                 <text class="ledger-name">{{ g.trader_name }}</text>
@@ -291,8 +294,48 @@
               </view>
             </view>
           </view>
+          <view v-if="historyLedgerGroups.length > 0" class="ledger-section-head">
+            <text class="ledger-section-title">历史账本（{{ historyLedgerGroups.length }}）</text>
+            <text class="ledger-section-sub">交易员已终止或暂停，账本仅作历史留存，不代表当前有效持仓</text>
+          </view>
+          <view
+            v-for="g in historyLedgerGroups"
+            :key="'h' + g.hire_id"
+            class="ledger-group ledger-group-history"
+          >
+            <view class="ledger-head">
+              <view class="ledger-head-left">
+                <text class="ledger-name">{{ g.trader_name }}</text>
+                <text v-if="g.trader_tag" class="ledger-tag">{{ g.trader_tag }}</text>
+                <text class="ledger-mode">{{ g.management_mode === 'full_managed' ? '全托管' : '建议模式' }}</text>
+                <text class="ledger-state">{{ g.status === 'expired' ? '已终止' : '已暂停' }}</text>
+              </view>
+              <view class="ledger-head-right">
+                <text class="ledger-mv">市值 {{ currencySymbol }}{{ formatMoney(g.total_market_value) }}</text>
+                <text class="ledger-pnl" :class="g.total_unrealized_pnl >= 0 ? 'up' : 'down'">
+                  {{ formatSigned(g.total_unrealized_pnl, 2) }}
+                </text>
+              </view>
+            </view>
+            <view v-for="p in g.positions" :key="'h' + p.id" class="ledger-pos">
+              <view class="pos-left">
+                <text class="pos-name">{{ p.symbol_name || p.symbol }}</text>
+                <text class="pos-symbol">{{ p.symbol }}</text>
+              </view>
+              <view class="pos-mid">
+                <text class="pos-price">{{ formatMoney(p.current_price || 0, 2) }}</text>
+                <text class="pos-cost">成本 {{ formatMoney(p.avg_cost, 2) }}</text>
+              </view>
+              <view class="pos-right">
+                <text class="pos-pnl" :class="(p.unrealized_pnl || 0) >= 0 ? 'up' : 'down'">
+                  {{ formatSigned(p.unrealized_pnl || 0, 2) }}
+                </text>
+                <text class="pos-qty">{{ p.quantity }}股</text>
+              </view>
+            </view>
+          </view>
           <view class="ledger-note">
-            <text>账本持仓为各交易员自身决策形成的持仓，与账户总持仓（全账户合并口径）分开展示</text>
+            <text>口径说明：账户总持仓 = 账户真实资金池（所有交易员共用同一个池）；交易员账本 = 各交易员独立策略记账，同一标的可在多本账上重复出现，两者口径不同、不可直接相加</text>
           </view>
         </view>
       </template>
@@ -690,6 +733,9 @@ const activeTab = ref('positions')
 // 持仓归属分区：账户总持仓（账户级）/ 交易员账本（AgentPortfolio 记账口径）
 const posScope = ref<'account' | 'ledger'>('account')
 const ledgerGroups = ref<LedgerPortfolioGroup[]>([])
+/** 账本分区：active 为进行中，expired/paused 归入历史账本 */
+const activeLedgerGroups = computed(() => ledgerGroups.value.filter(g => g.status === 'active'))
+const historyLedgerGroups = computed(() => ledgerGroups.value.filter(g => g.status !== 'active'))
 const isLoading = ref(false)
 const submitting = ref(false)
 const account = ref<AccountInfo | null>(null)
@@ -1765,6 +1811,11 @@ onShow(() => {
 }
 
 /* ── 交易员账本持仓 ── */
+.ledger-section-head { padding: 24rpx 32rpx 8rpx; }
+.ledger-section-title { font-size: 26rpx; font-weight: 600; color: $text-primary; }
+.ledger-section-sub { display: block; margin-top: 6rpx; font-size: 20rpx; color: $text-hint; line-height: 1.5; }
+.ledger-group-history { opacity: 0.62; }
+.ledger-state { font-size: 18rpx; color: $text-hint; background: $bg-page; padding: 2rpx 10rpx; border-radius: 8rpx; }
 .ledger-group {
   margin: 16rpx 24rpx;
   background: $bg-card;
