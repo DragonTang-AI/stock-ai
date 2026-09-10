@@ -141,7 +141,7 @@ export interface TradeItem {
   price: number
   amount: number
   created_at: string
-  source?: 'agent' | 'user'
+  source?: 'agent' | 'user' | 'hosted'
   trader_name?: string | null
 }
 

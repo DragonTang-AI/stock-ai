@@ -233,6 +233,7 @@
           <view class="pos-left">
             <text class="pos-name">{{ pos.name }}</text>
             <text class="pos-symbol">{{ pos.symbol }}</text>
+            <text v-if="posOperatorMap[pos.symbol]" class="pos-operator">{{ posOperatorMap[pos.symbol] }}</text>
           </view>
           <view class="pos-mid">
             <text class="pos-price">{{ formatMoney(pos.market_price, 2) }}</text>
@@ -740,6 +741,8 @@ const isLoading = ref(false)
 const submitting = ref(false)
 const account = ref<AccountInfo | null>(null)
 const positions = ref<PositionItem[]>([])
+/** 持仓溯源：symbol -> 最近操作来源标签（只读标注，不代表持仓归属） */
+const posOperatorMap = ref<Record<string, string>>({})
 const refreshing = ref(false)
 const pnlFlash = ref<Record<string, string>>({})
 const orders = ref<OrderItem[]>([])
@@ -1099,9 +1102,24 @@ async function loadAccount() {
   try { account.value = await getAccount(activeMarket.value) } catch (e) { console.error('[Portfolio] loadAccount 失败', e); }
 }
 
+/** 持仓「最近操作」溯源标签：取该标的最近一条成交的执行来源 */
+async function loadPosOperatorMap() {
+  try {
+    const res = await getTrades(activeMarket.value)
+    const map: Record<string, string> = {}
+    for (const t of res.data || []) {
+      const sym = (t.symbol || '').toUpperCase()
+      if (!sym || map[sym]) continue
+      if (t.source === 'agent') map[sym] = '最近操作 · ' + (t.trader_name || 'AI 交易员')
+      else if (t.source === 'hosted') map[sym] = '最近操作 · AI 托管'
+    }
+    posOperatorMap.value = map
+  } catch (e) { console.error('[Portfolio] loadPosOperatorMap 失败', e); }
+}
+
 async function loadPositions() {
   try {
-    const res = await getPositions(activeMarket.value)
+    const [res] = await Promise.all([getPositions(activeMarket.value), loadPosOperatorMap()])
     positions.value = res.data || []
   } catch (e) { console.error('[Portfolio] loadPositions 失败', e); }
 }
@@ -1434,6 +1452,7 @@ onShow(() => {
 .empty-sub { font-size: $font-size-xs; color: $text-hint; margin-top: 8rpx; }
 
 /* Position Card */
+.pos-operator { display: block; margin-top: 4rpx; font-size: 18rpx; color: $color-primary; }
 .position-card {
   background: $bg-card; margin: 8rpx 24rpx; border-radius: $border-radius;
   padding: 24rpx; display: flex; align-items: center; cursor: pointer;
