@@ -171,6 +171,8 @@ export interface ConsoleTrade {
   symbol: string
   symbol_name: string
   market: string
+  trader_id?: string
+  trader_name?: string
   action: string
   price: number
   quantity: number
@@ -230,6 +232,39 @@ export function getAgentPortfolio(hireId: number): Promise<ConsolePortfolio[]> {
 /** 获取交易日志 */
 export function getAgentTrades(hireId: number): Promise<ConsoleTrade[]> {
   return request<ConsoleTrade[]>('/agent-console/' + hireId + '/trades')
+}
+
+/** 交易员账本持仓（AgentPortfolio 记账口径） */
+export interface LedgerPortfolioPosition {
+  id: number
+  hire_id: number
+  symbol: string
+  symbol_name: string
+  market: string
+  quantity: number
+  avg_cost: number
+  current_price: number | null
+  market_value: number | null
+  unrealized_pnl: number | null
+}
+
+export interface LedgerPortfolioGroup {
+  hire_id: number
+  trader_id: string
+  trader_name: string
+  trader_tag: string
+  status: string
+  management_mode: string
+  total_market_value: number
+  total_unrealized_pnl: number
+  positions: LedgerPortfolioPosition[]
+}
+
+/** 各交易员账本持仓（按交易员分组，用于持仓页归属分区） */
+export function getLedgerPortfolios(market?: string): Promise<LedgerPortfolioGroup[]> {
+  return request<LedgerPortfolioGroup[]>('/agent-console/ledger-portfolios', {
+    params: market ? { market } : undefined,
+  })
 }
 
 /** 获取权益曲线 */

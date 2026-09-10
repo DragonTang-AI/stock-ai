@@ -232,6 +232,7 @@
             <text class="trade-symbol">{{ trade.symbol }}</text>
             <text class="mkt-tag" :class="trade.marketTag">{{ trade.marketLabel }}</text>
             <text class="trade-name">{{ trade.symbol_name }}</text>
+            <text class="trade-trader">执行交易员 · {{ trade.trader_name || '--' }}</text>
           </view>
         </view>
         <view class="trade-right">
@@ -1245,6 +1246,12 @@ const formatRelative = (t: string | null) => {
       .trade-name {
         font-size: 20rpx;
         color: #667788;
+      }
+      .trade-trader {
+        font-size: 18rpx;
+        color: #8899aa;
+        display: block;
+        margin-top: 2rpx;
       }
     }
   }

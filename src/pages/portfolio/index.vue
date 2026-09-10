@@ -200,6 +200,18 @@
       :refresher-triggered="refreshing"
       @refresherrefresh="onPullRefresh"
     >
+      <!-- 持仓归属分区：账户总持仓 / 交易员账本 -->
+      <view class="pos-scope-tabs">
+        <view class="pos-scope-tab" :class="{ active: posScope === 'account' }" @click="switchPosScope('account')">
+          <text>账户总持仓</text>
+        </view>
+        <view class="pos-scope-tab" :class="{ active: posScope === 'ledger' }" @click="switchPosScope('ledger')">
+          <text>交易员账本</text>
+        </view>
+      </view>
+
+      <!-- 账户总持仓（账户级口径） -->
+      <template v-if="posScope === 'account'">
       <view v-if="positions.length === 0" class="empty-state">
         <text class="empty-icon">&#x1F4ED;</text>
         <text class="empty-text">暂无持仓</text>
@@ -237,6 +249,53 @@
           </view>
         </view>
       </view>
+
+      </template>
+
+      <!-- 交易员账本持仓（按交易员分组，AgentPortfolio 记账口径） -->
+      <template v-else>
+        <view v-if="ledgerGroups.length === 0" class="empty-state">
+          <text class="empty-icon">&#x1F4D2;</text>
+          <text class="empty-text">暂无交易员账本持仓</text>
+          <text class="empty-sub">交易员建仓后，其账本持仓将显示在此</text>
+        </view>
+        <view v-else>
+          <view v-for="g in ledgerGroups" :key="g.hire_id" class="ledger-group">
+            <view class="ledger-head">
+              <view class="ledger-head-left">
+                <text class="ledger-name">{{ g.trader_name }}</text>
+                <text v-if="g.trader_tag" class="ledger-tag">{{ g.trader_tag }}</text>
+                <text class="ledger-mode">{{ g.management_mode === 'full_managed' ? '全托管' : '建议模式' }}</text>
+              </view>
+              <view class="ledger-head-right">
+                <text class="ledger-mv">市值 {{ currencySymbol }}{{ formatMoney(g.total_market_value) }}</text>
+                <text class="ledger-pnl" :class="g.total_unrealized_pnl >= 0 ? 'up' : 'down'">
+                  {{ formatSigned(g.total_unrealized_pnl, 2) }}
+                </text>
+              </view>
+            </view>
+            <view v-for="p in g.positions" :key="p.id" class="ledger-pos">
+              <view class="pos-left">
+                <text class="pos-name">{{ p.symbol_name || p.symbol }}</text>
+                <text class="pos-symbol">{{ p.symbol }}</text>
+              </view>
+              <view class="pos-mid">
+                <text class="pos-price">{{ formatMoney(p.current_price || 0, 2) }}</text>
+                <text class="pos-cost">成本 {{ formatMoney(p.avg_cost, 2) }}</text>
+              </view>
+              <view class="pos-right">
+                <text class="pos-pnl" :class="(p.unrealized_pnl || 0) >= 0 ? 'up' : 'down'">
+                  {{ formatSigned(p.unrealized_pnl || 0, 2) }}
+                </text>
+                <text class="pos-qty">{{ p.quantity }}股</text>
+              </view>
+            </view>
+          </view>
+          <view class="ledger-note">
+            <text>账本持仓为各交易员自身决策形成的持仓，与账户总持仓（全账户合并口径）分开展示</text>
+          </view>
+        </view>
+      </template>
 
       <!-- 底部占位，防止内容被FAB遮挡 -->
       <view style="height: 160rpx"></view>
@@ -278,6 +337,11 @@
         <view class="trade-top">
           <text class="trade-name">{{ trade.name || trade.symbol }}</text>
           <text :class="trade.side === 'buy' ? 'up' : 'down'">{{ trade.side === 'buy' ? '买入' : '卖出' }} {{ trade.quantity }}股</text>
+        </view>
+        <view class="trade-src-row">
+          <text class="trade-src-tag" :class="trade.source === 'agent' ? 'src-agent' : (trade.source === 'hosted' ? 'src-hosted' : 'src-user')">
+            {{ tradeSourceText(trade) }}
+          </text>
         </view>
         <view class="trade-meta">
           <text>{{ formatMoney(trade.price, 2) }} &times; {{ trade.quantity }} = {{ formatMoney(trade.amount) }}</text>
@@ -592,6 +656,7 @@ import {
   initHKAccount, getMarketRules,
   type AccountInfo, type PositionItem, type OrderItem, type TradeItem, type PositionAnalytics, type MarketRules,
 } from '@/api/portfolio'
+import { getLedgerPortfolios, type LedgerPortfolioGroup } from '@/api/agent'
 import { searchStocks, fetchQuote, getLotSize, type SearchResult, type QuoteSnapshot } from '@/api/market'
 import { formatPercent, formatSigned } from '@/utils/format'
 import { useShowRefresh, touchRefreshKey } from '@/utils/refresh-cache'
@@ -622,6 +687,9 @@ const marketRules = ref<MarketRules | null>(null)
 
 // ─── 默认 Tab ───
 const activeTab = ref('positions')
+// 持仓归属分区：账户总持仓（账户级）/ 交易员账本（AgentPortfolio 记账口径）
+const posScope = ref<'account' | 'ledger'>('account')
+const ledgerGroups = ref<LedgerPortfolioGroup[]>([])
 const isLoading = ref(false)
 const submitting = ref(false)
 const account = ref<AccountInfo | null>(null)
@@ -970,6 +1038,7 @@ function switchTab(key: string) {
   activeTab.value = key
   if (key === 'orders') loadOrders(undefined, activeMarket.value)
   if (key === 'trades') loadTrades(activeMarket.value)
+  if (key === 'positions' && posScope.value === 'ledger') loadLedger()
 }
 
 function goDetail(symbol: string) {
@@ -989,6 +1058,26 @@ async function loadPositions() {
     const res = await getPositions(activeMarket.value)
     positions.value = res.data || []
   } catch (e) { console.error('[Portfolio] loadPositions 失败', e); }
+}
+
+/** 各交易员账本持仓（按交易员分组） */
+async function loadLedger() {
+  try {
+    ledgerGroups.value = await getLedgerPortfolios(activeMarket.value) || []
+  } catch (e) { console.error('[Portfolio] loadLedger 失败', e); }
+}
+
+/** 切换持仓归属分区 */
+function switchPosScope(scope: 'account' | 'ledger') {
+  posScope.value = scope
+  if (scope === 'ledger' && ledgerGroups.value.length === 0) loadLedger()
+}
+
+/** 成交记录执行来源文案 */
+function tradeSourceText(t: TradeItem): string {
+  if (t.source === 'agent') return '执行交易员 · ' + (t.trader_name || 'AI 交易员')
+  if (t.source === 'hosted') return '执行来源 · AI 托管'
+  return '执行来源 · 手动下单'
 }
 
 async function loadOrders() {
@@ -1087,6 +1176,7 @@ async function switchMarket(market: string) {
   }
   await loadPositions()
   await loadAnalytics()
+  await loadLedger()
 }
 
 async function refreshAll() {
@@ -1108,6 +1198,7 @@ async function refreshAll() {
   if (Object.keys(flash).length > 0) {
     setTimeout(() => { pnlFlash.value = {} }, 2000)
   }
+  if (posScope.value === 'ledger') await loadLedger()
   isLoading.value = false
 }
 
@@ -1643,4 +1734,51 @@ onShow(() => {
   &::after { border: none; }
   &[disabled] { opacity: 0.5; }
 }
+
+/* ── 成交记录执行来源标记 ── */
+.trade-src-row { margin-top: 8rpx; }
+.trade-src-tag {
+  font-size: $font-size-xs;
+  color: $text-hint;
+  background: $bg-page;
+  border-radius: 8rpx;
+  padding: 4rpx 12rpx;
+}
+.trade-src-tag.src-agent { color: $color-primary; background: rgba($color-primary, 0.08); }
+.trade-src-tag.src-hosted { color: #F59E0B; background: rgba(#F59E0B, 0.1); }
+
+/* ── 持仓归属分区 ── */
+.pos-scope-tabs { display: flex; gap: 12rpx; padding: 24rpx 32rpx 0; }
+.pos-scope-tab {
+  padding: 12rpx 28rpx;
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  background: $bg-page;
+  border-radius: 24rpx;
+  border: 1rpx solid transparent;
+}
+.pos-scope-tab.active {
+  color: $color-primary;
+  background: rgba($color-primary, 0.1);
+  border-color: $color-primary;
+  font-weight: 600;
+}
+
+/* ── 交易员账本持仓 ── */
+.ledger-group {
+  margin: 16rpx 24rpx;
+  background: $bg-card;
+  border-radius: $border-radius;
+  padding: 20rpx 24rpx;
+}
+.ledger-head { display: flex; justify-content: space-between; align-items: flex-start; }
+.ledger-head-left { display: flex; align-items: center; gap: 10rpx; }
+.ledger-name { font-size: $font-size-base; font-weight: 600; color: $text-primary; }
+.ledger-tag { font-size: 18rpx; color: $color-primary; background: rgba($color-primary, 0.1); padding: 2rpx 10rpx; border-radius: 8rpx; }
+.ledger-mode { font-size: 18rpx; color: $text-hint; background: $bg-page; padding: 2rpx 10rpx; border-radius: 8rpx; }
+.ledger-head-right { text-align: right; }
+.ledger-mv { display: block; font-size: $font-size-xs; color: $text-hint; }
+.ledger-pnl { font-size: $font-size-sm; font-weight: 600; }
+.ledger-pos { display: flex; align-items: center; padding: 16rpx 0; border-top: 1rpx solid rgba(0, 0, 0, 0.06); }
+.ledger-note { padding: 16rpx 32rpx 0; font-size: 20rpx; color: $text-hint; line-height: 1.5; }
 </style>
