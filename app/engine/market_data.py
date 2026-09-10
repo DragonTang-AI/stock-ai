@@ -93,67 +93,155 @@ async def get_stock_list(db: AsyncSession, limit: int = 10, markets: list[str] |
 # ── 腾讯行情动态股票池（P2-03 整改：接腾讯行情接口）──
 
 _TENCENT_RANK_URL = "https://proxy.finance.qq.com/cgi/cgi-bin/rank/hs/getBoardRankList"
-_tencent_rank_cache: dict[str, Any] = {"data": [], "ts": 0.0}
+_SINA_RANK_URL = "http://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData"
+_tencent_rank_cache: dict[str, Any] = {"data": [], "ts": 0.0, "source": ""}
 _TENCENT_RANK_TTL = 60.0  # 60s 缓存，避免频繁请求
+# 2026-09-09 加固：connect 3s 快速失败（原 timeout=10 遇 TLS ConnectTimeout 单次挂 10s，
+# 多个 hire 累积超过 PER_HIRE_TIMEOUT=180s 导致整轮跳过 0 信号）
+_TENCENT_RANK_TIMEOUT = httpx.Timeout(connect=3.0, read=8.0, write=5.0, pool=3.0)
+# 主备源均失败的负缓存窗口：窗口内直接复用旧缓存/空，避免每轮调度反复等超时
+_TENCENT_RANK_FAIL_TTL = 30.0
+_tencent_rank_fail_ts = 0.0
 
 
-async def fetch_tencent_rank_quotes(count: int = 100) -> list[dict[str, Any]]:
-    """
-    腾讯 getBoardRankList 获取全市场 A 股实时排行（按成交额倒序）。
+def _rank_headers() -> dict[str, str]:
+    return {"Referer": "https://gu.qq.com/", "User-Agent": "Mozilla/5.0"}
 
-    返回列表项字段：
-        symbol / name / price / change_pct / volume / amount(元) /
-        pe_ttm / market_cap(元) / float_market_cap(元) / turnover_rate(%)
-    接口失败返回 []，由调用方决定 fallback。
-    """
-    now = time.time()
-    if now - _tencent_rank_cache["ts"] < _TENCENT_RANK_TTL and _tencent_rank_cache["data"]:
-        return _tencent_rank_cache["data"][:count]
 
-    url = f"{_TENCENT_RANK_URL}?board_code=aStock&sort_type=volume&direct=down&offset=0&count={count}"
-    headers = {"Referer": "https://gu.qq.com/", "User-Agent": "Mozilla/5.0"}
+def _parse_qq_rank_payload(data: dict) -> list[dict[str, Any]]:
+    """解析腾讯 getBoardRankList 返回"""
+    rank_list = (data.get("data") or {}).get("rank_list") or []
+    quotes: list[dict[str, Any]] = []
+    for r in rank_list:
+        code = r.get("code", "")
+        if not code.startswith(("sh", "sz")):
+            continue
+        symbol = code[2:]
+        try:
+            price = float(r.get("zxj") or 0)
+            change_pct = float(r.get("zdf") or 0)
+            volume = float(r.get("volume") or 0)
+            amount_wan = float(r.get("turnover") or 0)      # 成交额(万)
+            pe_ttm = float(r.get("pe_ttm") or 0)
+            mcap_yi = float(r.get("zsz") or 0)              # 总市值(亿)
+            fmcap_yi = float(r.get("ltsz") or 0)            # 流通市值(亿)
+            hsl = float(r.get("hsl") or 0)                  # 换手率(%)
+        except (TypeError, ValueError):
+            continue
+        quotes.append({
+            "symbol": symbol,
+            "name": r.get("name", symbol),
+            "price": price,
+            "change_pct": change_pct,
+            "volume": volume,
+            "amount": amount_wan * 10000,
+            "pe_ttm": pe_ttm,
+            "market_cap": mcap_yi * 1e8,
+            "float_market_cap": fmcap_yi * 1e8,
+            "turnover_rate": hsl,
+        })
+    return quotes
+
+
+async def _fetch_sina_rank_quotes(count: int = 100) -> list[dict[str, Any]]:
+    """备用源：新浪沪深 A 股实时排行（按成交额倒序），字段对齐腾讯返回"""
+    params = {
+        "page": 1,
+        "num": min(max(count, 1), 100),
+        "sort": "amount",
+        "asc": 0,
+        "node": "hs_a",
+    }
+    headers = {"Referer": "http://finance.sina.com.cn", "User-Agent": "Mozilla/5.0"}
+    quotes: list[dict[str, Any]] = []
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(url, headers=headers)
+        async with httpx.AsyncClient(timeout=_TENCENT_RANK_TIMEOUT) as client:
+            resp = await client.get(_SINA_RANK_URL, params=params, headers=headers)
             resp.raise_for_status()
-            data = resp.json()
-        rank_list = (data.get("data") or {}).get("rank_list") or []
-        quotes: list[dict[str, Any]] = []
-        for r in rank_list:
-            code = r.get("code", "")
-            if not code.startswith(("sh", "sz")):
+            rows = resp.json()
+        for r in rows:
+            symbol = str(r.get("code") or "")
+            name = str(r.get("name") or "")
+            if not symbol or not name:
                 continue
-            symbol = code[2:]
             try:
-                price = float(r.get("zxj") or 0)
-                change_pct = float(r.get("zdf") or 0)
+                price = float(r.get("trade") or 0)
+                change_pct = float(r.get("changepercent") or 0)
                 volume = float(r.get("volume") or 0)
-                amount_wan = float(r.get("turnover") or 0)      # 成交额(万)
-                pe_ttm = float(r.get("pe_ttm") or 0)
-                mcap_yi = float(r.get("zsz") or 0)              # 总市值(亿)
-                fmcap_yi = float(r.get("ltsz") or 0)            # 流通市值(亿)
-                hsl = float(r.get("hsl") or 0)                  # 换手率(%)
+                amount = float(r.get("amount") or 0)
+                turnover_rate = float(r.get("turnoverratio") or 0)
+                pe_ttm = float(r.get("per") or 0)
+                mktcap_wan = float(r.get("mktcap") or 0)    # 总市值(万)
+                nmc_wan = float(r.get("nmc") or 0)          # 流通市值(万)
             except (TypeError, ValueError):
                 continue
             quotes.append({
                 "symbol": symbol,
-                "name": r.get("name", symbol),
+                "name": name,
                 "price": price,
                 "change_pct": change_pct,
                 "volume": volume,
-                "amount": amount_wan * 10000,
+                "amount": amount,
                 "pe_ttm": pe_ttm,
-                "market_cap": mcap_yi * 1e8,
-                "float_market_cap": fmcap_yi * 1e8,
-                "turnover_rate": hsl,
+                "market_cap": mktcap_wan * 10000,
+                "float_market_cap": nmc_wan * 10000,
+                "turnover_rate": turnover_rate,
             })
+    except Exception as exc:
+        logger.warning("新浪备用排行源请求失败: %s", exc)
+    return quotes
+
+
+async def fetch_tencent_rank_quotes(count: int = 100) -> list[dict[str, Any]]:
+    """
+    获取 A 股实时排行（按成交额倒序）。主源腾讯 getBoardRankList，主源不可用时
+    自动切换备用源新浪排行；双源均失败返回旧缓存或 []（调用方 fallback 静态池）。
+
+    返回列表项字段：
+        symbol / name / price / change_pct / volume / amount(元) /
+        pe_ttm / market_cap(元) / float_market_cap(元) / turnover_rate(%)
+    """
+    global _tencent_rank_fail_ts
+    now = time.time()
+    cache = _tencent_rank_cache["data"]
+    if cache and now - _tencent_rank_cache["ts"] < _TENCENT_RANK_TTL:
+        return cache[:count]
+
+    # 双源刚失败过：负缓存窗口内直接复用旧数据，避免每轮调度反复等超时
+    if _tencent_rank_fail_ts and now - _tencent_rank_fail_ts < _TENCENT_RANK_FAIL_TTL:
+        return cache[:count]
+
+    quotes: list[dict[str, Any]] = []
+    source = ""
+    url = f"{_TENCENT_RANK_URL}?board_code=aStock&sort_type=volume&direct=down&offset=0&count={count}"
+    try:
+        async with httpx.AsyncClient(timeout=_TENCENT_RANK_TIMEOUT) as client:
+            resp = await client.get(url, headers=_rank_headers())
+            resp.raise_for_status()
+            quotes = _parse_qq_rank_payload(resp.json())
         if quotes:
-            _tencent_rank_cache["data"] = quotes
-            _tencent_rank_cache["ts"] = now
-        return quotes
-    except Exception:
-        logger.exception("腾讯排行接口请求失败")
-        return []
+            source = "qq"
+    except Exception as exc:
+        logger.warning("腾讯排行接口失败，切换备用源: %s", exc)
+
+    if not quotes:
+        quotes = await _fetch_sina_rank_quotes(count=count)
+        if quotes:
+            source = "sina"
+
+    if quotes:
+        _tencent_rank_cache["data"] = quotes
+        _tencent_rank_cache["ts"] = now
+        _tencent_rank_cache["source"] = source
+        _tencent_rank_fail_ts = 0.0
+        logger.info("动态池更新成功 source=%s size=%d", source, len(quotes))
+        return quotes[:count]
+    _tencent_rank_fail_ts = now
+    if cache:
+        logger.warning("主备行情源均失败，降级返回 %d 条旧缓存", len(cache))
+    else:
+        logger.warning("主备行情源均失败且无缓存，返回空（调用方将 fallback 静态池）")
+    return cache[:count]
 
 
 async def get_dynamic_stock_list(
