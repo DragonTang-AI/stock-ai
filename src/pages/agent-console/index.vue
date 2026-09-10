@@ -50,7 +50,7 @@
         <text class="ov-value">{{ overview.position_count }}</text>
         <text class="ov-label">持仓</text>
       </view>
-      <view class="ov-card highlight">
+      <view class="ov-card highlight clickable" @click="showPendingView">
         <text class="ov-value" style="color: #f39c12">{{ overview.pending_signals }}</text>
         <text class="ov-label">待决策</text>
       </view>
@@ -58,17 +58,17 @@
 
     <!-- Tab 切换 -->
     <view class="tabs">
-      <view class="tab-item" :class="{ active: activeTab === 'signals' }" @click="activeTab = 'signals'">
+      <view class="tab-item" :class="{ active: activeTab === 'signals' }" @click="selectTab('signals')">
         <text>信号流</text>
-        <text v-if="pendingCount > 0" class="tab-badge">{{ pendingCount }}</text>
+        <text v-if="pendingCount > 0" class="tab-badge" @click.stop="showPendingView">{{ pendingCount }}</text>
       </view>
-      <view class="tab-item" :class="{ active: activeTab === 'portfolio' }" @click="activeTab = 'portfolio'">
+      <view class="tab-item" :class="{ active: activeTab === 'portfolio' }" @click="selectTab('portfolio')">
         <text>持仓</text>
       </view>
-      <view class="tab-item" :class="{ active: activeTab === 'trades' }" @click="activeTab = 'trades'">
+      <view class="tab-item" :class="{ active: activeTab === 'trades' }" @click="selectTab('trades')">
         <text>交易记录</text>
       </view>
-      <view class="tab-item" :class="{ active: activeTab === 'perf' }" @click="activeTab = 'perf'" @click.once="loadPerformance">
+      <view class="tab-item" :class="{ active: activeTab === 'perf' }" @click="selectTab('perf')">
         <text>绩效</text>
       </view>
     </view>
@@ -242,7 +242,7 @@
       </view>
     </view>
 
-    <!-- 绩效面板 -->
+    <!-- 绩效面板（深色重制版） -->
     <view v-if="activeTab === 'perf'" class="perf-panel">
       <view v-if="perfLoading" class="perf-loading">
         <text>加载中...</text>
@@ -253,54 +253,73 @@
         <text class="empty-desc">交易员开始交易后将生成绩效指标</text>
       </view>
       <template v-else>
-        <!-- 指标卡片 -->
+        <!-- 累计收益 Hero 卡 -->
+        <view class="perf-hero">
+          <view class="perf-hero-main">
+            <text class="perf-hero-label">累计收益</text>
+            <view class="perf-hero-value" :class="perfData.return_pct >= 0 ? 'is-up' : 'is-down'">
+              <text class="perf-hero-arrow">{{ perfData.return_pct >= 0 ? '▲' : '▼' }}</text>
+              <text class="perf-hero-num mono">{{ formatPct(perfData.return_pct) }}</text>
+            </view>
+          </view>
+          <view class="perf-hero-sub">
+            <view class="perf-hero-sub-item">
+              <text class="perf-hero-sub-label">Alpha</text>
+              <text class="perf-hero-sub-val mono" :class="(perfData.alpha || 0) >= 0 ? 'is-up' : 'is-down'">
+                {{ formatPct(perfData.alpha || 0) }}
+              </text>
+            </view>
+            <view class="perf-hero-sub-item">
+              <text class="perf-hero-sub-label">夏普比率</text>
+              <text class="perf-hero-sub-val mono">{{ perfData.sharpe_ratio != null ? perfData.sharpe_ratio.toFixed(2) : '--' }}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 风控/胜率指标 -->
         <view class="perf-metrics">
           <view class="perf-card">
-            <text class="perf-label">累计收益</text>
-            <text class="perf-value" :class="perfData.return_pct >= 0 ? 'up' : 'down'">
-              {{ perfData.return_pct >= 0 ? '+' : '' }}{{ formatMoney(perfData.return_pct, 2) }}%
-            </text>
-          </view>
-          <view class="perf-card">
-            <text class="perf-label">Alpha</text>
-            <text class="perf-value" :class="(perfData.alpha || 0) >= 0 ? 'up' : 'down'">
-              {{ (perfData.alpha || 0) >= 0 ? '+' : '' }}{{ formatMoney(perfData.alpha || 0, 2) }}%
-            </text>
-          </view>
-          <view class="perf-card">
-            <text class="perf-label">夏普比率</text>
-            <text class="perf-value">{{ formatMoney(perfData.sharpe_ratio || 0, 2) }}</text>
-          </view>
-          <view class="perf-card">
             <text class="perf-label">最大回撤</text>
-            <text class="perf-value down">{{ formatMoney(perfData.max_drawdown || 0, 2) }}%</text>
+            <view class="perf-value-wrap">
+              <text class="perf-value mono is-down">{{ perfData.max_drawdown != null ? '-' + Math.abs(perfData.max_drawdown).toFixed(2) + '%' : '--' }}</text>
+            </view>
+            <text class="perf-trend down">区间最大回撤</text>
           </view>
           <view class="perf-card">
             <text class="perf-label">胜率</text>
-            <text class="perf-value">{{ formatMoney(perfData.win_rate || 0, 1) }}%</text>
+            <view class="perf-value-wrap">
+              <text class="perf-value mono">{{ perfData.win_rate != null ? perfData.win_rate.toFixed(1) + '%' : '--' }}</text>
+            </view>
+            <text class="perf-trend neutral">{{ perfHistory.length || 0 }} 个统计周期</text>
           </view>
         </view>
+
         <!-- 收益曲线 -->
-        <view v-if="perfCurve.dates.length" class="perf-chart-section">
-          <text class="perf-section-title">收益走势</text>
+        <view v-if="perfCurve.dates.length" class="perf-chart-card">
+          <view class="perf-chart-head">
+            <text class="perf-section-title">收益走势</text>
+          </view>
           <LineChart
             v-model="perfPeriod"
             :dates="perfCurve.dates"
             :values="perfCurve.values"
-            height="200px"
+            height="220px"
             :show-legend="false"
           />
         </view>
+
         <!-- 历史记录 -->
-        <view v-if="perfHistory.length" class="perf-history">
-          <text class="perf-section-title">历史记录</text>
+        <view v-if="perfHistory.length" class="perf-history-card">
+          <text class="perf-section-title">历史业绩</text>
           <view v-for="p in perfHistory" :key="p.period + '-' + p.period_end" class="perf-history-row">
-            <text class="perf-history-period">{{ p.period_end }}</text>
-            <text class="perf-history-return" :class="p.return_pct >= 0 ? 'up' : 'down'">
-              {{ p.return_pct >= 0 ? '+' : '' }}{{ formatMoney(p.return_pct, 2) }}%
-            </text>
-            <text class="perf-history-sharpe">Sharpe {{ formatMoney(p.sharpe_ratio || 0, 2) }}</text>
-            <text class="perf-history-win">胜率 {{ formatMoney(p.win_rate || 0, 1) }}%</text>
+            <view class="perf-history-left">
+              <text class="perf-history-period">{{ p.period_end }}</text>
+              <text class="perf-history-meta">Sharpe {{ p.sharpe_ratio != null ? p.sharpe_ratio.toFixed(2) : '--' }} · 胜率 {{ p.win_rate != null ? p.win_rate.toFixed(1) + '%' : '--' }}</text>
+            </view>
+            <view class="perf-history-pill mono" :class="p.return_pct >= 0 ? 'pill-up' : 'pill-down'">
+              <text class="perf-history-arrow">{{ p.return_pct >= 0 ? '▲' : '▼' }}</text>
+              <text class="perf-history-return">{{ formatPct(p.return_pct) }}</text>
+            </view>
           </view>
         </view>
       </template>
@@ -356,6 +375,27 @@ const signals = ref<ConsoleSignal[]>([])
 const portfolios = ref<ConsolePortfolio[]>([])
 const trades = ref<ConsoleTrade[]>([])
 
+// ── 信号筛选状态（P3 筛选栏）──
+const statusOptions = ['全部状态', '待决策', '已采纳', '已忽略', 'AI 自动执行', '已过期']
+const statusValues = ['', 'pending', 'confirmed', 'ignored', 'auto_executed', 'expired']
+const filterStatus = ref('')
+const filterStatusIndex = ref(0)
+const filterSymbol = ref('')
+const filterDateFrom = ref('')
+const filterDateTo = ref('')
+const filterStatusLabel = computed(() => statusOptions[filterStatusIndex.value] || '全部状态')
+const hasFilters = computed(() =>
+  !!filterStatus.value || !!filterSymbol.value || !!filterDateFrom.value || !!filterDateTo.value
+)
+
+// ── 绩效面板状态 ──
+const perfLoading = ref(false)
+const perfData = ref<any>(null)
+const perfHistory = ref<any[]>([])
+const perfCurve = ref<{ dates: string[]; values: number[] }>({ dates: [], values: [] })
+const perfPeriod = ref('30d')
+const perfLoaded = ref(false)
+
 const schedulerRunning = ref(false)
 const schedInfo = ref<any>(null)
 const schedLastRun = ref('')
@@ -376,6 +416,14 @@ onMounted(() => {
   const pages = getCurrentPages()
   const page = pages[pages.length - 1] as any
   hireId.value = parseInt(page.options?.hire_id || '0')
+  // 支持从建议入口带 status=pending&tab=signals 直达待决策列表
+  if (page.options?.status === 'pending') {
+    filterStatus.value = 'pending'
+    filterStatusIndex.value = statusValues.indexOf('pending')
+  }
+  if (page.options?.tab === 'perf') {
+    activeTab.value = 'perf'
+  }
   loadAll().finally(() => { isLoading.value = false })
   startPolling()
   checkScheduler()
@@ -473,6 +521,39 @@ const loadTrades = async () => {
   } catch (e) { /* ignore */ }
 }
 
+// ── Tab 切换与信号筛选交互 ──
+const selectTab = (t: 'signals' | 'portfolio' | 'trades' | 'perf') => {
+  activeTab.value = t
+  if (t === 'perf' && !perfLoaded.value) {
+    perfLoaded.value = true
+    loadPerformance()
+  }
+}
+
+const showPendingView = async () => {
+  filterStatus.value = 'pending'
+  filterStatusIndex.value = statusValues.indexOf('pending')
+  activeTab.value = 'signals'
+  await loadSignals()
+}
+
+const onFilterChange = async () => { await loadSignals() }
+const onDateFromChange = async (e: any) => { filterDateFrom.value = e.detail.value; await loadSignals() }
+const onDateToChange = async (e: any) => { filterDateTo.value = e.detail.value; await loadSignals() }
+const onStatusChange = async (e: any) => {
+  filterStatusIndex.value = Number(e.detail.value) || 0
+  filterStatus.value = statusValues[filterStatusIndex.value] || ''
+  await loadSignals()
+}
+const clearFilters = async () => {
+  filterStatus.value = ''
+  filterStatusIndex.value = 0
+  filterSymbol.value = ''
+  filterDateFrom.value = ''
+  filterDateTo.value = ''
+  await loadSignals()
+}
+
 const loadPerformance = async () => {
   if (!hireId.value) return
   perfLoading.value = true
@@ -492,7 +573,7 @@ const loadPerformance = async () => {
     }
     if (pdata.salary_curve && pdata.salary_curve.length) {
       perfCurve.value = {
-        dates: pdata.salary_curve.map((p: any) => p.date),
+        dates: pdata.salary_curve.map((p: any) => p.period || p.date || ''),
         values: pdata.salary_curve.map((p: any) => p.value),
       }
     }
@@ -1197,29 +1278,108 @@ const formatRelative = (t: string | null) => {
   font-family: 'DIN Alternate', 'Courier New', monospace;
 }
 
-/* 绩效面板 */
-.perf-panel { padding: 12px; }
-.perf-loading { text-align: center; padding: 40px 0; color: #999; font-size: 14px; }
-.perf-metrics { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+/* ══ 绩效面板（深色重制）══ */
+.perf-panel { padding: 20rpx; }
+
+.perf-loading { text-align: center; padding: 80rpx 0; color: #667788; font-size: 13px; }
+
+/* Hero 累计收益卡 */
+.perf-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #17172e 0%, #121224 100%);
+  border: 1rpx solid rgba(255, 255, 255, 0.07);
+  border-radius: 20rpx;
+  padding: 28rpx 26rpx;
+  margin-bottom: 18rpx;
+  position: relative;
+  overflow: hidden;
+}
+.perf-hero::after {
+  content: '';
+  position: absolute; right: -60rpx; top: -60rpx;
+  width: 220rpx; height: 220rpx; border-radius: 50%;
+  background: radial-gradient(circle, rgba(74, 144, 226, 0.10), transparent 70%);
+  pointer-events: none;
+}
+.perf-hero-main { display: flex; flex-direction: column; gap: 10rpx; }
+.perf-hero-label { font-size: 22rpx; color: #8a93a6; letter-spacing: 1rpx; }
+.perf-hero-value { display: flex; align-items: baseline; gap: 10rpx; }
+.perf-hero-arrow { font-size: 18rpx; align-self: center; }
+.perf-hero-num { font-size: 52rpx; font-weight: 700; line-height: 1.1; letter-spacing: -1rpx; }
+.is-up { color: #ff6b62; }
+.is-down { color: #2fc98e; }
+.perf-hero-sub { display: flex; flex-direction: column; gap: 16rpx; align-items: flex-end; }
+.perf-hero-sub-item { display: flex; flex-direction: column; align-items: flex-end; gap: 4rpx; }
+.perf-hero-sub-label { font-size: 20rpx; color: #6b7488; }
+.perf-hero-sub-val { font-size: 26rpx; font-weight: 600; }
+.perf-hero-sub-val.is-up { color: #ff8379; }
+.perf-hero-sub-val.is-down { color: #2fc98e; }
+
+/* 指标小卡 */
+.perf-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 14rpx; margin-bottom: 18rpx; }
 .perf-card {
-  flex: 1 1 calc(33.33% - 8px); min-width: 100px;
-  background: #f9fafb; border-radius: 8px; padding: 10px 12px;
-  text-align: center;
+  background: #131328;
+  border: 1rpx solid rgba(255, 255, 255, 0.06);
+  border-radius: 16rpx;
+  padding: 20rpx 22rpx;
+  display: flex; flex-direction: column; gap: 8rpx;
 }
-.perf-label { font-size: 12px; color: #999; display: block; margin-bottom: 4px; }
-.perf-value { font-size: 16px; font-weight: 600; color: #333; }
-.perf-value.up { color: #e53e3e; }
-.perf-value.down { color: #38a169; }
-.perf-chart-section { margin-bottom: 16px; }
-.perf-section-title { font-size: 14px; font-weight: 600; color: #333; display: block; margin-bottom: 8px; }
+.perf-label { font-size: 20rpx; color: #8a93a6; }
+.perf-value-wrap { display: flex; align-items: baseline; }
+.perf-value { font-size: 32rpx; font-weight: 600; color: #f2f4fb; line-height: 1.2; }
+.perf-value.mono { letter-spacing: 0; }
+.perf-value.is-up { color: #ff6b62; }
+.perf-value.is-down { color: #2fc98e; }
+.perf-trend { font-size: 18rpx; margin-top: 2rpx; }
+.perf-trend.down { color: #2fc98e; opacity: 0.85; }
+.perf-trend.neutral { color: #6b7488; }
+
+/* 收益曲线 */
+.perf-chart-card {
+  background: #131328;
+  border: 1rpx solid rgba(255, 255, 255, 0.06);
+  border-radius: 16rpx;
+  padding: 20rpx 22rpx 10rpx;
+  margin-bottom: 18rpx;
+}
+.perf-chart-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8rpx;
+}
+.perf-section-title { font-size: 24rpx; font-weight: 600; color: #e8ebf5; }
+.perf-chart-tail { font-size: 22rpx; font-weight: 600; }
+.perf-chart-tail.is-up { color: #ff8379; }
+.perf-chart-tail.is-down { color: #2fc98e; }
+
+/* 历史业绩 */
+.perf-history-card {
+  background: #131328;
+  border: 1rpx solid rgba(255, 255, 255, 0.06);
+  border-radius: 16rpx;
+  padding: 22rpx;
+}
+.perf-history-card .perf-section-title { margin-bottom: 6rpx; }
 .perf-history-row {
-  display: flex; align-items: center; padding: 10px 0;
-  border-bottom: 1px solid #f0f0f0; gap: 8px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20rpx 2rpx;
+  border-bottom: 1rpx solid rgba(255, 255, 255, 0.05);
+  gap: 12rpx;
 }
-.perf-history-period { font-size: 13px; color: #666; min-width: 80px; }
-.perf-history-return { font-size: 14px; font-weight: 600; min-width: 70px; }
-.perf-history-sharpe { font-size: 12px; color: #999; }
-.perf-history-win { font-size: 12px; color: #999; margin-left: auto; }
+.perf-history-row:last-child { border-bottom: none; }
+.perf-history-left { display: flex; flex-direction: column; gap: 6rpx; min-width: 0; }
+.perf-history-period { font-size: 24rpx; color: #e8ebf5; font-weight: 500; }
+.perf-history-meta { font-size: 19rpx; color: #6b7488; }
+.perf-history-pill {
+  display: flex; align-items: center; gap: 8rpx;
+  padding: 10rpx 16rpx; border-radius: 999rpx;
+  flex-shrink: 0;
+}
+.perf-history-pill.pill-up { color: #ff8379; background: rgba(255, 107, 98, 0.12); }
+.perf-history-pill.pill-down { color: #2fc98e; background: rgba(47, 201, 142, 0.10); }
+.perf-history-arrow { font-size: 18rpx; }
+.perf-history-return { font-size: 24rpx; font-weight: 700; }
 
 .mkt-tag {
   display: inline-flex;

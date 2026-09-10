@@ -54,6 +54,16 @@ export interface HireAgentResponse {
   message: string
 }
 
+export interface RenewAgentResponse {
+  hire_id: number
+  agent_id: string
+  points_spent: number
+  balance_after: number
+  status: string
+  expires_at: string | null
+  message: string
+}
+
 export interface UserAgent {
   id: number
   agent_id: string
@@ -65,6 +75,7 @@ export interface UserAgent {
   hired_at: string
   expires_at: string | null
   config_source?: string
+  pending_count?: number
 }
 
 /** 获取交易员市场列表 */
@@ -101,6 +112,13 @@ export function updateManagementMode(userAgentId: number, managementMode: string
 /** 解雇交易员 */
 export function dismissAgent(userAgentId: number): Promise<any> {
   return request('/agent/my-agents/' + userAgentId, { method: 'DELETE' })
+}
+
+/** 续费交易员（30天，按初次雇佣价扣积分） */
+export function renewAgent(userAgentId: number): Promise<RenewAgentResponse> {
+  return request<RenewAgentResponse>('/agent/market/' + userAgentId + '/renew', {
+    method: 'POST',
+  })
 }
 
 // ── 控制台 API ──

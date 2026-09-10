@@ -53,10 +53,24 @@
             <text class="warning-text">启动交易员前必须完成配置，否则无法启动</text>
           </view>
 
+          <view class="expiry-row">
+            <text class="expiry-label">有效期至</text>
+            <text class="expiry-date">{{ item.expires_at ? formatDate(item.expires_at) : '—' }}</text>
+            <text v-if="isTrulyExpired(item)" class="expiry-badge badge-danger">已到期</text>
+            <text v-else-if="isExpiredSoon(item)" class="expiry-badge badge-warn">即将到期</text>
+          </view>
+
           <view class="card-footer">
             <view class="footer-row">
               <view class="ft-btn console-btn" @click="goConsole(item)">
                 <text>进入控制台</text>
+              </view>
+              <view
+                v-if="item.management_mode === 'advisory' && (item.pending_count || 0) > 0"
+                class="ft-btn advisory-btn"
+                @click="goAdvisory(item)"
+              >
+                <text>查看建议 {{ item.pending_count }}</text>
               </view>
               <view class="mode-row" @click="switchMode(item)">
                 <text class="mode-label">切换模式</text>
@@ -87,7 +101,17 @@
                 <view v-if="item.status === 'active' || item.status === 'paused'" class="ft-btn config-btn" @click="goConfig(item)">
                   <text>配置</text>
                 </view>
-                <view class="ft-btn terminate-btn" @click="handleTerminate(item)">
+                <view v-if="isTrulyExpired(item)" class="ft-btn renew-btn" @click="handleRenew(item)">
+                  <text>立即续费</text>
+                </view>
+                <view
+                  v-else-if="item.status === 'active' && isExpiredSoon(item)"
+                  class="ft-btn renew-soon-btn"
+                  @click="handleRenew(item)"
+                >
+                  <text>续费</text>
+                </view>
+                <view v-if="item.status !== 'expired'" class="ft-btn terminate-btn" @click="handleTerminate(item)">
                   <text>终止</text>
                 </view>
               </template>
@@ -102,7 +126,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'; import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue'
-import { getMyAgents, updateManagementMode, dismissAgent, pauseAgent, resumeAgent, terminateAgent, type UserAgent } from '@/api/agent'
+import { getMyAgents, updateManagementMode, dismissAgent, pauseAgent, resumeAgent, terminateAgent, renewAgent, type UserAgent } from '@/api/agent'
 import { formatPercent } from '@/utils/format'
 import { useShowRefresh, touchRefreshKey } from '@/utils/refresh-cache'
 
@@ -135,6 +159,7 @@ const statusText = (item: UserAgent) => {
     if (isUnconfigured(item)) return '未配置'
     return '已暂停'
   }
+  if (isTrulyExpired(item)) return '已到期'
   return '已停用'
 }
 
@@ -152,6 +177,10 @@ const loadData = async () => {
 
 const goConsole = (item: UserAgent) => {
   uni.navigateTo({ url: `/pages/agent-console/index?hire_id=${item.id}` })
+}
+
+const goAdvisory = (item: UserAgent) => {
+  uni.navigateTo({ url: `/pages/agent-console/index?hire_id=${item.id}&status=pending` })
 }
 
 const goConfig = (item: UserAgent) => {
@@ -206,6 +235,48 @@ const handleTerminate = (item: UserAgent) => {
           loadData()
         } catch (e: any) {
           uni.showToast({ title: e?.message || '操作失败', icon: 'none' })
+        }
+      }
+    },
+  })
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+// 是否为真实到期（scheduler 自动过期：expires_at 已过）；主动终止(expires_at 未到)不算
+const isTrulyExpired = (item: UserAgent) => {
+  if (item.status !== 'expired' || !item.expires_at) return false
+  return new Date(item.expires_at).getTime() <= Date.now()
+}
+
+// 临期判断（7 天内到期，不含已到期）
+const isExpiredSoon = (item: UserAgent) => {
+  if (item.status === 'expired' || !item.expires_at) return false
+  const remain = new Date(item.expires_at).getTime() - Date.now()
+  return remain <= 7 * DAY_MS
+}
+
+const formatDate = (iso: string) => {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+const handleRenew = (item: UserAgent) => {
+  uni.showModal({
+    title: '续费交易员',
+    content: `续费「${item.agent.code_name}·${item.agent.tag}」将扣除 ${item.agent.hire_price_points} 积分，有效期延长 30 天。`,
+    success: async (res) => {
+      if (res.confirm) {
+        try {
+          await renewAgent(item.id)
+          uni.showToast({ title: '续费成功', icon: 'success' })
+          loadData()
+        } catch (e: any) {
+          uni.showToast({ title: e?.message || '续费失败', icon: 'none' })
         }
       }
     },
@@ -451,6 +522,7 @@ onPullDownRefresh(() => {
   .footer-row {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 16rpx;
     margin-bottom: 12rpx;
   }
@@ -465,6 +537,12 @@ onPullDownRefresh(() => {
   }
   .console-btn {
     background: linear-gradient(135deg, #4A90E2, #7B68EE);
+    color: #fff;
+    flex: 1;
+    text-align: center;
+  }
+  .advisory-btn {
+    background: linear-gradient(135deg, #f39c12, #e67e22);
     color: #fff;
     flex: 1;
     text-align: center;
@@ -511,5 +589,39 @@ onPullDownRefresh(() => {
     font-size: 22rpx;
     color: #e74c3c;
   }
+
+.expiry-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 14rpx 20rpx;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12rpx;
+  margin-bottom: 16rpx;
+
+  .expiry-label { color: #667788; font-size: 22rpx; }
+  .expiry-date { color: #aab8c8; font-size: 24rpx; flex: 1; }
+  .expiry-badge {
+    font-size: 20rpx;
+    padding: 2rpx 14rpx;
+    border-radius: 20rpx;
+  }
+  .badge-danger { color: #e74c3c; background: rgba(231, 76, 60, 0.15); }
+  .badge-warn { color: #f39c12; background: rgba(243, 156, 18, 0.15); }
+}
+
+.renew-btn {
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+  color: #fff;
+  flex: 1;
+  text-align: center;
+}
+
+.renew-soon-btn {
+  background: rgba(243, 156, 18, 0.15);
+  color: #f39c12;
+  flex: 1;
+  text-align: center;
+}
 
 </style>
